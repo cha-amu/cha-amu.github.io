@@ -58,12 +58,13 @@ async function readAdminPassword(env) {
 }
 
 async function clasp(args) {
-  const result = await execFileAsync('npx', ['@google/clasp', ...args], { cwd: process.cwd() });
-  const output = `${result.stdout || ''}\n${result.stderr || ''}`;
-  if (/Unable to|not found|permission|denied|error:/i.test(output)) {
-    throw new Error(`clasp ${args.join(' ')} failed: ${output}`);
+  try {
+    const result = await execFileAsync('npx', ['--yes', '@google/clasp', ...args], { cwd: process.cwd(), maxBuffer: 1024 * 1024 * 10 });
+    return `${result.stdout || ''}\n${result.stderr || ''}`;
+  } catch (error) {
+    const output = `${error.stdout || ''}\n${error.stderr || ''}`.trim();
+    throw new Error(`clasp ${args.join(' ')} failed${output ? `: ${output}` : ''}`);
   }
-  return output;
 }
 
 function versionFrom(output) {
