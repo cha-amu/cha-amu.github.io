@@ -1,0 +1,27 @@
+{
+  "name": "cha-amu-site",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "secrets:apps-script": "node scripts/generate-apps-script-secrets.mjs",
+    "typecheck": "tsc -b",
+    "env:apps-script": "node scripts/generate-apps-script-secrets.mjs --write-env",
+    "sync:apps-script-env": "node scripts/sync-apps-script-properties.mjs"
+  },
+  "dependencies": {
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^4.7.0",
+    "typescript": "^7.0.2",
+    "vite": "^6.4.3"
+  }
+}

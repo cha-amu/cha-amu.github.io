@@ -1,0 +1,59 @@
+name: Deploy Apps Script
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'apps-script/**'
+      - '.github/workflows/apps-script.yml'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      HAS_APPS_SCRIPT_DEPLOYMENT_ID: ${{ secrets.APPS_SCRIPT_DEPLOYMENT_ID != '' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Validate Apps Script source
+        run: node --check apps-script/Code.js
+
+      - name: Write clasp credentials
+        run: |
+          cat > ~/.clasprc.json <<'JSON'
+          ${{ secrets.CLASPRC_JSON }}
+          JSON
+          cat > apps-script/.clasp.json <<'JSON'
+          ${{ secrets.CLASP_JSON }}
+          JSON
+
+      - name: Push Apps Script source
+        working-directory: apps-script
+        run: npx @google/clasp push --force
+
+      - name: Create Apps Script version
+        id: script_version
+        working-directory: apps-script
+        run: |
+          VERSION_OUTPUT="$(npx @google/clasp create-version "GitHub ${GITHUB_SHA::7}")"
+          printf '%s\n' "$VERSION_OUTPUT"
+          VERSION="$(printf '%s\n' "$VERSION_OUTPUT" | grep -Eo '[0-9]+' | tail -1)"
+          test -n "$VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Update existing web app deployment
+        if: env.HAS_APPS_SCRIPT_DEPLOYMENT_ID == 'true'
+        working-directory: apps-script
+        run: npx @google/clasp update-deployment "${{ secrets.APPS_SCRIPT_DEPLOYMENT_ID }}" --versionNumber "${{ steps.script_version.outputs.version }}" --description "GitHub ${{ github.sha }}"
+
+      - name: Create first web app deployment
+        if: env.HAS_APPS_SCRIPT_DEPLOYMENT_ID != 'true'
+        working-directory: apps-script
+        run: npx @google/clasp create-deployment --versionNumber "${{ steps.script_version.outputs.version }}" --description "GitHub ${{ github.sha }}"

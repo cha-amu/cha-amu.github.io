@@ -1,0 +1,16 @@
+.DS_Store
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+.omx/
+# Local Google clasp credentials/config
+.clasprc.json
+.clasp.json
+apps-script/.clasp.json
+
+
+# Local UI reference screenshots
+/1.png
+/2.png
