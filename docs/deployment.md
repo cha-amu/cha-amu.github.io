@@ -41,6 +41,7 @@ https://cha-amu.github.io/
   - `CLASPRC_JSON`
   - `CLASP_JSON`
   - `APPS_SCRIPT_DEPLOYMENT_ID`
+  - `ADMIN_PASSWORD`는 로컬 없이 GitHub Actions로 관리자 비밀번호를 바꿀 때만 필요
 
 `APPS_SCRIPT_DEPLOYMENT_ID`를 넣어두면 기존 `/exec` URL을 유지한 채 배포만 갱신한다. 이 값을 빼면 Actions가 새 Web App deployment를 만들 수 있으므로, 기존 사이트 URL을 유지하려면 보통 넣어둔다.
 
@@ -120,7 +121,10 @@ GitHub repo → Settings → Secrets and variables → Actions → Secrets 탭
 CLASPRC_JSON=<~/.clasprc.json 전체 내용>
 CLASP_JSON=<Apps Script 프로젝트 연결 JSON>
 APPS_SCRIPT_DEPLOYMENT_ID=<기존 Apps Script Web App deployment id>
+ADMIN_PASSWORD=<GitHub에서 관리자 비밀번호를 변경할 때 사용할 새 비밀번호>
 ```
+
+`ADMIN_PASSWORD`는 사이트 빌드나 Apps Script 일반 배포에는 필요 없다. 로컬 `.env`를 잃어버렸거나 GitHub UI만으로 관리자 비밀번호를 바꿔야 할 때 `Update admin password` workflow가 사용한다.
 
 ## 5. 각 Secret 값 만드는 법
 
@@ -253,7 +257,14 @@ GitHub repo → Actions
 
 ## 7. 관리자 비밀번호 변경 방법
 
-관리자 비밀번호는 GitHub Secrets에 직접 넣는 방식이 아니다. 원문 비밀번호를 GitHub에 저장하지 않기 위해 로컬에서 Apps Script Properties로 반영한다.
+관리자 비밀번호 변경 방법은 2개다.
+
+- 로컬 `.env`가 있으면 로컬에서 변경
+- 로컬 자료가 없어졌으면 GitHub Secret + 수동 workflow로 변경
+
+원문 비밀번호는 repo 파일에 저장하지 않는다.
+
+### 7.1 로컬 `.env`가 있을 때
 
 1. 로컬 `.env` 파일에서 아래 값 변경
 
@@ -279,6 +290,62 @@ npm run sync:apps-script-env
 
 - `.env`는 `.gitignore`에 들어있고 커밋하면 안 된다.
 - `ADMIN_PASSWORD`에 `VITE_` 접두사를 붙이면 브라우저에 노출되므로 절대 쓰지 않는다.
+
+### 7.2 로컬 `.env`가 없어졌을 때: GitHub UI만으로 변경
+
+로컬 자료를 잃어버렸거나 다른 컴퓨터에서 비밀번호만 바꿔야 하면 아래 방식으로 한다.
+
+1. GitHub repo 접속
+
+```txt
+https://github.com/cha-amu/cha-amu.github.io
+```
+
+2. 새 관리자 비밀번호를 Secret으로 넣기
+
+```txt
+Settings → Secrets and variables → Actions → Secrets 탭
+```
+
+- 이미 `ADMIN_PASSWORD`가 있으면 오른쪽 **Update** 클릭
+- 없으면 **New repository secret** 클릭
+
+입력값:
+
+```txt
+Name: ADMIN_PASSWORD
+Secret: <새 관리자 비밀번호>
+```
+
+3. 비밀번호 갱신 workflow 실행
+
+```txt
+Actions → Update admin password → Run workflow → Branch: main → Run workflow
+```
+
+4. workflow가 success인지 확인
+
+```txt
+Actions → Update admin password → 가장 최근 실행 → success
+```
+
+이 workflow가 하는 일:
+
+- GitHub Secret `ADMIN_PASSWORD`를 읽음
+- hash/pepper/session secret을 생성 또는 갱신
+- Apps Script Properties에 반영
+- 기존 Apps Script Web App deployment id를 유지한 채 임시 설정 endpoint를 열었다 닫음
+
+5. `/admin/`에서 새 비밀번호로 로그인 확인
+
+```txt
+https://cha-amu.github.io/admin/
+```
+
+선택 사항:
+
+- 원문 비밀번호를 GitHub Secret에 계속 두기 싫으면 workflow 성공 후 `Settings → Secrets and variables → Actions → Secrets`에서 `ADMIN_PASSWORD`를 삭제해도 된다.
+- 다음에 또 GitHub UI로 비밀번호를 바꾸려면 `ADMIN_PASSWORD`를 다시 만들어야 한다.
 
 ## 8. Apps Script Properties를 GitHub UI에서 바꾸는 게 아닌 이유
 
@@ -322,6 +389,16 @@ Apps Script health 확인:
 ```
 
 ## 10. 자주 생기는 문제
+
+### `Update admin password`가 실패함
+
+확인할 것:
+
+- GitHub Secret `ADMIN_PASSWORD`가 있는지 확인
+- GitHub Secret `CLASPRC_JSON`이 있는지 확인
+- GitHub Secret `CLASP_JSON`이 있는지 확인
+- GitHub Secret `APPS_SCRIPT_DEPLOYMENT_ID`가 기존 `/exec` URL의 deployment id와 같은지 확인
+- `CLASP_JSON`의 `scriptId`가 현재 Apps Script 프로젝트 ID인지 확인
 
 ### Actions에서 `Deploy Apps Script`가 실패함
 

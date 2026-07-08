@@ -9,7 +9,7 @@ import { stdin as input, stdout as output } from 'node:process';
 const execFileAsync = promisify(execFile);
 const ENV_PATH = '.env';
 const CODE_PATH = 'apps-script/Code.js';
-const DEPLOYMENT_ID = 'AKfycbwn-qQpt3j2bxyzNtQeKSodJdo0Apvust80TPAxlp7U0jg2bZ0GI0FoJF3c4ZOTnQjt';
+const DEPLOYMENT_ID = process.env.APPS_SCRIPT_DEPLOYMENT_ID || 'AKfycbwn-qQpt3j2bxyzNtQeKSodJdo0Apvust80TPAxlp7U0jg2bZ0GI0FoJF3c4ZOTnQjt';
 const WEBAPP_URL = `https://script.google.com/macros/s/${DEPLOYMENT_ID}/exec`;
 
 function parseEnv(text) {

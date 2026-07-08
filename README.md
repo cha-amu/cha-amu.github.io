@@ -38,6 +38,11 @@ Only public frontend values go into Vite env files. Secrets belong in GitHub Act
 
 현재 GitHub 레포는 `cha-amu/cha-amu.github.io`이고, 사이트는 `https://cha-amu.github.io/`로 배포된다.
 
+관리자 비밀번호는 두 방식으로 바꿀 수 있다.
+
+- 로컬 `.env`가 있으면 `.env`의 `ADMIN_PASSWORD` 수정 후 `npm run sync:apps-script-env`
+- 로컬 자료가 없으면 GitHub `ADMIN_PASSWORD` Secret을 만들고 **Actions → Update admin password → Run workflow** 실행
+
 ## Runtime data behavior
 
 Public posts and guestbook entries use browser `localStorage` as a read-through cache. The page renders cached data immediately, then refreshes from Apps Script in the background and merges the authoritative server list. Guestbook create/delete uses optimistic UI and rolls back on failure.
