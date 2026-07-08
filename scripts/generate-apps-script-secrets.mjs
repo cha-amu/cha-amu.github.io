@@ -45,6 +45,13 @@ function randomHex() {
   return randomBytes(32).toString('hex');
 }
 
+function requireEnvValue(key, value) {
+  if (!value || String(value).includes('<')) {
+    throw new Error(`${key} is required. Put it in local .env or GitHub Actions Secrets.`);
+  }
+  return value;
+}
+
 let envText = existsSync(ENV_PATH) ? await readFile(ENV_PATH, 'utf8') : '';
 let env = { ...parseEnv(envText), ...process.env };
 
@@ -60,7 +67,7 @@ if (!adminPassword) {
 }
 
 const values = {
-  SPREADSHEET_ID: env.SPREADSHEET_ID || '1pztnlU8M1ioKFBlDeTstAnuhnXDsiTij_V7P5_M1MG4',
+  SPREADSHEET_ID: requireEnvValue('SPREADSHEET_ID', env.SPREADSHEET_ID),
   ADMIN_PASSWORD: adminPassword,
   ADMIN_PASSWORD_PEPPER: env.ADMIN_PASSWORD_PEPPER || randomHex(),
   ADMIN_SESSION_SECRET: env.ADMIN_SESSION_SECRET || randomHex(),

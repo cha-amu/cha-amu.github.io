@@ -3,7 +3,7 @@
 연결할 Google Sheet:
 
 ```txt
-SPREADSHEET_ID=1pztnlU8M1ioKFBlDeTstAnuhnXDsiTij_V7P5_M1MG4
+SPREADSHEET_ID=<SPREADSHEET_ID>
 ```
 
 ## 1. Apps Script 프로젝트 생성
@@ -63,7 +63,7 @@ setupChaAmu
 아래 값은 Apps Script의 Project Settings > Script Properties에 넣는다.
 
 ```txt
-SPREADSHEET_ID=1pztnlU8M1ioKFBlDeTstAnuhnXDsiTij_V7P5_M1MG4
+SPREADSHEET_ID=<SPREADSHEET_ID>
 ADMIN_PASSWORD_HASH=<generated>
 ADMIN_PASSWORD_PEPPER=<generated>
 ADMIN_SESSION_SECRET=<generated>
@@ -115,11 +115,7 @@ VITE_ADMIN_IDLE_TIMEOUT_MS=60000
 {
   "ok": true,
   "data": {
-    "name": "cha-amu-api",
-    "spreadsheetId": "1pztnlU8M1ioKFBlDeTstAnuhnXDsiTij_V7P5_M1MG4",
-    "sheets": [
-      { "name": "posts", "exists": true }
-    ]
+    "name": "cha-amu-api"
   }
 }
 ```

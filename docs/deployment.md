@@ -41,6 +41,7 @@ https://cha-amu.github.io/
   - `CLASPRC_JSON`
   - `CLASP_JSON`
   - `APPS_SCRIPT_DEPLOYMENT_ID`
+  - `SPREADSHEET_ID`
   - `ADMIN_PASSWORD`는 로컬 없이 GitHub Actions로 관리자 비밀번호를 바꿀 때만 필요
 
 `APPS_SCRIPT_DEPLOYMENT_ID`를 넣어두면 기존 `/exec` URL을 유지한 채 배포만 갱신한다. 이 값을 빼면 Actions가 새 Web App deployment를 만들 수 있으므로, 기존 사이트 URL을 유지하려면 보통 넣어둔다.
@@ -121,10 +122,11 @@ GitHub repo → Settings → Secrets and variables → Actions → Secrets 탭
 CLASPRC_JSON=<~/.clasprc.json 전체 내용>
 CLASP_JSON=<Apps Script 프로젝트 연결 JSON>
 APPS_SCRIPT_DEPLOYMENT_ID=<기존 Apps Script Web App deployment id>
+SPREADSHEET_ID=<Google Sheet ID>
 ADMIN_PASSWORD=<GitHub에서 관리자 비밀번호를 변경할 때 사용할 새 비밀번호>
 ```
 
-`ADMIN_PASSWORD`는 사이트 빌드나 Apps Script 일반 배포에는 필요 없다. 로컬 `.env`를 잃어버렸거나 GitHub UI만으로 관리자 비밀번호를 바꿔야 할 때 `Update admin password` workflow가 사용한다.
+`SPREADSHEET_ID`는 공개 repo 파일에 적지 않고 Secret으로 둔다. `ADMIN_PASSWORD`는 사이트 빌드나 Apps Script 일반 배포에는 필요 없다. 로컬 `.env`를 잃어버렸거나 GitHub UI만으로 관리자 비밀번호를 바꿔야 할 때 `Update admin password` workflow가 사용한다.
 
 ## 5. 각 Secret 값 만드는 법
 
@@ -212,6 +214,23 @@ npx @google/clasp deployments
 
 목록에서 현재 웹앱 URL에 해당하는 `AKfy...` 값을 `APPS_SCRIPT_DEPLOYMENT_ID`로 넣는다.
 
+
+### 5.4 `SPREADSHEET_ID`
+
+Google Sheet URL이 아래처럼 생겼다면:
+
+```txt
+https://docs.google.com/spreadsheets/d/<SPREADSHEET_ID>/edit
+```
+
+`/d/`와 `/edit` 사이 값이 `SPREADSHEET_ID`다.
+
+주의:
+
+- 이 값은 비밀번호급 secret은 아니지만 공개 repo에는 적지 않는다.
+- GitHub Actions에서는 Repository Secret `SPREADSHEET_ID`로 넣는다.
+- Apps Script 런타임에서는 Script Properties `SPREADSHEET_ID`로 읽는다.
+
 ## 6. 배포 실행 방법
 
 ### 6.1 코드 수정 후 자동 배포
@@ -284,6 +303,7 @@ npm run sync:apps-script-env
 - `ADMIN_PASSWORD_PEPPER` 생성 또는 유지
 - `ADMIN_SESSION_SECRET` 생성 또는 유지
 - `GUESTBOOK_SERVER_PEPPER` 생성 또는 유지
+- `.env`의 `SPREADSHEET_ID`를 Apps Script Properties에 반영
 - Apps Script Properties에 반영
 
 주의:
@@ -331,7 +351,7 @@ Actions → Update admin password → 가장 최근 실행 → success
 
 이 workflow가 하는 일:
 
-- GitHub Secret `ADMIN_PASSWORD`를 읽음
+- GitHub Secret `ADMIN_PASSWORD`와 `SPREADSHEET_ID`를 읽음
 - hash/pepper/session secret을 생성 또는 갱신
 - Apps Script Properties에 반영
 - 기존 Apps Script Web App deployment id를 유지한 채 임시 설정 endpoint를 열었다 닫음
@@ -346,6 +366,7 @@ https://cha-amu.github.io/admin/
 
 - 원문 비밀번호를 GitHub Secret에 계속 두기 싫으면 workflow 성공 후 `Settings → Secrets and variables → Actions → Secrets`에서 `ADMIN_PASSWORD`를 삭제해도 된다.
 - 다음에 또 GitHub UI로 비밀번호를 바꾸려면 `ADMIN_PASSWORD`를 다시 만들어야 한다.
+- `SPREADSHEET_ID`는 workflow 실행에 계속 필요하므로 삭제하지 않는다.
 
 ## 8. Apps Script Properties를 GitHub UI에서 바꾸는 게 아닌 이유
 

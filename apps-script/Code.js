@@ -10,7 +10,6 @@ const SHEETS = {
   auditLog: 'auditLog'
 };
 
-const DEFAULT_SPREADSHEET_ID = '1pztnlU8M1ioKFBlDeTstAnuhnXDsiTij_V7P5_M1MG4';
 
 const SHEET_COLUMNS = {
   posts: [
@@ -32,6 +31,15 @@ const SHEET_COLUMNS = {
 const SESSION_TTL_MS = Number(getProperty_('ADMIN_SESSION_TTL_MS', '60000'));
 const PASSWORD_ITERATIONS = Number(getProperty_('GUESTBOOK_PASSWORD_ITERATIONS', '1'));
 const GUESTBOOK_PASSWORD_HASH_ALGORITHM = 'SHA-256+salt+pepper';
+const MIN_SECRET_LENGTH = 32;
+const RATE_LIMITS = {
+  adminLoginBurst: { key: 'admin-login-burst', limit: 1, windowSeconds: 2, message: '로그인 시도가 너무 빠릅니다. 잠시 후 다시 시도하세요.' },
+  adminLoginWindow: { key: 'admin-login-window', limit: 8, windowSeconds: 300, message: '로그인 시도가 너무 많습니다. 5분 후 다시 시도하세요.' },
+  guestbookCreateBurst: { key: 'guestbook-create-burst', limit: 1, windowSeconds: 10, message: '방명록 작성이 너무 빠릅니다. 잠시 후 다시 시도하세요.' },
+  guestbookCreateWindow: { key: 'guestbook-create-window', limit: 12, windowSeconds: 3600, message: '방명록 작성이 너무 많습니다. 나중에 다시 시도하세요.' },
+  guestbookDeleteWindow: { key: 'guestbook-delete-window', limit: 30, windowSeconds: 3600, message: '삭제 시도가 너무 많습니다. 나중에 다시 시도하세요.' },
+  guestbookDeleteEntryWindow: { key: 'guestbook-delete-entry', limit: 5, windowSeconds: 600, message: '이 글의 삭제 비밀번호 시도가 너무 많습니다. 10분 후 다시 시도하세요.' }
+};
 
 function doPost(event) {
   try {
@@ -48,7 +56,7 @@ function doGet(event) {
   try {
     const action = event && event.parameter && event.parameter.action;
     if (action === 'health') return json_({ ok: true, data: health_() });
-    return json_({ ok: true, data: { name: 'cha-amu-api', spreadsheetId: getSpreadsheetId_() } });
+    return json_({ ok: true, data: { name: 'cha-amu-api' } });
   } catch (error) {
     return json_({ ok: false, error: String(error && error.message ? error.message : error) });
   }
@@ -56,10 +64,10 @@ function doGet(event) {
 
 /**
  * Run once from the Apps Script editor after creating/deploying the script.
- * It stores the spreadsheet id in Script Properties and creates required sheets/headers.
+ * Requires SPREADSHEET_ID in Script Properties and creates required sheets/headers.
  */
 function setupChaAmu() {
-  PropertiesService.getScriptProperties().setProperty('SPREADSHEET_ID', DEFAULT_SPREADSHEET_ID);
+  getSpreadsheetId_();
   Object.keys(SHEET_COLUMNS).forEach((sheetName) => {
     const sheet = getSheet_(sheetName);
     ensureHeaders_(sheet, SHEET_COLUMNS[sheetName]);
@@ -70,17 +78,7 @@ function setupChaAmu() {
 }
 
 function health_() {
-  const spreadsheetId = getSpreadsheetId_();
-  const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
-  return {
-    name: 'cha-amu-api',
-    spreadsheetId,
-    spreadsheetName: spreadsheet.getName(),
-    sheets: Object.keys(SHEET_COLUMNS).map((sheetName) => ({
-      name: sheetName,
-      exists: Boolean(spreadsheet.getSheetByName(sheetName))
-    }))
-  };
+  return { name: 'cha-amu-api' };
 }
 
 function route_(action, body) {
@@ -112,6 +110,8 @@ function listPublicGuestbook_() {
 
 function createGuestbook_(body) {
   assert_(body.name && body.message && body.deletePassword, 'Missing guestbook fields.');
+  enforceRateLimit_(RATE_LIMITS.guestbookCreateBurst);
+  enforceRateLimit_(RATE_LIMITS.guestbookCreateWindow);
   verifyTurnstile_(body.turnstileToken);
   const salt = Utilities.getUuid();
   const passwordHash = hashPassword_(body.deletePassword, salt);
@@ -132,6 +132,9 @@ function createGuestbook_(body) {
 }
 
 function hideGuestbookByPassword_(body) {
+  assert_(body.id, 'Guestbook entry id is required.');
+  enforceRateLimit_(RATE_LIMITS.guestbookDeleteWindow);
+  enforceRateLimit_(Object.assign({}, RATE_LIMITS.guestbookDeleteEntryWindow, { key: RATE_LIMITS.guestbookDeleteEntryWindow.key + ':' + rateKeyPart_(body.id) }));
   const sheet = getSheet_(SHEETS.guestbook);
   const values = sheet.getDataRange().getValues();
   const headers = values[0];
@@ -160,9 +163,10 @@ function hideGuestbookByPassword_(body) {
 }
 
 function adminLogin_(body) {
-  const expected = getProperty_('ADMIN_PASSWORD_HASH', '');
-  assert_(expected, 'ADMIN_PASSWORD_HASH is not configured.');
-  const actual = sha256Hex_(String(body.password || '') + getProperty_('ADMIN_PASSWORD_PEPPER', ''));
+  enforceRateLimit_(RATE_LIMITS.adminLoginBurst);
+  enforceRateLimit_(RATE_LIMITS.adminLoginWindow);
+  const expected = getRequiredProperty_('ADMIN_PASSWORD_HASH', 32);
+  const actual = sha256Hex_(String(body.password || '') + getRequiredProperty_('ADMIN_PASSWORD_PEPPER'));
   assert_(constantTimeEqual_(expected, actual), '관리자 비밀번호가 맞지 않습니다.');
   audit_('admin.login', 'admin', '');
   return createAdminSession_();
@@ -171,7 +175,7 @@ function adminLogin_(body) {
 function createAdminSession_() {
   const expiresAt = Date.now() + SESSION_TTL_MS;
   const payload = Utilities.base64EncodeWebSafe(JSON.stringify({ exp: expiresAt, nonce: Utilities.getUuid() }));
-  const sig = hmacHex_(payload, getProperty_('ADMIN_SESSION_SECRET', ''));
+  const sig = hmacHex_(payload, getRequiredProperty_('ADMIN_SESSION_SECRET'));
   return { token: payload + '.' + sig, expiresAt: new Date(expiresAt).toISOString() };
 }
 
@@ -180,7 +184,7 @@ function requireAdmin_(token) {
   const parts = token.split('.');
   const payload = parts[0];
   const sig = parts[1];
-  assert_(constantTimeEqual_(sig, hmacHex_(payload, getProperty_('ADMIN_SESSION_SECRET', ''))), 'Invalid admin session.');
+  assert_(constantTimeEqual_(sig, hmacHex_(payload, getRequiredProperty_('ADMIN_SESSION_SECRET'))), 'Invalid admin session.');
   const decoded = JSON.parse(Utilities.newBlob(Utilities.base64DecodeWebSafe(payload)).getDataAsString());
   assert_(Date.now() <= decoded.exp, 'Admin session expired.');
 }
@@ -277,7 +281,7 @@ function getSheet_(name) {
 }
 
 function getSpreadsheetId_() {
-  return getProperty_('SPREADSHEET_ID', DEFAULT_SPREADSHEET_ID);
+  return getRequiredProperty_('SPREADSHEET_ID', 20);
 }
 
 function seedSettings_() {
@@ -306,6 +310,34 @@ function parseJson_(value) { return value ? JSON.parse(value) : {}; }
 function json_(value) { return ContentService.createTextOutput(JSON.stringify(value)).setMimeType(ContentService.MimeType.JSON); }
 function assert_(condition, message) { if (!condition) throw new Error(message); }
 function getProperty_(key, fallback) { return PropertiesService.getScriptProperties().getProperty(key) || fallback; }
+function getRequiredProperty_(key, minLength) {
+  const value = PropertiesService.getScriptProperties().getProperty(key);
+  const requiredLength = minLength || MIN_SECRET_LENGTH;
+  assert_(value && String(value).length >= requiredLength, 'Server security config is missing.');
+  return value;
+}
+function rateKeyPart_(value) {
+  return String(value || '').replace(/[^A-Za-z0-9:_-]/g, '_').slice(0, 80);
+}
+function enforceRateLimit_(rule) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(3000);
+  try {
+    const cache = CacheService.getScriptCache();
+    const now = Date.now();
+    const raw = cache.get(rule.key);
+    let state = raw ? JSON.parse(raw) : null;
+    if (!state || !state.resetAt || now >= state.resetAt) {
+      state = { count: 0, resetAt: now + rule.windowSeconds * 1000 };
+    }
+    state.count += 1;
+    const ttl = Math.max(1, Math.ceil((state.resetAt - now) / 1000));
+    cache.put(rule.key, JSON.stringify(state), ttl);
+    assert_(state.count <= rule.limit, rule.message || '요청이 너무 많습니다. 잠시 후 다시 시도하세요.');
+  } finally {
+    lock.releaseLock();
+  }
+}
 function parseCell_(value) {
   if (typeof value !== 'string') return value;
   const trimmed = value.trim();
@@ -316,11 +348,11 @@ function formatCell_(value) { return Array.isArray(value) || (value && typeof va
 function sha256Hex_(value) { return bytesToHex_(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, value)); }
 function hmacHex_(value, secret) { return bytesToHex_(Utilities.computeHmacSha256Signature(value, secret)); }
 function hashPassword_(password, salt) {
-  return sha256Hex_(String(salt) + ':' + String(password) + ':' + getProperty_('GUESTBOOK_SERVER_PEPPER', ''));
+  return sha256Hex_(String(salt) + ':' + String(password) + ':' + getRequiredProperty_('GUESTBOOK_SERVER_PEPPER'));
 }
 function hashPasswordForEntry_(password, salt, algorithm, iterations) {
   if (String(algorithm).indexOf('PBKDF2-HMAC-SHA256') === 0) {
-    const pepperedPassword = String(password) + getProperty_('GUESTBOOK_SERVER_PEPPER', '');
+    const pepperedPassword = String(password) + getRequiredProperty_('GUESTBOOK_SERVER_PEPPER');
     return pbkdf2Sha256Hex_(pepperedPassword, String(salt), Number(iterations || PASSWORD_ITERATIONS || 50000));
   }
   return hashPassword_(password, salt);

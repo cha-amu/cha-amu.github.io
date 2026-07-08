@@ -48,6 +48,13 @@ function randomHex() {
   return randomBytes(32).toString('hex');
 }
 
+function requireEnvValue(key, value) {
+  if (!value || String(value).includes('<')) {
+    throw new Error(`${key} is required. Put it in local .env or GitHub Actions Secrets.`);
+  }
+  return value;
+}
+
 async function readAdminPassword(env) {
   if (env.ADMIN_PASSWORD) return env.ADMIN_PASSWORD;
   const rl = createInterface({ input, output });
@@ -99,7 +106,7 @@ const env = { ...parseEnv(envText), ...process.env };
 const adminPassword = await readAdminPassword(env);
 
 const valuesForEnv = {
-  SPREADSHEET_ID: env.SPREADSHEET_ID || '1pztnlU8M1ioKFBlDeTstAnuhnXDsiTij_V7P5_M1MG4',
+  SPREADSHEET_ID: requireEnvValue('SPREADSHEET_ID', env.SPREADSHEET_ID),
   ADMIN_PASSWORD: adminPassword,
   ADMIN_PASSWORD_PEPPER: env.ADMIN_PASSWORD_PEPPER || randomHex(),
   ADMIN_SESSION_SECRET: env.ADMIN_SESSION_SECRET || randomHex(),

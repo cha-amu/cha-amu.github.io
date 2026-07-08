@@ -3,18 +3,18 @@
 ## 연결 대상
 
 ```txt
-https://docs.google.com/spreadsheets/d/1pztnlU8M1ioKFBlDeTstAnuhnXDsiTij_V7P5_M1MG4/edit
+https://docs.google.com/spreadsheets/d/<SPREADSHEET_ID>/edit
 ```
 
 Apps Script에서 사용할 ID:
 
 ```txt
-1pztnlU8M1ioKFBlDeTstAnuhnXDsiTij_V7P5_M1MG4
+<SPREADSHEET_ID>
 ```
 
 ## 코드 반영 상태
 
-- `apps-script/Code.js`에 기본 `DEFAULT_SPREADSHEET_ID` 반영 완료
+- `SPREADSHEET_ID`는 공개 코드 기본값이 아니라 Apps Script Properties / GitHub Secret에서만 주입
 - `setupChaAmu()` 추가 완료
 - `doGet(?action=health)` 연결 확인 endpoint 추가 완료
 - `apps-script/README.md`에 설정 절차 작성 완료
