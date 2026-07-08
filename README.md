@@ -30,6 +30,14 @@ Copy `.env.example` to `.env` for local configuration.
 Only public frontend values go into Vite env files. Secrets belong in GitHub Actions Secrets and Apps Script Properties.
 
 
+## Deployment / 운영
+
+배포, GitHub Actions Secrets/Variables 변경, Apps Script 배포, 관리자 비밀번호 변경 절차는 아래 문서를 따른다.
+
+- [배포와 GitHub Secrets/Variables 관리](docs/deployment.md)
+
+현재 GitHub 레포는 `cha-amu/cha-amu.github.io`이고, 사이트는 `https://cha-amu.github.io/`로 배포된다.
+
 ## Runtime data behavior
 
 Public posts and guestbook entries use browser `localStorage` as a read-through cache. The page renders cached data immediately, then refreshes from Apps Script in the background and merges the authoritative server list. Guestbook create/delete uses optimistic UI and rolls back on failure.
