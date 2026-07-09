@@ -4,7 +4,7 @@ import { AppLayout } from '../components/AppLayout';
 import { ErrorState, LoadingState, EmptyState } from '../components/PageState';
 import { MarkdownView } from '../components/MarkdownView';
 import { TagList } from '../components/TagList';
-import { PUBLIC_PAGE_REFRESH_INTERVAL_MS, refreshPosts, usePublicResource } from '../stores/publicDataStore';
+import { refreshPosts, usePublicResource } from '../stores/publicDataStore';
 import { formatDate } from '../utils/date';
 import { excerpt } from '../utils/strings';
 
@@ -46,17 +46,6 @@ export function PostsPage() {
 
   useEffect(() => {
     load({ force: true, silent: postsCount.current > 0 });
-    const intervalId = window.setInterval(() => {
-      if (document.visibilityState === 'visible') load({ force: true, silent: true });
-    }, PUBLIC_PAGE_REFRESH_INTERVAL_MS);
-    const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible') load({ force: true, silent: true });
-    };
-    document.addEventListener('visibilitychange', onVisibilityChange);
-    return () => {
-      window.clearInterval(intervalId);
-      document.removeEventListener('visibilitychange', onVisibilityChange);
-    };
   }, [load]);
 
   useEffect(() => {

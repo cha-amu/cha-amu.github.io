@@ -6,7 +6,7 @@ import {
 import { AppLayout } from '../components/AppLayout';
 import { EmptyState, ErrorState, LoadingState } from '../components/PageState';
 import { TurnstileBox } from '../components/TurnstileBox';
-import { PUBLIC_PAGE_REFRESH_INTERVAL_MS, refreshGuestbook, setPublicGuestbook, usePublicResource } from '../stores/publicDataStore';
+import { refreshGuestbook, setPublicGuestbook, usePublicResource } from '../stores/publicDataStore';
 import type { GuestbookEntry } from '../types';
 import { formatDate } from '../utils/date';
 
@@ -60,17 +60,6 @@ export function GuestbookPage() {
 
   useEffect(() => {
     load({ force: true, silent: entriesCount.current > 0 });
-    const intervalId = window.setInterval(() => {
-      if (document.visibilityState === 'visible') load({ force: true, silent: true });
-    }, PUBLIC_PAGE_REFRESH_INTERVAL_MS);
-    const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible') load({ force: true, silent: true });
-    };
-    document.addEventListener('visibilitychange', onVisibilityChange);
-    return () => {
-      window.clearInterval(intervalId);
-      document.removeEventListener('visibilitychange', onVisibilityChange);
-    };
   }, [load]);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {

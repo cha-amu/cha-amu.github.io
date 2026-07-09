@@ -30,7 +30,6 @@ type ResourceMap = {
 type PendingMap = Partial<Record<ResourceKey, Promise<unknown>>>;
 
 const PUBLIC_REFRESH_COOLDOWN_MS = 60_000;
-export const PUBLIC_PAGE_REFRESH_INTERVAL_MS = 180_000;
 
 function emptyResource<T>(items: T[] = [], loadedAt = ''): PublicResource<T> {
   return {
