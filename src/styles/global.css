@@ -13,7 +13,8 @@
   --layout-gutter: clamp(1rem, 4vw, 2rem);
   --layout-section-gap: 1.25rem;
   --site-tools-top: 1rem;
-  --site-tools-right: 1rem;
+  --site-tools-row-height: 42px;
+  --site-tools-mobile-clearance: 0.85rem;
   --nav-tile-size: 74px;
   --home-tile-size: 92px;
   font-family: Inter, ui-rounded, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
@@ -467,21 +468,26 @@ img {
   position: fixed;
   z-index: 50;
   top: var(--site-tools-top);
-  right: var(--site-tools-right);
+  left: 0;
+  right: 0;
   display: flex;
-  justify-content: flex-end;
-  max-width: calc(100vw - (var(--site-tools-right) * 2));
+  justify-content: center;
+  pointer-events: none;
 }
 
 .site-tools {
+  width: min(var(--layout-page), calc(100vw - (var(--layout-gutter) * 2)));
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 0.5rem;
   min-width: 0;
+  pointer-events: none;
 }
 
-.site-tools--home {
-  justify-content: flex-end;
+.search-form--toolbar,
+.tool-icon-link {
+  pointer-events: auto;
 }
 
 .search-form--toolbar {
@@ -579,7 +585,7 @@ img {
   .site-header__inner {
     width: 100%;
     gap: 0.6rem;
-    padding: 1rem var(--layout-gutter);
+    padding: calc(var(--site-tools-top) + var(--site-tools-row-height) + var(--site-tools-mobile-clearance)) var(--layout-gutter) 1rem;
     overflow: visible;
   }
 
@@ -594,10 +600,10 @@ img {
   .site-header__tools {
     position: fixed;
     top: var(--site-tools-top);
-    right: var(--site-tools-right);
+    left: 0;
+    right: 0;
     width: auto;
-    max-width: calc(100vw - (var(--site-tools-right) * 2));
-    padding: 0;
+    max-width: none;
   }
 
   .main-nav {
@@ -608,7 +614,7 @@ img {
   }
 
   .site-tools {
-    width: auto;
+    width: min(var(--layout-page), calc(100vw - (var(--layout-gutter) * 2)));
     justify-content: flex-end;
     gap: 0.35rem;
   }
@@ -795,16 +801,12 @@ img {
 
   .site-tools {
     flex: 0 1 auto;
-    width: auto;
+    width: min(var(--layout-page), calc(100vw - (var(--layout-gutter) * 2)));
     justify-content: flex-end;
     gap: 0.25rem;
     min-width: 0;
   }
 
-  .site-tools--home {
-    flex: none;
-    width: auto;
-  }
 
   .search-form--toolbar {
     flex: 0 1 auto;

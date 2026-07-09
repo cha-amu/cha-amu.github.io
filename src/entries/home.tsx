@@ -17,7 +17,7 @@ function HomePage() {
   return (
     <main className="home-screen">
       <div className="site-header__tools">
-        <SiteTools variant="home" showSearch={false} />
+        <SiteTools showSearch={false} />
       </div>
       <section className="home-cluster" aria-labelledby="home-title">
         <div className="home-intro">

@@ -6,13 +6,7 @@ function currentPath(): string {
   return window.location.pathname.endsWith('/') ? window.location.pathname : `${window.location.pathname}/`;
 }
 
-export function SiteTools({
-  variant = 'default',
-  showSearch = true
-}: {
-  variant?: 'default' | 'home';
-  showSearch?: boolean;
-}) {
+export function SiteTools({ showSearch = true }: { showSearch?: boolean }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const titleId = useId();
   const path = currentPath();
@@ -33,7 +27,7 @@ export function SiteTools({
 
   return (
     <>
-      <div className={`site-tools ${variant === 'home' ? 'site-tools--home' : ''}`} aria-label="공통 도구">
+      <div className="site-tools" aria-label="공통 도구">
         {showSearch ? <SearchForm compact variant="toolbar" /> : null}
         <a
           className={`tool-icon-link ${isGuestbook ? 'tool-icon-link--active' : ''}`}

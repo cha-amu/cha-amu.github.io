@@ -27,7 +27,7 @@
 - Content hierarchy: 페이지 제목 반복보다 즉시 할 일/목록/검색을 먼저 보여준다.
 
 ## Design principles
-- Principle 1: 같은 위계는 같은 크기와 위치 규칙을 쓴다. 특히 공통 도구는 모든 페이지에서 같은 fixed 좌표를 유지한다.
+- Principle 1: 같은 위계는 같은 크기와 위치 규칙을 쓴다. 특히 공통 도구는 모든 페이지에서 같은 fixed 오버레이와 같은 `--layout-page` 오른쪽 레일을 유지한다.
 - Principle 2: 홈은 중앙 검색이 있으므로 우측 도구에서 검색을 반복하지 않는다.
 - Tradeoffs: 작은 화면에서는 상단 도구가 한 줄 아래로 내려가도 잘림 없는 접근성을 우선한다.
 
@@ -54,8 +54,8 @@
 
 ## Responsive behavior
 - Supported breakpoints/devices: 데스크톱 기본, 760px/430px 이하에서 축소·줄바꿈.
-- Layout adaptations: 430px 이하에서는 공통 도구가 다음 줄로 내려가 잘림을 막는다.
-- Touch/hover differences: 아이콘 버튼은 터치 가능한 크기를 유지한다.
+- Layout adaptations: 좁은 화면에서는 공통 도구를 fixed 상단 레일에 유지하고, 헤더 콘텐츠를 도구 줄 아래로 내려 겹침을 막는다.
+- Touch/hover differences: 아이콘 버튼은 터치 가능한 크기를 유지하고, fixed 오버레이의 빈 레일은 아래 메뉴 클릭을 막지 않는다.
 
 ## Interaction states
 - Loading: 기존 상태 컴포넌트로 표시.
