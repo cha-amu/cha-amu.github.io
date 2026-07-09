@@ -34,7 +34,7 @@
 html {
   background: var(--color-background);
   overflow-y: scroll;
-  scrollbar-gutter: stable both-edges;
+  scrollbar-gutter: stable;
 }
 
 body {
