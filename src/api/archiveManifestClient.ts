@@ -1,13 +1,22 @@
 import { config } from '../config';
 import { mockAssets } from '../data/mockData';
 import type { ArchiveAsset, ArchiveManifest, AssetOverride } from '../types';
-import { readCache, writeCache } from '../utils/localCache';
+import { readCache, readCachePayload, writeCache, type CachePayload } from '../utils/localCache';
 
 const ARCHIVE_ASSETS_CACHE_KEY = 'archive-assets:v1';
 const IMAGE_EXTENSIONS = new Set(['avif', 'gif', 'jpg', 'jpeg', 'png', 'svg', 'webp']);
 
 export function readCachedArchiveAssets(): ArchiveAsset[] {
   return readCache<ArchiveAsset[]>(ARCHIVE_ASSETS_CACHE_KEY) || [];
+}
+
+export function readCachedArchiveAssetsPayload(): CachePayload<ArchiveAsset[]> | null {
+  const payload = readCachePayload<ArchiveAsset[]>(ARCHIVE_ASSETS_CACHE_KEY);
+  if (!payload) return null;
+  return {
+    savedAt: payload.savedAt,
+    data: Array.isArray(payload.data) ? payload.data : []
+  };
 }
 
 export function writeCachedArchiveAssets(assets: ArchiveAsset[]) {

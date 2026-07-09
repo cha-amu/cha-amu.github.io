@@ -1,7 +1,7 @@
 import { config, isAppsScriptConfigured } from '../config';
 import { mockGuestbook, mockPosts } from '../data/mockData';
 import type { AdminSession, ApiEnvelope, AssetOverride, GuestbookEntry, Post } from '../types';
-import { readCache, writeCache } from '../utils/localCache';
+import { readCache, readCachePayload, writeCache, type CachePayload } from '../utils/localCache';
 
 export class ApiNotConfiguredError extends Error {
   constructor() {
@@ -86,12 +86,30 @@ export function readCachedPosts(): Post[] {
   return normalizePosts(readCache<unknown>(POSTS_CACHE_KEY));
 }
 
+export function readCachedPostsPayload(): CachePayload<Post[]> | null {
+  const payload = readCachePayload<unknown>(POSTS_CACHE_KEY);
+  if (!payload) return null;
+  return {
+    savedAt: payload.savedAt,
+    data: normalizePosts(payload.data)
+  };
+}
+
 export function writeCachedPosts(posts: Post[]) {
   writeCache(POSTS_CACHE_KEY, normalizePosts(posts));
 }
 
 export function readCachedGuestbook(): GuestbookEntry[] {
   return readCache<GuestbookEntry[]>(GUESTBOOK_CACHE_KEY) || [];
+}
+
+export function readCachedGuestbookPayload(): CachePayload<GuestbookEntry[]> | null {
+  const payload = readCachePayload<GuestbookEntry[]>(GUESTBOOK_CACHE_KEY);
+  if (!payload) return null;
+  return {
+    savedAt: payload.savedAt,
+    data: Array.isArray(payload.data) ? payload.data : []
+  };
 }
 
 export function writeCachedGuestbook(entries: GuestbookEntry[]) {

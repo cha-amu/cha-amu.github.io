@@ -1,6 +1,6 @@
 const PREFIX = 'cha-amu:';
 
-interface CachePayload<T> {
+export interface CachePayload<T> {
   savedAt: string;
   data: T;
 }
@@ -13,16 +13,24 @@ function isStorageAvailable() {
   }
 }
 
-export function readCache<T>(key: string): T | null {
+export function readCachePayload<T>(key: string): CachePayload<T> | null {
   if (!isStorageAvailable()) return null;
   try {
     const raw = window.localStorage.getItem(PREFIX + key);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as CachePayload<T>;
-    return parsed.data ?? null;
+    if (!parsed || !('data' in parsed)) return null;
+    return {
+      savedAt: typeof parsed.savedAt === 'string' ? parsed.savedAt : '',
+      data: parsed.data
+    };
   } catch (_) {
     return null;
   }
+}
+
+export function readCache<T>(key: string): T | null {
+  return readCachePayload<T>(key)?.data ?? null;
 }
 
 export function writeCache<T>(key: string, data: T) {

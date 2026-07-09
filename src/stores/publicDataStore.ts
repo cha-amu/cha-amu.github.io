@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
-import { loadArchiveManifest, mergeAssetOverrides, readCachedArchiveAssets, writeCachedArchiveAssets } from '../api/archiveManifestClient';
-import { listAssetOverrides, listGuestbook, listPosts, readCachedGuestbook, readCachedPosts, writeCachedGuestbook, writeCachedPosts } from '../api/appsScriptClient';
+import { loadArchiveManifest, mergeAssetOverrides, readCachedArchiveAssetsPayload, writeCachedArchiveAssets } from '../api/archiveManifestClient';
+import { listAssetOverrides, listGuestbook, listPosts, readCachedGuestbookPayload, readCachedPostsPayload, writeCachedGuestbook, writeCachedPosts } from '../api/appsScriptClient';
 import { listStoragePosts } from '../api/storageClient';
 import type { ArchiveAsset, GuestbookEntry, Post } from '../types';
 
@@ -30,14 +30,15 @@ type ResourceMap = {
 type PendingMap = Partial<Record<ResourceKey, Promise<unknown>>>;
 
 const PUBLIC_REFRESH_COOLDOWN_MS = 60_000;
+export const PUBLIC_PAGE_REFRESH_INTERVAL_MS = 180_000;
 
-function emptyResource<T>(items: T[] = []): PublicResource<T> {
+function emptyResource<T>(items: T[] = [], loadedAt = ''): PublicResource<T> {
   return {
     items,
     status: items.length ? 'ready' : 'idle',
     refreshing: false,
     error: '',
-    loadedAt: items.length ? new Date().toISOString() : ''
+    loadedAt: items.length ? loadedAt : ''
   };
 }
 
@@ -113,10 +114,14 @@ function normalizeGuestbookList(entries: GuestbookEntry[]) {
     .sort(byNewestGuestbook);
 }
 
+const cachedPosts = readCachedPostsPayload();
+const cachedGuestbook = readCachedGuestbookPayload();
+const cachedArchive = readCachedArchiveAssetsPayload();
+
 let state: PublicDataState = {
-  posts: emptyResource(normalizePostList(readCachedPosts())),
-  guestbook: emptyResource(normalizeGuestbookList(readCachedGuestbook())),
-  archive: emptyResource(readCachedArchiveAssets())
+  posts: emptyResource(normalizePostList(cachedPosts?.data || []), cachedPosts?.savedAt || ''),
+  guestbook: emptyResource(normalizeGuestbookList(cachedGuestbook?.data || []), cachedGuestbook?.savedAt || ''),
+  archive: emptyResource(cachedArchive?.data || [], cachedArchive?.savedAt || '')
 };
 
 const listeners = new Set<() => void>();

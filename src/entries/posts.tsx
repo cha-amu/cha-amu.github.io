@@ -1,10 +1,10 @@
-import { Component, ReactNode, useEffect, useMemo, useState } from 'react';
+import { Component, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { writeCachedPosts } from '../api/appsScriptClient';
 import { AppLayout } from '../components/AppLayout';
 import { ErrorState, LoadingState, EmptyState } from '../components/PageState';
 import { MarkdownView } from '../components/MarkdownView';
 import { TagList } from '../components/TagList';
-import { refreshPosts, usePublicResource } from '../stores/publicDataStore';
+import { PUBLIC_PAGE_REFRESH_INTERVAL_MS, refreshPosts, usePublicResource } from '../stores/publicDataStore';
 import { formatDate } from '../utils/date';
 import { excerpt } from '../utils/strings';
 
@@ -33,15 +33,31 @@ export class PostsErrorBoundary extends Component<{ children: ReactNode }, { mes
 export function PostsPage() {
   const postsResource = usePublicResource('posts');
   const posts = postsResource.items;
+  const postsCount = useRef(posts.length);
   const [selectedId, setSelectedId] = useState(() => decodeURIComponent(window.location.hash.replace('#', '')));
 
-  const load = () => {
-    void refreshPosts({ force: true, silent: posts.length > 0 }).catch(() => undefined);
-  };
+  useEffect(() => {
+    postsCount.current = posts.length;
+  }, [posts.length]);
+
+  const load = useCallback((options: { force?: boolean; silent?: boolean } = {}) => {
+    void refreshPosts({ force: options.force ?? true, silent: options.silent ?? postsCount.current > 0 }).catch(() => undefined);
+  }, []);
 
   useEffect(() => {
-    void refreshPosts({ silent: posts.length > 0 }).catch(() => undefined);
-  }, []);
+    load({ force: true, silent: postsCount.current > 0 });
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === 'visible') load({ force: true, silent: true });
+    }, PUBLIC_PAGE_REFRESH_INTERVAL_MS);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') load({ force: true, silent: true });
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [load]);
 
   useEffect(() => {
     const syncHash = () => setSelectedId(decodeURIComponent(window.location.hash.replace('#', '')));

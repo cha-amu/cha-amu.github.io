@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useRef, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import {
   createGuestbookEntry,
   hideGuestbookEntry
@@ -6,7 +6,7 @@ import {
 import { AppLayout } from '../components/AppLayout';
 import { EmptyState, ErrorState, LoadingState } from '../components/PageState';
 import { TurnstileBox } from '../components/TurnstileBox';
-import { refreshGuestbook, setPublicGuestbook, usePublicResource } from '../stores/publicDataStore';
+import { PUBLIC_PAGE_REFRESH_INTERVAL_MS, refreshGuestbook, setPublicGuestbook, usePublicResource } from '../stores/publicDataStore';
 import type { GuestbookEntry } from '../types';
 import { formatDate } from '../utils/date';
 
@@ -41,21 +41,37 @@ function mergeGuestbookEntries(serverEntries: GuestbookEntry[], currentEntries: 
 export function GuestbookPage() {
   const guestbookResource = usePublicResource('guestbook');
   const entries = guestbookResource.items;
+  const entriesCount = useRef(entries.length);
   const locallyHiddenIds = useRef(new Set<string>());
   const [message, setMessage] = useState('');
   const [saving, setSaving] = useState(false);
 
-  const load = (options: { force?: boolean; silent?: boolean } = {}) => {
-    void refreshGuestbook({ force: options.force, silent: options.silent ?? entries.length > 0 })
+  useEffect(() => {
+    entriesCount.current = entries.length;
+  }, [entries.length]);
+
+  const load = useCallback((options: { force?: boolean; silent?: boolean } = {}) => {
+    void refreshGuestbook({ force: options.force, silent: options.silent ?? entriesCount.current > 0 })
       .then((serverEntries) => {
         setPublicGuestbook((current) => mergeGuestbookEntries(serverEntries, current, locallyHiddenIds.current));
       })
       .catch(() => undefined);
-  };
+  }, []);
 
   useEffect(() => {
-    load({ silent: entries.length > 0 });
-  }, []);
+    load({ force: true, silent: entriesCount.current > 0 });
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === 'visible') load({ force: true, silent: true });
+    }, PUBLIC_PAGE_REFRESH_INTERVAL_MS);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') load({ force: true, silent: true });
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [load]);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
