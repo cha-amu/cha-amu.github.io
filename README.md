@@ -23,6 +23,10 @@ npm run dev
 npm run build
 ```
 
+## Routing
+
+The site is built as a React SPA. `npm run build` emits a single `index.html` and a matching `404.html` fallback so GitHub Pages can handle direct visits such as `/posts/`, `/archive/`, `/guestbook/`, `/search/?q=...`, and `/admin/`. Internal navigation uses the History API to avoid full document reloads.
+
 ## Config
 
 Copy `.env.example` to `.env` for local configuration.

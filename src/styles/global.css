@@ -33,6 +33,7 @@ html {
 body {
   margin: 0;
   min-width: 320px;
+  min-height: calc(100vh + 1px);
   background: var(--color-background);
 }
 
@@ -468,8 +469,9 @@ img {
   position: fixed;
   z-index: 50;
   top: var(--site-tools-top);
-  left: 0;
-  right: 0;
+  left: 50%;
+  width: 100vw;
+  transform: translateX(-50%);
   display: flex;
   justify-content: center;
   pointer-events: none;
@@ -605,10 +607,10 @@ img {
   .site-header__tools {
     position: fixed;
     top: var(--site-tools-top);
-    left: 0;
-    right: 0;
-    width: auto;
+    left: 50%;
+    width: 100vw;
     max-width: none;
+    transform: translateX(-50%);
   }
 
   .main-nav {

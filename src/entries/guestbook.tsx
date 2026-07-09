@@ -1,5 +1,4 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
-import { createRoot } from 'react-dom/client';
 import {
   createGuestbookEntry,
   hideGuestbookEntry,
@@ -43,7 +42,7 @@ function mergeGuestbookEntries(serverEntries: GuestbookEntry[], currentEntries: 
   return [...pendingEntries.filter((entry) => !serverIds.has(entry.id)), ...serverVisibleEntries];
 }
 
-function GuestbookPage() {
+export function GuestbookPage() {
   const [initialEntries] = useState(() => readCachedGuestbook().map(normalizeEntry).sort(byNewestFirst));
   const [entries, setEntries] = useState<GuestbookEntry[]>(initialEntries);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>(initialEntries.length ? 'ready' : 'loading');
@@ -183,5 +182,3 @@ function GuestbookPage() {
     </AppLayout>
   );
 }
-
-createRoot(document.getElementById('root')!).render(<GuestbookPage />);

@@ -1,5 +1,6 @@
 import { FormEvent, useState } from 'react';
 import { SearchIcon } from './ToolIcons';
+import { navigateTo } from '../utils/router';
 
 export function SearchForm({
   initialValue = '',
@@ -14,7 +15,7 @@ export function SearchForm({
   const submit = (event: FormEvent) => {
     event.preventDefault();
     const trimmed = query.trim();
-    window.location.href = trimmed ? `/search/?q=${encodeURIComponent(trimmed)}` : '/search/';
+    navigateTo(trimmed ? `/search/?q=${encodeURIComponent(trimmed)}` : '/search/');
   };
 
   return (

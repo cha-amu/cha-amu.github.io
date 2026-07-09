@@ -27,7 +27,7 @@
 - Content hierarchy: 페이지 제목 반복보다 즉시 할 일/목록/검색을 먼저 보여준다.
 
 ## Design principles
-- Principle 1: 같은 위계는 같은 크기와 위치 규칙을 쓴다. 특히 공통 도구는 모든 페이지에서 같은 fixed 오버레이와 같은 `--layout-page` 오른쪽 레일을 유지한다.
+- Principle 1: 같은 위계는 같은 크기와 위치 규칙을 쓴다. 특히 공통 도구는 모든 페이지에서 전체 뷰포트 기준 fixed 오버레이와 같은 `--layout-page` 오른쪽 레일을 유지한다.
 - Principle 2: 홈은 중앙 검색이 있으므로 우측 도구에서 검색을 반복하지 않는다.
 - Tradeoffs: 작은 화면에서는 상단 도구가 한 줄 아래로 내려가도 잘림 없는 접근성을 우선한다.
 
@@ -74,8 +74,8 @@
 - Framework/styling system: Vite + React + TypeScript, 전역 CSS 토큰.
 - Design-token constraints: 색상/폭/버튼 크기는 공통 토큰 변경을 우선한다.
 - Performance constraints: GitHub Pages 정적 호스팅, Apps Script 응답은 캐시 우선 표시.
-- Compatibility constraints: GitHub Pages 경로와 trailing slash 보정 유지.
-- Test/screenshot expectations: UI 변경 후 typecheck/build와 주요 DOM 구조 확인.
+- Compatibility constraints: React SPA 라우팅, GitHub Pages `404.html` fallback, 경로 직접 입력/새로고침, trailing slash 보정 유지.
+- Test/screenshot expectations: UI/라우팅 변경 후 typecheck/build, 직접 URL 진입, 내부 링크 무reload 이동, 주요 DOM 구조 확인.
 
 ## Open questions
 - [ ] 실제 다국어/다크테마를 언제 활성화할지 / 관리자 / 낮음

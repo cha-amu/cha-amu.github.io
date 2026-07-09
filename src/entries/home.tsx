@@ -1,7 +1,5 @@
-import { createRoot } from 'react-dom/client';
 import { SearchForm } from '../components/SearchForm';
 import { SiteTools } from '../components/SiteTools';
-import '../styles/global.css';
 
 const canonicalRoutes = ['/posts', '/guestbook', '/archive', '/search', '/admin'];
 if (canonicalRoutes.includes(window.location.pathname)) {
@@ -13,7 +11,7 @@ const menuItems = [
   { href: '/archive/', label: '자료', icon: '/assets/ui/archive-icon.png' }
 ];
 
-function HomePage() {
+export function HomePage() {
   return (
     <main className="home-screen">
       <div className="site-header__tools">
@@ -37,5 +35,3 @@ function HomePage() {
     </main>
   );
 }
-
-createRoot(document.getElementById('root')!).render(<HomePage />);

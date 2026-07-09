@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import { createRoot } from 'react-dom/client';
 import { loadArchiveManifest, mergeAssetOverrides } from '../api/archiveManifestClient';
 import { listPosts } from '../api/appsScriptClient';
 import { AppLayout } from '../components/AppLayout';
@@ -13,7 +12,7 @@ function getQuery(): string {
   return new URLSearchParams(window.location.search).get('q') || '';
 }
 
-function SearchPage() {
+export function SearchPage() {
   const query = getQuery();
   const [posts, setPosts] = useState<Post[]>([]);
   const [assets, setAssets] = useState<ArchiveAsset[]>([]);
@@ -63,5 +62,3 @@ function SearchPage() {
     </AppLayout>
   );
 }
-
-createRoot(document.getElementById('root')!).render(<SearchPage />);

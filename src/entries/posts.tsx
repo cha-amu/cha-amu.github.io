@@ -1,5 +1,4 @@
 import { Component, ReactNode, useEffect, useMemo, useState } from 'react';
-import { createRoot } from 'react-dom/client';
 import { listPosts, normalizePosts, readCachedPosts, writeCachedPosts } from '../api/appsScriptClient';
 import { AppLayout } from '../components/AppLayout';
 import { ErrorState, LoadingState, EmptyState } from '../components/PageState';
@@ -11,7 +10,7 @@ import { excerpt } from '../utils/strings';
 
 type PostUpdater = Post[] | ((current: Post[]) => Post[]);
 
-class PostsErrorBoundary extends Component<{ children: ReactNode }, { message: string }> {
+export class PostsErrorBoundary extends Component<{ children: ReactNode }, { message: string }> {
   state = { message: '' };
 
   static getDerivedStateFromError(error: unknown) {
@@ -42,7 +41,7 @@ function mergePosts(serverPosts: unknown) {
   return normalizePosts(serverPosts).filter((post) => post.status === 'published').sort(byNewestPost);
 }
 
-function PostsPage() {
+export function PostsPage() {
   const [initialPosts] = useState(() => mergePosts(readCachedPosts()));
   const [posts, setPosts] = useState<Post[]>(initialPosts);
   const [selectedId, setSelectedId] = useState(() => decodeURIComponent(window.location.hash.replace('#', '')));
@@ -80,7 +79,11 @@ function PostsPage() {
   useEffect(() => {
     const syncHash = () => setSelectedId(decodeURIComponent(window.location.hash.replace('#', '')));
     window.addEventListener('hashchange', syncHash);
-    return () => window.removeEventListener('hashchange', syncHash);
+    window.addEventListener('popstate', syncHash);
+    return () => {
+      window.removeEventListener('hashchange', syncHash);
+      window.removeEventListener('popstate', syncHash);
+    };
   }, []);
 
   const selectedPost = useMemo(() => posts.find((post) => post.id === selectedId) || null, [posts, selectedId]);
@@ -117,5 +120,3 @@ function PostsPage() {
     </AppLayout>
   );
 }
-
-createRoot(document.getElementById('root')!).render(<PostsErrorBoundary><PostsPage /></PostsErrorBoundary>);

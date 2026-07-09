@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import { createRoot } from 'react-dom/client';
 import { loadArchiveManifest, mergeAssetOverrides } from '../api/archiveManifestClient';
 import { AppLayout } from '../components/AppLayout';
 import { EmptyState, ErrorState, LoadingState } from '../components/PageState';
@@ -7,7 +6,7 @@ import { TagList } from '../components/TagList';
 import type { ArchiveAsset } from '../types';
 import { normalizeText, uniqueTags } from '../utils/strings';
 
-function ArchivePage() {
+export function ArchivePage() {
   const [assets, setAssets] = useState<ArchiveAsset[]>([]);
   const [query, setQuery] = useState('');
   const [selectedTag, setSelectedTag] = useState('');
@@ -82,5 +81,3 @@ function ArchivePage() {
     </AppLayout>
   );
 }
-
-createRoot(document.getElementById('root')!).render(<ArchivePage />);

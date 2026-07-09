@@ -1,5 +1,4 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { createRoot } from 'react-dom/client';
 import { loadArchiveManifest } from '../api/archiveManifestClient';
 import { adminHideGuestbook, adminListAssetOverrides, adminListPosts, adminLogin, adminRefreshSession, adminSaveAssetOverride, adminSavePost, listGuestbook, readCachedPosts, writeCachedPosts } from '../api/appsScriptClient';
 import { AppLayout } from '../components/AppLayout';
@@ -380,7 +379,7 @@ function GuestbookAdmin({ token, onSessionExpired }: { token: string; onSessionE
   );
 }
 
-function AdminApp() {
+export function AdminApp() {
   const [session, setSession] = useState(() => loadAdminSession());
   const [tab, setTab] = useState<Tab>('posts');
   const [sessionMessage, setSessionMessage] = useState('');
@@ -457,5 +456,3 @@ function AdminApp() {
     </AppLayout>
   );
 }
-
-createRoot(document.getElementById('root')!).render(<AdminApp />);

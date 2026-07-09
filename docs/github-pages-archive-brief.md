@@ -100,7 +100,7 @@ Image hosting: 별도 이미지 전용 GitHub Pages repo
 
 #### 라우팅/배포 원칙
 
-GitHub Pages에서 새로고침과 직접 접근 문제가 생기지 않게, 가능하면 확정 경로에 맞춘 정적 파일 출력을 우선한다.
+GitHub Pages에서 새로고침과 직접 접근이 동작하면서도 페이지 이동 깜빡임을 줄이기 위해 React SPA와 `404.html` fallback을 사용한다.
 
 확정 경로:
 
@@ -113,27 +113,19 @@ GitHub Pages에서 새로고침과 직접 접근 문제가 생기지 않게, 가
 /search/
 ```
 
-구현 방식 후보:
+구현 방식:
 
-1. Vite multi-page app 방식
-   - 각 경로에 대응하는 HTML entry를 둔다.
-   - GitHub Pages에서 직접 접근이 비교적 단순하다.
-
-2. React SPA + 404 fallback 방식
-   - 하나의 앱에서 클라이언트 라우팅을 한다.
-   - GitHub Pages에서 직접 URL 접근/새로고침 처리를 별도로 고려해야 한다.
-
-현재는 1번, Vite multi-page app 방식을 우선 검토한다.
+- React SPA + `404.html` fallback 방식으로 확정한다.
+- 하나의 앱 엔트리에서 클라이언트 라우팅을 처리한다.
+- GitHub Pages는 서버 rewrite가 없으므로 빌드 시 `dist/index.html`을 `dist/404.html`로 복사한다.
+- `/posts/`, `/guestbook/`, `/archive/`, `/admin/`, `/search/` 직접 입력/새로고침은 fallback HTML을 받은 뒤 React 라우터가 현재 주소를 읽어 해당 화면을 렌더링한다.
+- `/posts`처럼 trailing slash가 빠진 경로는 앱/로컬 미들웨어에서 `/posts/`로 보정한다.
 
 #### 예상 파일 구조
 
 ```txt
-/index.html
-/posts/index.html
-/guestbook/index.html
-/archive/index.html
-/admin/index.html
-/search/index.html
+/index.html              # 단일 SPA entry
+/404.html                # GitHub Pages 직접 URL fallback; 빌드 산출물에서 index와 동일
 /src/
   api/
     appsScriptClient.ts
@@ -143,13 +135,14 @@ GitHub Pages에서 새로고침과 직접 접근 문제가 생기지 않게, 가
     MarkdownView.tsx
     Toast.tsx
     ConfirmDialog.tsx
-  pages/
-    home/
-    posts/
-    guestbook/
-    archive/
-    admin/
-    search/
+  main.tsx              # SPA router
+  entries/              # route component implementations
+    home.tsx
+    posts.tsx
+    guestbook.tsx
+    archive.tsx
+    admin.tsx
+    search.tsx
   styles/
     main.css
   types/
@@ -160,8 +153,8 @@ GitHub Pages에서 새로고침과 직접 접근 문제가 생기지 않게, 가
 
 #### React를 쓰더라도 지켜야 할 것
 
-- 전체를 무거운 SPA처럼 만들지 않는다.
-- 공개 페이지는 읽기/검색 중심으로 가볍게 유지한다.
+- SPA로 통합하되 공개 페이지는 읽기/검색 중심으로 가볍게 유지한다.
+- 공통 상단 도구와 설정 사이드바는 앱 최상위에서 일관되게 동작해야 한다.
 - 관리자 화면은 React의 장점을 적극 사용한다.
 - 결제/판매 기능은 직접 구현하지 않고 Fourthwall 같은 외부 서비스 링크를 우선한다.
 - GitHub Pages 정적 배포와 Apps Script API 연동이라는 기본 구조를 유지한다.
@@ -400,7 +393,7 @@ GitHub Pages에서 새로고침과 직접 접근 문제가 생기지 않게, 가
 
 #### 통합 검색 인덱스
 
-Vite multi-page app 구조에서도 통합 검색은 가능하다. 핵심은 SPA 여부가 아니라 공통 검색 인덱스를 만드는 것이다.
+SPA 구조에서도 통합 검색은 공통 검색 인덱스/API 응답을 기반으로 처리한다. 검색 URL은 `/search/?q=검색어`를 유지하고 내부 이동은 History API로 처리한다.
 
 검색 인덱스 후보 구조:
 
@@ -476,18 +469,15 @@ GET Apps Script?action=assetOverrides
 - `/admin/` → 관리자
 - `/search/` → 통합 검색
 
-권장 구현 방식은 실제 여러 HTML 파일 방식이다.
+구현 방식은 단일 SPA entry 방식이다.
 
 ```txt
-/index.html
-/posts/index.html
-/guestbook/index.html
-/archive/index.html
-/admin/index.html
-/search/index.html
+/index.html      # 단일 앱 entry
+/404.html        # GitHub Pages 직접 URL fallback; index와 동일한 빌드 산출물
+/src/main.tsx    # 현재 pathname/search/hash를 읽어 route component 선택
 ```
 
-이 방식은 GitHub Pages에서 새로고침/직접 접근이 단순하고, 별도 404 라우팅 처리가 필요 없다. SPA 라우팅은 현재 기본 방향에서 제외한다.
+GitHub Pages에서 `/posts/` 같은 직접 URL은 실제 파일이 없어도 `404.html`을 내려주고, React 라우터가 현재 주소를 기준으로 해당 페이지를 렌더링한다. 내부 링크 이동은 History API로 처리해 전체 문서 reload와 화면 깜빡임을 피한다.
 
 ### 디자인 방향
 
