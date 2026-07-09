@@ -15,11 +15,14 @@ export function Header() {
   const path = currentPath();
   return (
     <header className="site-header">
-      <div className="site-header__inner">
+      <div className="site-header__tools">
         <a className="topbar-brand" href="/" aria-label="홈으로 이동">
           <img src="/assets/ui/cha-amu-logo.png" alt="" />
           <span>그냥 아무거나 올리는 채널</span>
         </a>
+        <SiteTools />
+      </div>
+      <div className="site-header__inner">
         <nav className="main-nav" aria-label="주요 메뉴">
           {navItems.map((item) => (
             <a key={item.href} href={item.href} aria-current={path === item.href ? 'page' : undefined}>
@@ -28,9 +31,6 @@ export function Header() {
             </a>
           ))}
         </nav>
-      </div>
-      <div className="site-header__tools">
-        <SiteTools />
       </div>
     </header>
   );
