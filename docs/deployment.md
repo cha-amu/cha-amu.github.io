@@ -16,13 +16,14 @@ https://cha-amu.github.io/
 
 ## 1. 배포 구조
 
-이 프로젝트는 GitHub Actions workflow 2개로 배포한다.
+이 프로젝트는 메인 사이트 레포의 GitHub Actions workflow 2개로 배포한다.
 
 ```txt
 .github/workflows/pages.yml       → 사이트 빌드 후 GitHub Pages 배포
 .github/workflows/apps-script.yml → Apps Script 코드 배포
-.github/workflows/storage-sync.yml → Google Sheets와 cha-amu/storage repo 주기적 동기화
 ```
+
+Google Sheets와 `cha-amu/storage` repo의 주기적 동기화는 storage repo 자신의 `Sync storage repo` workflow에서 실행한다. storage repo가 자기 파일과 manifest만 커밋하므로 별도 cross-repo push 토큰은 쓰지 않는다.
 
 ### 사이트 배포
 
@@ -44,7 +45,6 @@ https://cha-amu.github.io/
   - `APPS_SCRIPT_DEPLOYMENT_ID`
   - `SPREADSHEET_ID`
   - `ADMIN_PASSWORD`는 로컬 없이 GitHub Actions로 관리자 비밀번호를 바꿀 때만 필요
-  - `STORAGE_REPO_TOKEN`은 `cha-amu/storage` repo에 push할 수 있는 토큰
 
 `APPS_SCRIPT_DEPLOYMENT_ID`를 넣어두면 기존 `/exec` URL을 유지한 채 배포만 갱신한다. 이 값을 빼면 Actions가 새 Web App deployment를 만들 수 있으므로, 기존 사이트 URL을 유지하려면 보통 넣어둔다.
 
@@ -128,7 +128,6 @@ CLASP_JSON=<Apps Script 프로젝트 연결 JSON>
 APPS_SCRIPT_DEPLOYMENT_ID=<기존 Apps Script Web App deployment id>
 SPREADSHEET_ID=<Google Sheet ID>
 ADMIN_PASSWORD=<GitHub에서 관리자 비밀번호를 변경할 때 사용할 새 비밀번호>
-STORAGE_REPO_TOKEN=<cha-amu/storage repo push 권한 토큰>
 ```
 
 `SPREADSHEET_ID`는 공개 repo 파일에 적지 않고 Secret으로 둔다. `ADMIN_PASSWORD`는 사이트 빌드나 Apps Script 일반 배포에는 필요 없다. 로컬 `.env`를 잃어버렸거나 GitHub UI만으로 관리자 비밀번호를 바꿔야 할 때 `Update admin password` workflow가 사용한다.

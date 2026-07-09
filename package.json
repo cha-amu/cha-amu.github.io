@@ -10,8 +10,7 @@
     "secrets:apps-script": "node scripts/generate-apps-script-secrets.mjs",
     "typecheck": "tsc -b",
     "env:apps-script": "node scripts/generate-apps-script-secrets.mjs --write-env",
-    "sync:apps-script-env": "node scripts/sync-apps-script-properties.mjs",
-    "sync:storage": "node scripts/sync-storage-repo.mjs"
+    "sync:apps-script-env": "node scripts/sync-apps-script-properties.mjs"
   },
   "dependencies": {
     "react": "^19.2.7",
