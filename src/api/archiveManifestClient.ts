@@ -69,7 +69,10 @@ function normalizeAsset(value: unknown): ArchiveAsset | null {
     createdAt: asString(record.createdAt).trim() || undefined,
     updatedAt: asString(record.updatedAt).trim() || undefined,
     source: 'storage',
-    storagePath: path
+    storagePath: path,
+    metadataPath: asString(record.metadataPath).trim() || undefined,
+    markdownBaseUrl: asString(record.markdownBaseUrl).trim() || undefined,
+    markdownRootUrl: asString(record.markdownRootUrl).trim() || config.storageBaseUrl
   };
 }
 

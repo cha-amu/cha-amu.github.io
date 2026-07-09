@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AppLayout } from '../components/AppLayout';
+import { MarkdownView } from '../components/MarkdownView';
 import { EmptyState, ErrorState, LoadingState } from '../components/PageState';
 import { TagList } from '../components/TagList';
 import { refreshArchive, usePublicResource } from '../stores/publicDataStore';
@@ -61,8 +62,9 @@ export function ArchivePage() {
             )}
             <div className="asset-card__body">
               <h2>{asset.title}</h2>
-              {asset.description ? <p>{asset.description}</p> : null}
+              {asset.description ? <MarkdownView markdown={asset.description} baseUrl={asset.markdownBaseUrl} rootUrl={asset.markdownRootUrl} /> : null}
               <TagList tags={asset.tags} />
+              {asset.sourceUrl ? <p className="meta"><a href={asset.sourceUrl} target="_blank" rel="noreferrer">출처</a></p> : null}
               <p className="meta">{asset.path}</p>
             </div>
           </article>

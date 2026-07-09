@@ -47,6 +47,9 @@ export interface ArchiveAsset {
   updatedAt?: string;
   source?: 'sheets' | 'storage';
   storagePath?: string;
+  metadataPath?: string;
+  markdownBaseUrl?: string;
+  markdownRootUrl?: string;
 }
 
 export interface ArchiveManifest {

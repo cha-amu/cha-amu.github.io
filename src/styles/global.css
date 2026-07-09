@@ -448,6 +448,21 @@ img {
   padding: 0.9rem;
 }
 
+.asset-card__body .markdown-body {
+  max-width: none;
+  font-size: 0.98rem;
+}
+
+.asset-card__body .markdown-body p,
+.asset-card__body .markdown-body ul {
+  margin: 0.35rem 0;
+}
+
+.asset-card__body .markdown-body img {
+  border-radius: 0.75rem;
+  margin: 0.55rem 0;
+}
+
 .tabs {
   display: flex;
   gap: 0.5rem;
