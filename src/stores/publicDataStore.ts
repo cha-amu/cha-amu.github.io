@@ -203,7 +203,7 @@ export function setPublicArchiveAssets(assets: ArchiveAsset[]) {
 }
 
 export function refreshPosts(options: { force?: boolean; silent?: boolean } = {}) {
-  if (pending.posts && !options.force) return pending.posts as Promise<Post[]>;
+  if (pending.posts) return pending.posts as Promise<Post[]>;
   if (!options.force && state.posts.status === 'ready' && isFresh(state.posts)) return Promise.resolve(state.posts.items);
   setLoading('posts', Boolean(options.silent));
   const request = Promise.allSettled([listStoragePosts(), listPosts()])
@@ -233,7 +233,7 @@ export function refreshPosts(options: { force?: boolean; silent?: boolean } = {}
 }
 
 export function refreshGuestbook(options: { force?: boolean; silent?: boolean } = {}) {
-  if (pending.guestbook && !options.force) return pending.guestbook as Promise<GuestbookEntry[]>;
+  if (pending.guestbook) return pending.guestbook as Promise<GuestbookEntry[]>;
   if (!options.force && state.guestbook.status === 'ready' && isFresh(state.guestbook)) return Promise.resolve(state.guestbook.items);
   setLoading('guestbook', Boolean(options.silent));
   const request = listGuestbook()

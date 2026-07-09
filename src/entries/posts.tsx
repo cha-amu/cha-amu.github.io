@@ -41,11 +41,11 @@ export function PostsPage() {
   }, [posts.length]);
 
   const load = useCallback((options: { force?: boolean; silent?: boolean } = {}) => {
-    void refreshPosts({ force: options.force ?? true, silent: options.silent ?? postsCount.current > 0 }).catch(() => undefined);
+    void refreshPosts({ force: options.force, silent: options.silent ?? postsCount.current > 0 }).catch(() => undefined);
   }, []);
 
   useEffect(() => {
-    load({ force: true, silent: postsCount.current > 0 });
+    load({ silent: postsCount.current > 0 });
   }, [load]);
 
   useEffect(() => {
@@ -67,9 +67,8 @@ export function PostsPage() {
   return (
     <AppLayout>
       <h1 className="sr-only">아무 글</h1>
-      {postsResource.refreshing ? <p className="meta">최신 글 확인 중</p> : null}
       {postsResource.status === 'loading' ? <LoadingState /> : null}
-      {postsResource.status === 'error' ? <ErrorState message={postsResource.error} onRetry={load} /> : null}
+      {postsResource.status === 'error' ? <ErrorState message={postsResource.error} onRetry={() => load({ force: true })} /> : null}
       {postsResource.status === 'ready' && !posts.length ? <EmptyState label="아직 공개된 글이 없습니다." /> : null}
       {postsResource.status === 'ready' && posts.length ? (
         <section className="post-flow" aria-label="아무 글 목록">

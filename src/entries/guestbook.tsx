@@ -59,7 +59,7 @@ export function GuestbookPage() {
   }, []);
 
   useEffect(() => {
-    load({ force: true, silent: entriesCount.current > 0 });
+    load({ silent: entriesCount.current > 0 });
   }, [load]);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
@@ -141,7 +141,6 @@ export function GuestbookPage() {
           </div>
           <TurnstileBox />
           {message ? <p className="status-message">{message}</p> : null}
-          {guestbookResource.refreshing ? <p className="meta">최신 방명록 확인 중</p> : null}
           <button className="button button--primary" type="submit" disabled={saving}>{saving ? '전송 중' : '작성'}</button>
         </form>
         <section className="stack" aria-label="방명록 목록">
