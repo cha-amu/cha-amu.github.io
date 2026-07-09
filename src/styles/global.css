@@ -424,29 +424,23 @@ img {
 .tag-panel {
   grid-area: tags;
   display: grid;
-  gap: 0.85rem;
+  gap: 0.65rem;
   padding: 0.15rem 0;
 }
 
-.filter-rail-search {
-  display: grid;
-  gap: 0.45rem;
+.content-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-wrap: wrap;
 }
 
-.filter-rail-search input {
-  width: 100%;
+.content-filter-bar input {
+  width: min(360px, 100%);
   border: 2px solid var(--color-ink);
   border-radius: 999px;
   background: var(--color-surface);
   padding: 0.5rem 0.7rem;
-}
-
-.filter-rail-meta {
-  min-height: 1.5rem;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
 }
 
 .filter-reset {
@@ -1067,6 +1061,7 @@ img {
 .page__inner > .guestbook-flow,
 .page__inner > .archive-grid,
 .page__inner > .tagged-layout,
+.page__inner > .content-filter-bar,
 .page__inner > .stack,
 .page__inner > .two-column,
 .page__inner > .filter-bar,
@@ -1170,7 +1165,8 @@ img {
 .page__inner > .guestbook-flow,
 .page__inner > .post-flow,
 .page__inner > .archive-grid,
-.page__inner > .tagged-layout {
+.page__inner > .tagged-layout,
+.page__inner > .content-filter-bar {
   justify-self: stretch;
 }
 

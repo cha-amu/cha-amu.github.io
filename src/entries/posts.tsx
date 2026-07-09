@@ -97,41 +97,43 @@ export function PostsPage() {
       {postsResource.status === 'error' ? <ErrorState message={postsResource.error} onRetry={() => load({ force: true })} /> : null}
       {postsResource.status === 'ready' && !posts.length ? <EmptyState label="아직 공개된 글이 없습니다." /> : null}
       {postsResource.status === 'ready' && posts.length ? (
-        <div className="tagged-layout">
-          <section className="post-flow tagged-main" aria-label="아무 글 목록">
-            {filteredPosts.map((post) => {
-              const expanded = selectedPost?.id === post.id;
-              return (
-                <article className={`post-entry ${expanded ? 'post-entry--active' : ''}`} id={post.id} key={post.id}>
-                  <a className="post-entry__summary" href={`#${encodeURIComponent(post.id)}`} onClick={() => setSelectedId(post.id)}>
-                    <h2>{post.title}</h2>
-                    <p>{post.excerpt || excerpt(post.body)}</p>
-                    <TagList tags={post.tags} />
-                    <p className="meta">{formatDate(post.publishedAt || post.createdAt)}</p>
-                  </a>
-                  {expanded ? (
-                    <div className="post-entry__body">
-                      <MarkdownView markdown={post.body} baseUrl={post.markdownBaseUrl} rootUrl={post.markdownRootUrl} />
-                    </div>
-                  ) : null}
-                </article>
-              );
-            })}
-            {filteredPosts.length === 0 ? <EmptyState label="선택한 태그에 맞는 글이 없습니다." /> : null}
+        <>
+          <section className="content-filter-bar" aria-label="아무 글 검색">
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="글 검색" aria-label="아무 글 검색어" />
+            <span className="result-count" aria-live="polite">{filteredPosts.length}개 표시 중</span>
+            {query.trim() || selectedTags.length ? <button className="filter-reset" type="button" onClick={resetFilters}>초기화</button> : null}
           </section>
-          <TagFilterPanel
-            label="아무 글"
-            query={query}
-            searchPlaceholder="글 검색"
-            visibleCount={filteredPosts.length}
-            tags={tagOptions}
-            selectedTags={selectedTags}
-            onQueryChange={setQuery}
-            onToggleTag={toggleTag}
-            onClearTags={() => setSelectedTags([])}
-            onClearFilters={resetFilters}
-          />
-        </div>
+          <div className="tagged-layout">
+            <section className="post-flow tagged-main" aria-label="아무 글 목록">
+              {filteredPosts.map((post) => {
+                const expanded = selectedPost?.id === post.id;
+                return (
+                  <article className={`post-entry ${expanded ? 'post-entry--active' : ''}`} id={post.id} key={post.id}>
+                    <a className="post-entry__summary" href={`#${encodeURIComponent(post.id)}`} onClick={() => setSelectedId(post.id)}>
+                      <h2>{post.title}</h2>
+                      <p>{post.excerpt || excerpt(post.body)}</p>
+                      <TagList tags={post.tags} />
+                      <p className="meta">{formatDate(post.publishedAt || post.createdAt)}</p>
+                    </a>
+                    {expanded ? (
+                      <div className="post-entry__body">
+                        <MarkdownView markdown={post.body} baseUrl={post.markdownBaseUrl} rootUrl={post.markdownRootUrl} />
+                      </div>
+                    ) : null}
+                  </article>
+                );
+              })}
+              {filteredPosts.length === 0 ? <EmptyState label="선택한 태그에 맞는 글이 없습니다." /> : null}
+            </section>
+            <TagFilterPanel
+              label="아무 글"
+              tags={tagOptions}
+              selectedTags={selectedTags}
+              onToggleTag={toggleTag}
+              onClearTags={() => setSelectedTags([])}
+            />
+          </div>
+        </>
       ) : null}
     </AppLayout>
   );

@@ -46,6 +46,11 @@ export function ArchivePage() {
   return (
     <AppLayout>
       <h1 className="sr-only">자료</h1>
+      <section className="content-filter-bar" aria-label="자료 검색">
+        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="자료 검색" aria-label="자료 검색어" />
+        <span className="result-count" aria-live="polite">{filtered.length}개 표시 중</span>
+        {query.trim() || selectedTags.length ? <button className="filter-reset" type="button" onClick={resetFilters}>초기화</button> : null}
+      </section>
       <div className="tagged-layout">
         <main className="tagged-main">
           {archiveResource.refreshing ? <p className="meta">최신 자료 확인 중</p> : null}
@@ -72,15 +77,10 @@ export function ArchivePage() {
         </main>
         <TagFilterPanel
           label="자료"
-          query={query}
-          searchPlaceholder="자료 검색"
-          visibleCount={filtered.length}
           tags={tags}
           selectedTags={selectedTags}
-          onQueryChange={setQuery}
           onToggleTag={toggleTag}
           onClearTags={() => setSelectedTags([])}
-          onClearFilters={resetFilters}
         />
       </div>
       {modalAsset ? (
