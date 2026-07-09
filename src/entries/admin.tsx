@@ -1,10 +1,11 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { loadArchiveManifest } from '../api/archiveManifestClient';
-import { adminHideGuestbook, adminListAssetOverrides, adminListPosts, adminLogin, adminRefreshSession, adminSaveAssetOverride, adminSavePost, listGuestbook, readCachedPosts, writeCachedPosts } from '../api/appsScriptClient';
+import { adminHideGuestbook, adminListAssetOverrides, adminListPosts, adminLogin, adminRefreshSession, adminSaveAssetOverride, adminSavePost, listGuestbook } from '../api/appsScriptClient';
 import { AppLayout } from '../components/AppLayout';
 import { MarkdownView } from '../components/MarkdownView';
 import { EmptyState } from '../components/PageState';
 import { TagList } from '../components/TagList';
+import { syncPublicPost } from '../stores/publicDataStore';
 import type { ArchiveAsset, AssetOverride, GuestbookEntry, Post } from '../types';
 import { clearAdminSession, loadAdminSession, refreshAdminSession, saveAdminSession } from '../utils/session';
 import { splitTags } from '../utils/strings';
@@ -59,15 +60,6 @@ function sortPostsByNewest(posts: Post[]) {
     const right = b.publishedAt || b.updatedAt || b.createdAt || '';
     return right.localeCompare(left);
   });
-}
-
-function syncPublicPostCache(saved: Post) {
-  const cached = readCachedPosts().filter((post) => post.id !== saved.id);
-  if (saved.status === 'published') {
-    writeCachedPosts(sortPostsByNewest([saved, ...cached]));
-    return;
-  }
-  writeCachedPosts(cached);
 }
 
 function LoginPanel({ onLogin, initialMessage = '' }: { onLogin: () => void; initialMessage?: string }) {
@@ -173,7 +165,7 @@ function PostsAdmin({ token, onSessionExpired }: { token: string; onSessionExpir
       setPosts((items) => sortPostsByNewest([saved, ...items.filter((item) => item.id !== saved.id)]));
       setCurrent(saved);
       setTagsText((saved.tags || []).join(', '));
-      syncPublicPostCache(saved);
+      syncPublicPost(saved);
       setMessage(saved.status === 'published' ? '저장했습니다. 공개 글 목록에도 바로 반영했습니다.' : `저장했습니다. 현재 상태는 ${POST_STATUS_LABELS[saved.status]}입니다.`);
     } catch (err) {
       if (isAdminSessionError(err)) { onSessionExpired(); return; }

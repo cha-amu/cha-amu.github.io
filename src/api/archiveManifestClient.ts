@@ -1,6 +1,17 @@
 import { config } from '../config';
 import { mockAssets } from '../data/mockData';
 import type { ArchiveAsset, ArchiveManifest, AssetOverride } from '../types';
+import { readCache, writeCache } from '../utils/localCache';
+
+const ARCHIVE_ASSETS_CACHE_KEY = 'archive-assets:v1';
+
+export function readCachedArchiveAssets(): ArchiveAsset[] {
+  return readCache<ArchiveAsset[]>(ARCHIVE_ASSETS_CACHE_KEY) || [];
+}
+
+export function writeCachedArchiveAssets(assets: ArchiveAsset[]) {
+  writeCache(ARCHIVE_ASSETS_CACHE_KEY, assets);
+}
 
 export async function loadArchiveManifest(): Promise<ArchiveManifest> {
   try {

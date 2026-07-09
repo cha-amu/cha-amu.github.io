@@ -8,6 +8,7 @@ import { PostsErrorBoundary, PostsPage } from './entries/posts';
 import { SearchPage } from './entries/search';
 import { AppLayout } from './components/AppLayout';
 import { EmptyState } from './components/PageState';
+import { preloadPublicData } from './stores/publicDataStore';
 import { canonicalizeCurrentUrl, isPlainInternalNavigation, navigateTo, readAppLocation } from './utils/router';
 import './styles/global.css';
 
@@ -46,6 +47,8 @@ function App() {
   });
 
   useEffect(() => {
+    preloadPublicData();
+
     const syncLocation = () => {
       canonicalizeCurrentUrl();
       setLocation(readAppLocation());

@@ -32,6 +32,11 @@ const SESSION_TTL_MS = Number(getProperty_('ADMIN_SESSION_TTL_MS', '60000'));
 const PASSWORD_ITERATIONS = Number(getProperty_('GUESTBOOK_PASSWORD_ITERATIONS', '1'));
 const GUESTBOOK_PASSWORD_HASH_ALGORITHM = 'SHA-256+salt+pepper';
 const MIN_SECRET_LENGTH = 32;
+const PUBLIC_CACHE_TTL_SECONDS = Math.max(1, Number(getProperty_('PUBLIC_CACHE_TTL_SECONDS', '300')) || 300);
+const PUBLIC_CACHE_KEYS = {
+  posts: 'public:posts:v1',
+  guestbook: 'public:guestbook:v1'
+};
 const RATE_LIMITS = {
   adminLoginBurst: { key: 'admin-login-burst', limit: 1, windowSeconds: 2, message: '로그인 시도가 너무 빠릅니다. 잠시 후 다시 시도하세요.' },
   adminLoginWindow: { key: 'admin-login-window', limit: 8, windowSeconds: 300, message: '로그인 시도가 너무 많습니다. 5분 후 다시 시도하세요.' },
@@ -99,13 +104,17 @@ function route_(action, body) {
 }
 
 function listPublicPosts_() {
-  return rowsToObjects_(SHEETS.posts).filter((post) => post.status === 'published');
+  return readPublicCache_(PUBLIC_CACHE_KEYS.posts, function () {
+    return rowsToObjects_(SHEETS.posts).filter((post) => post.status === 'published');
+  });
 }
 
 function listPublicGuestbook_() {
-  return rowsToObjects_(SHEETS.guestbook)
-    .filter((entry) => entry.status === 'visible')
-    .map((entry) => ({ id: String(entry.id), name: String(entry.name || ''), message: String(entry.message || ''), status: entry.status, createdAt: entry.createdAt }));
+  return readPublicCache_(PUBLIC_CACHE_KEYS.guestbook, function () {
+    return rowsToObjects_(SHEETS.guestbook)
+      .filter((entry) => entry.status === 'visible')
+      .map((entry) => ({ id: String(entry.id), name: String(entry.name || ''), message: String(entry.message || ''), status: entry.status, createdAt: entry.createdAt }));
+  });
 }
 
 function createGuestbook_(body) {
@@ -128,6 +137,7 @@ function createGuestbook_(body) {
     hiddenReason: ''
   };
   appendObject_(SHEETS.guestbook, entry);
+  invalidatePublicCache_(PUBLIC_CACHE_KEYS.guestbook);
   return { id: entry.id, name: entry.name, message: entry.message, status: entry.status, createdAt: entry.createdAt };
 }
 
@@ -156,6 +166,7 @@ function hideGuestbookByPassword_(body) {
       );
       assert_(constantTimeEqual_(expected, actual), '삭제용 비밀번호가 맞지 않습니다.');
       sheet.getRange(row + 1, statusIndex + 1).setValue('hidden');
+      invalidatePublicCache_(PUBLIC_CACHE_KEYS.guestbook);
       return { id: body.id };
     }
   }
@@ -198,6 +209,7 @@ function savePost_(post) {
     publishedAt: post.status === 'published' ? (post.publishedAt || new Date().toISOString()) : post.publishedAt || ''
   });
   upsertObject_(SHEETS.posts, 'id', next);
+  invalidatePublicCache_(PUBLIC_CACHE_KEYS.posts);
   audit_('post.save', 'post', next.id);
   return next;
 }
@@ -221,6 +233,7 @@ function adminHideGuestbook_(body) {
     if (values[row][idIndex] === body.id) {
       sheet.getRange(row + 1, statusIndex + 1).setValue('hidden');
       if (reasonIndex >= 0) sheet.getRange(row + 1, reasonIndex + 1).setValue(body.hiddenReason || '');
+      invalidatePublicCache_(PUBLIC_CACHE_KEYS.guestbook);
       audit_('guestbook.hide', 'guestbook', body.id);
       return { id: body.id };
     }
@@ -308,6 +321,26 @@ function audit_(action, targetType, targetId) {
 
 function parseJson_(value) { return value ? JSON.parse(value) : {}; }
 function json_(value) { return ContentService.createTextOutput(JSON.stringify(value)).setMimeType(ContentService.MimeType.JSON); }
+function readPublicCache_(key, producer) {
+  const cache = CacheService.getScriptCache();
+  const cached = cache.get(key);
+  if (cached) {
+    try { return JSON.parse(cached); } catch (_) { cache.remove(key); }
+  }
+  const data = producer();
+  try {
+    cache.put(key, JSON.stringify(data), PUBLIC_CACHE_TTL_SECONDS);
+  } catch (_) {
+    // Public cache failures must not break reads; large payloads can exceed Apps Script cache limits.
+  }
+  return data;
+}
+function invalidatePublicCache_() {
+  const cache = CacheService.getScriptCache();
+  Array.prototype.slice.call(arguments).filter(Boolean).forEach(function (key) {
+    try { cache.remove(key); } catch (_) { /* cache invalidation must not break writes */ }
+  });
+}
 function assert_(condition, message) { if (!condition) throw new Error(message); }
 function getProperty_(key, fallback) { return PropertiesService.getScriptProperties().getProperty(key) || fallback; }
 function getRequiredProperty_(key, minLength) {

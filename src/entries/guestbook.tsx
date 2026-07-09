@@ -1,18 +1,14 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import {
   createGuestbookEntry,
-  hideGuestbookEntry,
-  listGuestbook,
-  readCachedGuestbook,
-  writeCachedGuestbook
+  hideGuestbookEntry
 } from '../api/appsScriptClient';
 import { AppLayout } from '../components/AppLayout';
 import { EmptyState, ErrorState, LoadingState } from '../components/PageState';
 import { TurnstileBox } from '../components/TurnstileBox';
+import { refreshGuestbook, setPublicGuestbook, usePublicResource } from '../stores/publicDataStore';
 import type { GuestbookEntry } from '../types';
 import { formatDate } from '../utils/date';
-
-type EntryUpdater = GuestbookEntry[] | ((current: GuestbookEntry[]) => GuestbookEntry[]);
 
 function isPendingEntry(entry: GuestbookEntry) {
   return entry.id.startsWith('temp-');
@@ -43,41 +39,23 @@ function mergeGuestbookEntries(serverEntries: GuestbookEntry[], currentEntries: 
 }
 
 export function GuestbookPage() {
-  const [initialEntries] = useState(() => readCachedGuestbook().map(normalizeEntry).sort(byNewestFirst));
-  const [entries, setEntries] = useState<GuestbookEntry[]>(initialEntries);
-  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>(initialEntries.length ? 'ready' : 'loading');
+  const guestbookResource = usePublicResource('guestbook');
+  const entries = guestbookResource.items;
   const locallyHiddenIds = useRef(new Set<string>());
   const [message, setMessage] = useState('');
-  const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
 
-  const commitEntries = (updater: EntryUpdater) => {
-    setEntries((current) => {
-      const nextEntries = typeof updater === 'function' ? updater(current) : updater;
-      writeCachedGuestbook(nextEntries);
-      return nextEntries;
-    });
-  };
-
-  const load = (options: { silent?: boolean } = {}) => {
-    if (options.silent) setRefreshing(true);
-    else setStatus(entries.length ? 'ready' : 'loading');
-
-    listGuestbook()
+  const load = (options: { force?: boolean; silent?: boolean } = {}) => {
+    void refreshGuestbook({ force: options.force, silent: options.silent ?? entries.length > 0 })
       .then((serverEntries) => {
-        commitEntries((current) => mergeGuestbookEntries(serverEntries, current, locallyHiddenIds.current));
-        setStatus('ready');
-        setError('');
+        setPublicGuestbook((current) => mergeGuestbookEntries(serverEntries, current, locallyHiddenIds.current));
       })
-      .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : '방명록을 불러오지 못했습니다.');
-        setStatus((currentStatus) => (entries.length || currentStatus === 'ready' ? 'ready' : 'error'));
-      })
-      .finally(() => setRefreshing(false));
+      .catch(() => undefined);
   };
 
-  useEffect(() => load({ silent: initialEntries.length > 0 }), []);
+  useEffect(() => {
+    load({ silent: entries.length > 0 });
+  }, []);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -104,15 +82,14 @@ export function GuestbookPage() {
     setSaving(true);
     setMessage('전송 중입니다. 글은 먼저 화면에 표시했습니다.');
     formElement.reset();
-    commitEntries((current) => [optimisticEntry, ...current]);
-    setStatus('ready');
+    setPublicGuestbook((current) => [optimisticEntry, ...current]);
 
     try {
       const created = normalizeEntry(await createGuestbookEntry({ name, message: body, deletePassword, turnstileToken }));
-      commitEntries((current) => [created, ...current.filter((entry) => entry.id !== optimisticEntry.id && entry.id !== created.id)].sort(byNewestFirst));
+      setPublicGuestbook((current) => [created, ...current.filter((entry) => entry.id !== optimisticEntry.id && entry.id !== created.id)].sort(byNewestFirst));
       setMessage('방명록을 남겼습니다.');
     } catch (err) {
-      commitEntries((current) => current.filter((entry) => entry.id !== optimisticEntry.id));
+      setPublicGuestbook((current) => current.filter((entry) => entry.id !== optimisticEntry.id));
       setMessage(err instanceof Error ? err.message : '저장에 실패했습니다.');
     } finally {
       setSaving(false);
@@ -125,14 +102,14 @@ export function GuestbookPage() {
     if (!deletePassword) return;
 
     locallyHiddenIds.current.add(entry.id);
-    commitEntries((current) => current.filter((item) => item.id !== entry.id));
+    setPublicGuestbook((current) => current.filter((item) => item.id !== entry.id));
 
     try {
       await hideGuestbookEntry({ id: entry.id, deletePassword });
-      commitEntries((current) => current.filter((item) => item.id !== entry.id));
+      setPublicGuestbook((current) => current.filter((item) => item.id !== entry.id));
     } catch (err) {
       locallyHiddenIds.current.delete(entry.id);
-      commitEntries((current) => [entry, ...current.filter((item) => item.id !== entry.id)].sort(byNewestFirst));
+      setPublicGuestbook((current) => [entry, ...current.filter((item) => item.id !== entry.id)].sort(byNewestFirst));
       window.alert(err instanceof Error ? err.message : '삭제에 실패했습니다.');
     }
   };
@@ -159,13 +136,13 @@ export function GuestbookPage() {
           </div>
           <TurnstileBox />
           {message ? <p className="status-message">{message}</p> : null}
-          {refreshing ? <p className="meta">최신 방명록 확인 중</p> : null}
+          {guestbookResource.refreshing ? <p className="meta">최신 방명록 확인 중</p> : null}
           <button className="button button--primary" type="submit" disabled={saving}>{saving ? '전송 중' : '작성'}</button>
         </form>
         <section className="stack" aria-label="방명록 목록">
-          {status === 'loading' ? <LoadingState /> : null}
-          {status === 'error' ? <ErrorState message={error} onRetry={() => load()} /> : null}
-          {status === 'ready' && !entries.length ? <EmptyState label="아직 방명록이 없습니다." /> : null}
+          {guestbookResource.status === 'loading' ? <LoadingState /> : null}
+          {guestbookResource.status === 'error' ? <ErrorState message={guestbookResource.error} onRetry={() => load({ force: true })} /> : null}
+          {guestbookResource.status === 'ready' && !entries.length ? <EmptyState label="아직 방명록이 없습니다." /> : null}
           {entries.map((entry) => {
             const pending = isPendingEntry(entry);
             return (

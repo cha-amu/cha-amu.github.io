@@ -52,7 +52,7 @@ img {
 }
 
 .app-shell {
-  min-height: 100vh;
+  min-height: calc(100vh + 1px);
 }
 
 .site-header {
@@ -497,7 +497,7 @@ img {
 }
 
 .search-form--toolbar input {
-  width: 150px;
+  width: 130px;
   min-width: 0;
   border-radius: 999px;
   padding: 0.5rem 0.7rem;

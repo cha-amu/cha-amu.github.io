@@ -1219,25 +1219,28 @@ admin.login
 
 ## 공개 데이터 캐시 전략
 
-확정: 방명록과 일반 글의 읽기 성능은 브라우저 localStorage 캐시로 개선한다. 글 작성/삭제마다 GitHub repo에 커밋하거나 GitHub Pages용 JSON 파일을 갱신하지 않는다.
+확정: 방명록과 일반 글의 읽기 성능은 SPA 전역 public data store, 브라우저 localStorage 캐시, Apps Script `CacheService` 공개 응답 캐시로 개선한다. 글 작성/삭제마다 GitHub repo에 커밋하거나 GitHub Pages용 JSON 파일을 갱신하지 않는다.
 
 이유:
 
 - 글 작성마다 GitHub 커밋이 생기면 스팸 상황에서 커밋 폭증/충돌/히스토리 오염이 생긴다.
 - GitHub Pages JSON 캐시는 첫 방문 속도에는 유리하지만, 지금 단계에서는 구조가 늘어나고 최신성 지연을 따로 관리해야 한다.
-- 현재 요구에는 “재방문/새로고침/작성 직후 체감 속도”가 더 중요하므로 localStorage 우선 표시가 더 단순하다.
+- 현재 요구에는 “재방문/새로고침/작성 직후 체감 속도”가 더 중요하므로 SPA 전역 store + localStorage 우선 표시가 더 단순하다.
+- 첫 방문 서버 응답은 Apps Script `CacheService`로 Sheet 반복 read를 줄인다.
 
 흐름:
 
 ```txt
 읽기
-1. localStorage 캐시를 즉시 표시
-2. Apps Script 최신 목록을 백그라운드 요청
-3. 서버 목록 기준으로 병합
+1. 앱 시작 시 localStorage 캐시를 SPA 전역 store에 적재
+2. 화면은 전역 store 데이터를 즉시 표시
+3. Apps Script 최신 목록을 백그라운드 요청
+4. Apps Script는 공개 목록을 CacheService에서 먼저 확인하고, miss 시 Sheets를 읽어 캐시 저장
+5. 서버 목록 기준으로 병합
    - 새 글 추가
    - 숨김/삭제된 글 제거
    - 수정된 글 교체
-4. localStorage 캐시 갱신
+6. 전역 store와 localStorage 캐시 갱신
 
 쓰기/삭제
 1. 화면과 localStorage에 낙관적으로 먼저 반영
@@ -1248,6 +1251,7 @@ admin.login
 
 제약:
 
-- 완전 첫 방문자는 캐시가 없으므로 Apps Script 응답 대기 시간이 남는다.
+- 완전 첫 방문자는 브라우저 캐시가 없으므로 Apps Script 응답 대기 시간이 남는다. 단, Apps Script 공개 캐시가 살아 있으면 Sheets read 없이 더 빠르게 응답할 수 있다.
+- `CacheService` 값은 만료 전에도 사라질 수 있으므로 miss fallback이 필수다.
 - 0.2초급 “항상 최신 첫 로딩”은 Apps Script 직접 호출만으로는 기대하지 않는다.
 - 서버 응답이 최종 기준이다. 서버 목록에 없는 항목은 숨김/삭제 상태로 간주해 로컬 캐시에서 제거한다.

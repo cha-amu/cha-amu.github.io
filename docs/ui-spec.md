@@ -443,17 +443,19 @@ archive/manifest.json
 
 ## 공개 데이터 로딩/캐시 UX
 
-방명록과 아무 글은 GitHub Pages JSON 캐시나 글 작성별 GitHub 커밋을 쓰지 않는다. 브라우저 `localStorage` 캐시를 먼저 보여주고, Apps Script 최신 응답을 뒤에서 병합한다.
+방명록과 아무 글은 글 작성별 GitHub 커밋을 쓰지 않는다. 브라우저 `localStorage` 캐시와 SPA 전역 public data store를 먼저 보여주고, Apps Script 최신 응답을 뒤에서 병합한다. 자료 manifest도 같은 전역 store에서 공유해 검색/자료 페이지 간 중복 로드를 줄인다. Apps Script 공개 목록 응답은 `CacheService`로 단기 캐시하고, 글/방명록 쓰기·숨김 시 관련 공개 캐시를 무효화한다.
 
 ### 기본 흐름
 
 ```txt
-페이지 진입
-→ localStorage 캐시가 있으면 즉시 표시
-→ 백그라운드에서 Apps Script 최신 목록 요청
+앱 시작
+→ localStorage 캐시를 SPA 전역 store에 즉시 올림
+→ 첫 화면 렌더링
+→ 백그라운드에서 Apps Script 최신 목록과 자료 manifest preload
+→ 페이지 진입 시 전역 store 데이터 즉시 표시
 → 서버 응답 도착
 → 서버 목록 기준으로 새 글 추가 / 숨김·삭제 글 제거 / 수정 글 교체
-→ localStorage 캐시 갱신
+→ 전역 store와 localStorage 캐시 갱신
 ```
 
 ### 방명록 작성
@@ -477,9 +479,11 @@ archive/manifest.json
 
 ### 제약
 
-- 완전 첫 방문처럼 localStorage 캐시가 없으면 Apps Script 응답을 기다려야 한다.
+- 완전 첫 방문처럼 localStorage 캐시가 없고 Apps Script 공개 캐시도 비어 있으면 Apps Script/Sheets 응답을 기다려야 한다.
+- 같은 SPA 세션 안에서는 전역 store를 공유하므로 `/posts/`, `/guestbook/`, `/archive/`, `/search/` 이동 때 중복 로드를 피한다.
 - 다른 기기/다른 브라우저의 변경 사항은 백그라운드 최신 목록 요청이 끝난 뒤 반영된다.
 - 서버 응답은 실제 공개 상태의 기준이다. 서버 목록에 없는 일반 글/방명록은 숨김 또는 삭제된 것으로 보고 로컬 캐시에서 제거한다.
+- Apps Script `CacheService`는 단기 캐시이고 보존이 보장되지 않으므로, cache miss 시 항상 Sheets를 다시 읽는 fallback을 유지한다.
 
 ## `/admin/` 관리자
 

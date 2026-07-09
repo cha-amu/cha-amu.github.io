@@ -1,14 +1,12 @@
 import { Component, ReactNode, useEffect, useMemo, useState } from 'react';
-import { listPosts, normalizePosts, readCachedPosts, writeCachedPosts } from '../api/appsScriptClient';
+import { writeCachedPosts } from '../api/appsScriptClient';
 import { AppLayout } from '../components/AppLayout';
 import { ErrorState, LoadingState, EmptyState } from '../components/PageState';
 import { MarkdownView } from '../components/MarkdownView';
 import { TagList } from '../components/TagList';
-import type { Post } from '../types';
+import { refreshPosts, usePublicResource } from '../stores/publicDataStore';
 import { formatDate } from '../utils/date';
 import { excerpt } from '../utils/strings';
-
-type PostUpdater = Post[] | ((current: Post[]) => Post[]);
 
 export class PostsErrorBoundary extends Component<{ children: ReactNode }, { message: string }> {
   state = { message: '' };
@@ -32,50 +30,19 @@ export class PostsErrorBoundary extends Component<{ children: ReactNode }, { mes
   }
 }
 
-
-function byNewestPost(a: Post, b: Post) {
-  return new Date(b.publishedAt || b.createdAt).getTime() - new Date(a.publishedAt || a.createdAt).getTime();
-}
-
-function mergePosts(serverPosts: unknown) {
-  return normalizePosts(serverPosts).filter((post) => post.status === 'published').sort(byNewestPost);
-}
-
 export function PostsPage() {
-  const [initialPosts] = useState(() => mergePosts(readCachedPosts()));
-  const [posts, setPosts] = useState<Post[]>(initialPosts);
+  const postsResource = usePublicResource('posts');
+  const posts = postsResource.items;
   const [selectedId, setSelectedId] = useState(() => decodeURIComponent(window.location.hash.replace('#', '')));
-  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>(initialPosts.length ? 'ready' : 'loading');
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState('');
 
-  const commitPosts = (updater: PostUpdater) => {
-    setPosts((current) => {
-      const nextPosts = typeof updater === 'function' ? updater(current) : updater;
-      writeCachedPosts(nextPosts);
-      return nextPosts;
-    });
+  const load = () => {
+    void refreshPosts({ force: true, silent: posts.length > 0 }).catch(() => undefined);
   };
 
-  const load = (options: { silent?: boolean } = {}) => {
-    if (options.silent) setRefreshing(true);
-    else setStatus(posts.length ? 'ready' : 'loading');
-    listPosts()
-      .then((serverPosts) => {
-        const nextPosts = mergePosts(serverPosts);
-        commitPosts(nextPosts);
-        setStatus('ready');
-        setError('');
-        if (!selectedId && nextPosts[0]) setSelectedId(nextPosts[0].id);
-      })
-      .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : '아무 글을 불러오지 못했습니다.');
-        setStatus((currentStatus) => (posts.length || currentStatus === 'ready' ? 'ready' : 'error'));
-      })
-      .finally(() => setRefreshing(false));
-  };
+  useEffect(() => {
+    void refreshPosts({ silent: posts.length > 0 }).catch(() => undefined);
+  }, []);
 
-  useEffect(() => load({ silent: initialPosts.length > 0 }), []);
   useEffect(() => {
     const syncHash = () => setSelectedId(decodeURIComponent(window.location.hash.replace('#', '')));
     window.addEventListener('hashchange', syncHash);
@@ -86,16 +53,20 @@ export function PostsPage() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!selectedId && posts[0]) setSelectedId(posts[0].id);
+  }, [posts, selectedId]);
+
   const selectedPost = useMemo(() => posts.find((post) => post.id === selectedId) || null, [posts, selectedId]);
 
   return (
     <AppLayout>
       <h1 className="sr-only">아무 글</h1>
-      {refreshing ? <p className="meta">최신 글 확인 중</p> : null}
-      {status === 'loading' ? <LoadingState /> : null}
-      {status === 'error' ? <ErrorState message={error} onRetry={load} /> : null}
-      {status === 'ready' && !posts.length ? <EmptyState label="아직 공개된 글이 없습니다." /> : null}
-      {status === 'ready' && posts.length ? (
+      {postsResource.refreshing ? <p className="meta">최신 글 확인 중</p> : null}
+      {postsResource.status === 'loading' ? <LoadingState /> : null}
+      {postsResource.status === 'error' ? <ErrorState message={postsResource.error} onRetry={load} /> : null}
+      {postsResource.status === 'ready' && !posts.length ? <EmptyState label="아직 공개된 글이 없습니다." /> : null}
+      {postsResource.status === 'ready' && posts.length ? (
         <section className="post-flow" aria-label="아무 글 목록">
           {posts.map((post) => {
             const expanded = selectedPost?.id === post.id;

@@ -1,33 +1,25 @@
 import { useEffect, useMemo, useState } from 'react';
-import { loadArchiveManifest, mergeAssetOverrides } from '../api/archiveManifestClient';
 import { AppLayout } from '../components/AppLayout';
 import { EmptyState, ErrorState, LoadingState } from '../components/PageState';
 import { TagList } from '../components/TagList';
+import { refreshArchive, usePublicResource } from '../stores/publicDataStore';
 import type { ArchiveAsset } from '../types';
 import { normalizeText, uniqueTags } from '../utils/strings';
 
 export function ArchivePage() {
-  const [assets, setAssets] = useState<ArchiveAsset[]>([]);
+  const archiveResource = usePublicResource('archive');
+  const assets = archiveResource.items;
   const [query, setQuery] = useState('');
   const [selectedTag, setSelectedTag] = useState('');
   const [modalAsset, setModalAsset] = useState<ArchiveAsset | null>(null);
-  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
-  const [error, setError] = useState('');
 
   const load = () => {
-    setStatus('loading');
-    loadArchiveManifest()
-      .then((manifest) => {
-        setAssets(mergeAssetOverrides(manifest.assets, []));
-        setStatus('ready');
-      })
-      .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : '자료 목록을 불러오지 못했습니다.');
-        setStatus('error');
-      });
+    void refreshArchive({ force: true, silent: assets.length > 0 }).catch(() => undefined);
   };
 
-  useEffect(load, []);
+  useEffect(() => {
+    void refreshArchive({ silent: assets.length > 0 }).catch(() => undefined);
+  }, []);
 
   const tags = useMemo(() => uniqueTags(assets), [assets]);
   const filtered = useMemo(() => {
@@ -51,9 +43,10 @@ export function ArchivePage() {
         </select>
         <button className="button" type="button" onClick={() => { setQuery(''); setSelectedTag(''); }}>초기화</button>
       </section>
-      {status === 'loading' ? <LoadingState /> : null}
-      {status === 'error' ? <ErrorState message={error} onRetry={load} /> : null}
-      {status === 'ready' && !filtered.length ? <EmptyState label="조건에 맞는 자료가 없습니다." /> : null}
+      {archiveResource.refreshing ? <p className="meta">최신 자료 확인 중</p> : null}
+      {archiveResource.status === 'loading' ? <LoadingState /> : null}
+      {archiveResource.status === 'error' ? <ErrorState message={archiveResource.error} onRetry={load} /> : null}
+      {archiveResource.status === 'ready' && !filtered.length ? <EmptyState label="조건에 맞는 자료가 없습니다." /> : null}
       <section className="archive-grid" aria-label="자료 목록">
         {filtered.map((asset) => (
           <article className={`asset-card ${window.location.hash === `#${asset.id}` ? 'list-item--active' : ''}`} id={asset.id} key={asset.id}>

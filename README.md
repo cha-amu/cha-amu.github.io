@@ -49,6 +49,6 @@ Only public frontend values go into Vite env files. Secrets belong in GitHub Act
 
 ## Runtime data behavior
 
-Public posts and guestbook entries use browser `localStorage` as a read-through cache. The page renders cached data immediately, then refreshes from Apps Script in the background and merges the authoritative server list. Guestbook create/delete uses optimistic UI and rolls back on failure.
+Public posts, guestbook entries, and archive manifest data use browser `localStorage` plus an in-memory SPA public data store. The app preloads public data once at startup, pages render cached/in-memory data immediately, and Apps Script refreshes run in the background. Apps Script also caches public list responses with `CacheService` and invalidates those caches on writes. Guestbook create/delete uses optimistic UI and rolls back on failure.
 
 The project intentionally does not create GitHub commits for each guestbook write.
