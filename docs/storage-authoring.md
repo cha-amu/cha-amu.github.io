@@ -108,13 +108,15 @@ posts/2026/my-first-post.md   -> post:posts/2026/my-first-post.md
 
 ## Sheets와 sync 규칙
 
-주기적 GitHub Actions가 `cha-amu/storage`와 Google Sheets를 맞춘다.
+GitHub Actions가 `cha-amu/storage`와 Google Sheets를 맞춘다.
 
-- Sheets에만 있는 글은 `posts/YYYY/title.md`로 storage repo에 생성한다.
-- storage에만 있는 글은 Sheets에 `source=storage`, `storagePath=...`, `syncStatus=linked` 표시로 추가한다.
+- storage repo에 직접 push한 글은 즉시 Sheets에 본문까지 복사된다.
+- Sheets에만 있거나 Sheets 쪽 `updatedAt`이 더 최신인 글은 주기적 sync 때 `posts/YYYY/title.md`로 storage repo에 반영된다.
+- storage에만 있는 글은 Sheets에 `source=storage`, `storagePath=...`, `syncStatus=synced` 표시와 함께 본문까지 추가된다.
 - storage에만 있는 자료 파일은 Sheets asset override에 link-only 행으로 추가한다.
-- 같은 항목이 양쪽에 있으면 storage 파일/본문을 우선하고, Sheets의 `status`, 표시명, 태그, 정렬 같은 운영값을 override로 쓴다.
-- Sheets에서 `hidden`이나 `deleted`로 둔 항목은 storage에 파일이 있어도 공개 사이트에서 숨긴다.
+- 사이트에서 글을 표시할 때는 Sheets의 `updatedAt`이 storage의 `updatedAt`보다 최신이면 Sheets 본문을 쓰고, 같거나 storage가 최신이면 storage Markdown을 쓴다.
+- GitHub push로 실행된 sync는 사람이 frontmatter `updatedAt`을 직접 바꾸지 않아도 storage 파일을 최신으로 보고 Sheets에 반영한다.
+- Sheets에서 `hidden`이나 `deleted`로 둔 항목은 그 상태의 `updatedAt`이 최신이면 공개 사이트에서 숨긴다.
 
 ## 직접 편집하지 않는 파일
 

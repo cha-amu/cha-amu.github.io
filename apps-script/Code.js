@@ -14,7 +14,8 @@ const SHEETS = {
 const SHEET_COLUMNS = {
   posts: [
     'id', 'slug', 'title', 'excerpt', 'body', 'tags', 'status',
-    'createdAt', 'updatedAt', 'publishedAt'
+    'createdAt', 'updatedAt', 'publishedAt', 'source', 'storagePath',
+    'bodyUrl', 'syncStatus'
   ],
   guestbook: [
     'id', 'name', 'message', 'status', 'createdAt', 'passwordSalt',
@@ -97,6 +98,7 @@ function route_(action, body) {
     case 'admin.session.refresh': requireAdmin_(body.token); return createAdminSession_();
     case 'admin.post.list': requireAdmin_(body.token); return rowsToObjects_(SHEETS.posts);
     case 'admin.post.save': requireAdmin_(body.token); return savePost_(body.post);
+    case 'admin.post.syncFromStorage': requireAdmin_(body.token); return syncPostFromStorage_(body.post);
     case 'admin.guestbook.hide': requireAdmin_(body.token); return adminHideGuestbook_(body);
     case 'admin.assetOverride.list': requireAdmin_(body.token); return rowsToObjects_(SHEETS.assetOverrides);
     case 'admin.assetOverride.save': requireAdmin_(body.token); return saveAssetOverride_(body.override);
@@ -216,6 +218,22 @@ function savePost_(post) {
   upsertObject_(SHEETS.posts, 'id', next);
   invalidatePublicCache_(PUBLIC_CACHE_KEYS.posts);
   audit_('post.save', 'post', next.id);
+  return next;
+}
+
+function syncPostFromStorage_(post) {
+  assert_(post && post.id, 'Post id is required.');
+  const next = Object.assign({}, post, {
+    tags: Array.isArray(post.tags) ? post.tags : [],
+    updatedAt: post.updatedAt || post.publishedAt || post.createdAt || new Date().toISOString(),
+    createdAt: post.createdAt || post.publishedAt || new Date().toISOString(),
+    publishedAt: post.publishedAt || (post.status === 'published' ? (post.createdAt || new Date().toISOString()) : ''),
+    source: 'storage',
+    syncStatus: 'synced'
+  });
+  upsertObject_(SHEETS.posts, 'id', next);
+  invalidatePublicCache_(PUBLIC_CACHE_KEYS.posts);
+  audit_('post.syncFromStorage', 'post', next.id);
   return next;
 }
 

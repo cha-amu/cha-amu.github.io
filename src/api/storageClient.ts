@@ -104,6 +104,7 @@ async function loadStoragePost(entry: StoragePostEntry): Promise<Post | null> {
   const date = asString(entry.publishedAt || entry.date || meta.publishedAt || meta.date || entry.createdAt || meta.createdAt).trim();
   const publishedAt = asString(entry.publishedAt || meta.publishedAt || date).trim() || undefined;
   const createdAt = asString(entry.createdAt || meta.createdAt || date || new Date().toISOString());
+  const updatedAt = asString(entry.updatedAt || meta.updatedAt || publishedAt || createdAt).trim() || undefined;
 
   return {
     id: asString(entry.id || meta.id).trim() || idFromPath(path || url),
@@ -114,7 +115,7 @@ async function loadStoragePost(entry: StoragePostEntry): Promise<Post | null> {
     tags: normalizeTags(entry.tags ?? meta.tags),
     status: statusFrom(entry.status || meta.status),
     createdAt,
-    updatedAt: asString(entry.updatedAt || meta.updatedAt).trim() || undefined,
+    updatedAt,
     publishedAt,
     source: 'storage',
     storagePath: path || undefined,

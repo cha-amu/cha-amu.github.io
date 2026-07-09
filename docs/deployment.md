@@ -23,7 +23,7 @@ https://cha-amu.github.io/
 .github/workflows/apps-script.yml → Apps Script 코드 배포
 ```
 
-Google Sheets와 `cha-amu/storage` repo의 주기적 동기화는 storage repo 자신의 `Sync storage repo` workflow에서 실행한다. storage repo가 자기 파일과 manifest만 커밋하므로 별도 cross-repo push 토큰은 쓰지 않는다.
+Google Sheets와 `cha-amu/storage` repo의 동기화는 storage repo 자신의 `Sync storage repo` workflow에서 실행한다. storage repo가 자기 파일과 manifest만 커밋하므로 별도 cross-repo push 토큰은 쓰지 않는다. storage repo에 직접 push하면 즉시 Sheets에 본문까지 반영하고, 주기적 실행은 Sheets의 최신 수정본을 storage Markdown으로 되돌려 맞춘다.
 
 ### 사이트 배포
 
