@@ -481,11 +481,6 @@ img {
 }
 
 .site-tools--home {
-  position: fixed;
-  z-index: 50;
-  top: var(--site-tools-top);
-  right: var(--site-tools-right);
-  max-width: calc(100vw - (var(--site-tools-right) * 2));
   justify-content: flex-end;
 }
 

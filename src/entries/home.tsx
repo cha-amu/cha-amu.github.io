@@ -16,7 +16,9 @@ const menuItems = [
 function HomePage() {
   return (
     <main className="home-screen">
-      <SiteTools variant="home" showSearch={false} />
+      <div className="site-header__tools">
+        <SiteTools variant="home" showSearch={false} />
+      </div>
       <section className="home-cluster" aria-labelledby="home-title">
         <div className="home-intro">
           <img className="home-logo" src="/assets/ui/cha-amu-logo.png" alt="채아무 아이콘" />
