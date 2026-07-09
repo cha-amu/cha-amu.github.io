@@ -12,6 +12,8 @@
   --layout-readable: 70ch;
   --layout-gutter: clamp(1rem, 4vw, 2rem);
   --layout-section-gap: 1.25rem;
+  --site-tools-top: 1rem;
+  --site-tools-right: 1rem;
   --nav-tile-size: 74px;
   --home-tile-size: 92px;
   font-family: Inter, ui-rounded, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
@@ -462,13 +464,13 @@ img {
 }
 
 .site-header__tools {
-  position: absolute;
-  z-index: 20;
-  top: 1.5rem;
-  right: var(--layout-gutter);
+  position: fixed;
+  z-index: 50;
+  top: var(--site-tools-top);
+  right: var(--site-tools-right);
   display: flex;
   justify-content: flex-end;
-  max-width: calc(100vw - 2rem);
+  max-width: calc(100vw - (var(--site-tools-right) * 2));
 }
 
 .site-tools {
@@ -480,11 +482,10 @@ img {
 
 .site-tools--home {
   position: fixed;
-  z-index: 20;
-  top: 1rem;
-  right: 1rem;
-  width: 92px;
-  max-width: calc(100vw - 2rem);
+  z-index: 50;
+  top: var(--site-tools-top);
+  right: var(--site-tools-right);
+  max-width: calc(100vw - (var(--site-tools-right) * 2));
   justify-content: flex-end;
 }
 
@@ -596,10 +597,12 @@ img {
   }
 
   .site-header__tools {
-    position: static;
-    width: 100%;
-    max-width: 100%;
-    padding: 0 var(--layout-gutter) 0.75rem;
+    position: fixed;
+    top: var(--site-tools-top);
+    right: var(--site-tools-right);
+    width: auto;
+    max-width: calc(100vw - (var(--site-tools-right) * 2));
+    padding: 0;
   }
 
   .main-nav {
@@ -610,7 +613,7 @@ img {
   }
 
   .site-tools {
-    width: 100%;
+    width: auto;
     justify-content: flex-end;
     gap: 0.35rem;
   }
@@ -796,7 +799,8 @@ img {
   }
 
   .site-tools {
-    flex: 0 1 100%;
+    flex: 0 1 auto;
+    width: auto;
     justify-content: flex-end;
     gap: 0.25rem;
     min-width: 0;
@@ -804,7 +808,7 @@ img {
 
   .site-tools--home {
     flex: none;
-    width: 92px;
+    width: auto;
   }
 
   .search-form--toolbar {
