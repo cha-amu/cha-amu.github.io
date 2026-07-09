@@ -1,3 +1,10 @@
+@font-face {
+  font-family: 'OmuDaye';
+  src: url('https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_2304-01@1.0/omyu_pretty.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+}
+
 :root {
   --color-primary: #b7ddbf;
   --color-background: #f9f9f9;
@@ -17,7 +24,7 @@
   --site-tools-mobile-clearance: 0.85rem;
   --nav-tile-size: 74px;
   --home-tile-size: 92px;
-  font-family: Inter, ui-rounded, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+  font-family: 'OmuDaye', ui-rounded, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
   color: var(--color-ink);
   background: var(--color-background);
 }
@@ -213,7 +220,12 @@ img {
 
 .home-copy {
   margin: 0;
-  font-size: 1rem;
+  max-width: 360px;
+  font-size: 1.7rem;
+  font-weight: 800;
+  line-height: 1.18;
+  text-align: left;
+  text-wrap: balance;
 }
 
 .home-menu {
@@ -668,6 +680,16 @@ img {
   .home-menu,
   .search-form--home {
     flex-wrap: wrap;
+  }
+
+  .home-intro {
+    gap: 1rem;
+  }
+
+  .home-copy {
+    max-width: 280px;
+    font-size: 1.45rem;
+    text-align: center;
   }
 
   .home-menu {
