@@ -4,6 +4,7 @@ import { AppLayout } from '../components/AppLayout';
 import { ErrorState, LoadingState, EmptyState } from '../components/PageState';
 import { MarkdownView } from '../components/MarkdownView';
 import { TagList } from '../components/TagList';
+import { TagFilterPanel, countTagOptions } from '../components/TagFilterPanel';
 import { refreshPosts, usePublicResource } from '../stores/publicDataStore';
 import { formatDate } from '../utils/date';
 import { excerpt } from '../utils/strings';
@@ -35,6 +36,7 @@ export function PostsPage() {
   const posts = postsResource.items;
   const postsCount = useRef(posts.length);
   const [selectedId, setSelectedId] = useState(() => decodeURIComponent(window.location.hash.replace('#', '')));
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
 
   useEffect(() => {
     postsCount.current = posts.length;
@@ -62,7 +64,19 @@ export function PostsPage() {
     if (!selectedId && posts[0]) setSelectedId(posts[0].id);
   }, [posts, selectedId]);
 
-  const selectedPost = useMemo(() => posts.find((post) => post.id === selectedId) || null, [posts, selectedId]);
+  const tagOptions = useMemo(() => countTagOptions(posts), [posts]);
+  const filteredPosts = useMemo(() => (
+    selectedTags.length === 0 ? posts : posts.filter((post) => selectedTags.every((tag) => post.tags.includes(tag)))
+  ), [posts, selectedTags]);
+  const selectedPost = useMemo(() => filteredPosts.find((post) => post.id === selectedId) || null, [filteredPosts, selectedId]);
+
+  useEffect(() => {
+    if (filteredPosts.length && !filteredPosts.some((post) => post.id === selectedId)) setSelectedId(filteredPosts[0].id);
+  }, [filteredPosts, selectedId]);
+
+  const toggleTag = (tag: string) => {
+    setSelectedTags((current) => current.includes(tag) ? current.filter((item) => item !== tag) : [...current, tag]);
+  };
 
   return (
     <AppLayout>
@@ -71,26 +85,38 @@ export function PostsPage() {
       {postsResource.status === 'error' ? <ErrorState message={postsResource.error} onRetry={() => load({ force: true })} /> : null}
       {postsResource.status === 'ready' && !posts.length ? <EmptyState label="아직 공개된 글이 없습니다." /> : null}
       {postsResource.status === 'ready' && posts.length ? (
-        <section className="post-flow" aria-label="아무 글 목록">
-          {posts.map((post) => {
-            const expanded = selectedPost?.id === post.id;
-            return (
-              <article className={`post-entry ${expanded ? 'post-entry--active' : ''}`} id={post.id} key={post.id}>
-                <a className="post-entry__summary" href={`#${encodeURIComponent(post.id)}`} onClick={() => setSelectedId(post.id)}>
-                  <h2>{post.title}</h2>
-                  <p>{post.excerpt || excerpt(post.body)}</p>
-                  <TagList tags={post.tags} />
-                  <p className="meta">{formatDate(post.publishedAt || post.createdAt)}</p>
-                </a>
-                {expanded ? (
-                  <div className="post-entry__body">
-                    <MarkdownView markdown={post.body} baseUrl={post.markdownBaseUrl} rootUrl={post.markdownRootUrl} />
-                  </div>
-                ) : null}
-              </article>
-            );
-          })}
-        </section>
+        <div className="tagged-layout">
+          <section className="post-flow tagged-main" aria-label="아무 글 목록">
+            {filteredPosts.map((post) => {
+              const expanded = selectedPost?.id === post.id;
+              return (
+                <article className={`post-entry ${expanded ? 'post-entry--active' : ''}`} id={post.id} key={post.id}>
+                  <a className="post-entry__summary" href={`#${encodeURIComponent(post.id)}`} onClick={() => setSelectedId(post.id)}>
+                    <h2>{post.title}</h2>
+                    <p>{post.excerpt || excerpt(post.body)}</p>
+                    <TagList tags={post.tags} />
+                    <p className="meta">{formatDate(post.publishedAt || post.createdAt)}</p>
+                  </a>
+                  {expanded ? (
+                    <div className="post-entry__body">
+                      <MarkdownView markdown={post.body} baseUrl={post.markdownBaseUrl} rootUrl={post.markdownRootUrl} />
+                    </div>
+                  ) : null}
+                </article>
+              );
+            })}
+            {filteredPosts.length === 0 ? <EmptyState label="선택한 태그에 맞는 글이 없습니다." /> : null}
+          </section>
+          <TagFilterPanel
+            label="아무 글"
+            totalCount={posts.length}
+            visibleCount={filteredPosts.length}
+            tags={tagOptions}
+            selectedTags={selectedTags}
+            onToggleTag={toggleTag}
+            onClearTags={() => setSelectedTags([])}
+          />
+        </div>
       ) : null}
     </AppLayout>
   );

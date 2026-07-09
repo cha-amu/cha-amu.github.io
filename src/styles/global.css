@@ -396,6 +396,98 @@ img {
   font-weight: 700;
 }
 
+.tagged-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(178px, 220px);
+  grid-template-areas: "main tags";
+  gap: var(--layout-section-gap);
+  align-items: start;
+}
+
+.tagged-main {
+  grid-area: main;
+  display: grid;
+  gap: var(--layout-section-gap);
+  min-width: 0;
+}
+
+.tag-panel {
+  grid-area: tags;
+  position: sticky;
+  top: 1rem;
+  display: grid;
+  gap: 0.75rem;
+  border: 2px solid var(--color-ink);
+  border-radius: 1.25rem;
+  background: rgba(255, 255, 255, 0.82);
+  padding: 0.85rem;
+  box-shadow: 3px 4px 0 rgba(31, 31, 31, 0.12);
+}
+
+.tag-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.tag-panel__head h2 {
+  margin: 0;
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+.tag-panel__head span {
+  color: var(--color-muted);
+  font-size: 0.9rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.tag-filter-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.tag-filter {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.38rem;
+  border: 1.5px solid var(--color-ink);
+  border-radius: 999px;
+  background: var(--color-surface);
+  padding: 0.28rem 0.52rem;
+  color: var(--color-ink);
+  font-weight: 800;
+  line-height: 1;
+}
+
+.tag-filter:hover,
+.tag-filter:focus-visible {
+  background: var(--color-soft-primary);
+}
+
+.tag-filter:focus-visible {
+  outline: 3px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.tag-filter--selected {
+  background: var(--color-primary);
+}
+
+.tag-filter span:last-child {
+  min-width: 1.35rem;
+  border: 1.5px solid rgba(31, 31, 31, 0.45);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  padding: 0.08rem 0.32rem;
+  text-align: center;
+  font-size: 0.78rem;
+}
+
 .markdown-body {
   max-width: var(--layout-readable);
   line-height: 1.72;
@@ -829,6 +921,17 @@ img {
     display: grid;
   }
 
+  .tagged-layout {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "tags"
+      "main";
+  }
+
+  .tag-panel {
+    position: static;
+  }
+
   .search-form:not(.search-form--home):not(.search-form--toolbar) {
     display: grid;
   }
@@ -904,6 +1007,7 @@ img {
 .page__inner > .post-flow,
 .page__inner > .guestbook-flow,
 .page__inner > .archive-grid,
+.page__inner > .tagged-layout,
 .page__inner > .stack,
 .page__inner > .two-column,
 .page__inner > .filter-bar,
@@ -1006,7 +1110,8 @@ img {
 
 .page__inner > .guestbook-flow,
 .page__inner > .post-flow,
-.page__inner > .archive-grid {
+.page__inner > .archive-grid,
+.page__inner > .tagged-layout {
   justify-self: stretch;
 }
 
