@@ -1,5 +1,6 @@
 import { useEffect, useId, useState } from 'react';
 import { SearchForm } from './SearchForm';
+import { GuestbookIcon, SettingsIcon } from './ToolIcons';
 
 export function SiteTools({
   variant = 'default',
@@ -29,7 +30,7 @@ export function SiteTools({
       <div className={`site-tools ${variant === 'home' ? 'site-tools--home' : ''}`} aria-label="공통 도구">
         {showSearch ? <SearchForm compact variant="toolbar" /> : null}
         <a className="tool-icon-link" href="/guestbook/" aria-label="방명록">
-          <span className="guestbook-icon-vector" aria-hidden="true" />
+          <GuestbookIcon />
         </a>
         <button
           className="tool-icon-link"
@@ -38,9 +39,7 @@ export function SiteTools({
           aria-expanded={settingsOpen}
           onClick={() => setSettingsOpen(true)}
         >
-          <span className="settings-icon" aria-hidden="true">
-            <span />
-          </span>
+          <SettingsIcon />
         </button>
       </div>
 

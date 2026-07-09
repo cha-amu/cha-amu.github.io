@@ -37,11 +37,11 @@
 - Spacing/layout rhythm: `--layout-page` 본문 레일과 `--layout-gutter`를 공유한다.
 - Shape/radius/elevation: 검은 손그림 느낌 테두리, 둥근 모서리, 과한 그림자 지양.
 - Motion: 필수 상태 전환만 사용한다.
-- Imagery/iconography: 주요 콘텐츠 메뉴는 제공된 손그림 아이콘을 사용하고, 검색/방명록/설정 공통 도구는 같은 결의 CSS 벡터 아이콘으로 만든다.
+- Imagery/iconography: 주요 콘텐츠 메뉴는 제공된 손그림 아이콘을 사용하고, 검색/방명록/설정 공통 도구는 같은 결의 SVG 벡터 아이콘으로 만든다.
 
 ## Components
 - Existing components to reuse: `AppLayout`, `Header`, `SiteTools`, `SearchForm`, `PageState`, `TagList`.
-- New/changed components: `SiteTools`는 검색/방명록/설정 공통 도구를 담당한다.
+- New/changed components: `Header`는 홈을 제외한 모든 페이지의 상단바 단일 소스이고, `SiteTools`는 검색/방명록/설정 공통 도구를 담당한다. 개별 페이지에서 상단바를 복제하지 않는다.
 - Variants and states: `SiteTools`는 홈에서 검색을 숨기는 `showSearch=false` 변형을 쓴다.
 - Token/component ownership: 레이아웃 폭/색/버튼 크기는 `src/styles/global.css` 토큰과 공통 클래스에서 관리한다.
 

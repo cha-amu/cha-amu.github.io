@@ -1,4 +1,5 @@
 import { FormEvent, useState } from 'react';
+import { SearchIcon } from './ToolIcons';
 
 export function SearchForm({
   initialValue = '',
@@ -29,7 +30,7 @@ export function SearchForm({
         placeholder={variant === 'toolbar' ? '검색' : '검색창'}
       />
       <button className="button button--primary search-submit" type="submit" aria-label="검색">
-        <span className="search-icon-vector" aria-hidden="true" />
+        <SearchIcon />
         {compact ? <span className="sr-only">검색</span> : '검색'}
       </button>
     </form>
