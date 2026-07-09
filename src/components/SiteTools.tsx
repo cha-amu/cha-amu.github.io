@@ -1,4 +1,5 @@
 import { useEffect, useId, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { SearchForm } from './SearchForm';
 import { GuestbookIcon, SettingsIcon } from './ToolIcons';
 
@@ -48,7 +49,7 @@ export function SiteTools({ showSearch = true }: { showSearch?: boolean }) {
         </button>
       </div>
 
-      {settingsOpen ? (
+      {settingsOpen ? createPortal(
         <div className="settings-layer" role="presentation">
           <button className="settings-backdrop" type="button" aria-label="설정 닫기" onClick={() => setSettingsOpen(false)} />
           <aside className="settings-panel" role="dialog" aria-modal="true" aria-labelledby={titleId}>
@@ -77,7 +78,8 @@ export function SiteTools({ showSearch = true }: { showSearch?: boolean }) {
 
             <p className="help-text">이 설정은 방문자용 표시 설정입니다. 관리자 페이지 설정과는 분리합니다.</p>
           </aside>
-        </div>
+        </div>,
+        document.body
       ) : null}
     </>
   );

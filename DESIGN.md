@@ -55,7 +55,7 @@
 ## Responsive behavior
 - Supported breakpoints/devices: 데스크톱 기본, 760px/430px 이하에서 축소·줄바꿈.
 - Layout adaptations: 좁은 화면에서는 공통 도구를 fixed 상단 레일에 유지하고, 헤더 콘텐츠를 도구 줄 아래로 내려 겹침을 막는다.
-- Touch/hover differences: 아이콘 버튼은 터치 가능한 크기를 유지하고, fixed 오버레이의 빈 레일은 아래 메뉴 클릭을 막지 않는다.
+- Touch/hover differences: 아이콘 버튼은 터치 가능한 크기를 유지한다. fixed 오버레이의 빈 레일은 아래 메뉴 클릭을 막지 않되, 설정 사이드바는 최상위 전체-뷰포트 오버레이로 열려 클릭/닫기/배경 클릭/Escape를 받는다.
 
 ## Interaction states
 - Loading: 기존 상태 컴포넌트로 표시.
