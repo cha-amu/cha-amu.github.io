@@ -183,6 +183,9 @@ sortOrder   낮을수록 먼저 표시
 
 GitHub Actions가 `cha-amu/storage`와 Google Sheets를 맞춘다.
 
+- sync는 메인 사이트 repo가 아니라 `cha-amu/storage` repo의 `Sync storage repo` GitHub Actions에서 돈다.
+- `posts/**`, `assets/**`, sync 스크립트, `package.json`, sync workflow가 `main`에 push되면 즉시 실행된다.
+- 주기 sync는 매주 월요일 03:17 KST에 실행된다. GitHub cron 기준으로는 일요일 18:17 UTC다.
 - storage repo에 직접 push한 글은 즉시 Sheets에 본문까지 복사된다.
 - Sheets에만 있거나 Sheets 쪽 `updatedAt`이 더 최신인 글은 주기적 sync 때 `posts/YYYY/title.md`로 storage repo에 반영된다.
 - storage에만 있는 글은 Sheets에 `source=storage`, `storagePath=...`, `syncStatus=synced` 표시와 함께 본문까지 추가된다.
@@ -190,6 +193,46 @@ GitHub Actions가 `cha-amu/storage`와 Google Sheets를 맞춘다.
 - 사이트에서 글을 표시할 때는 Sheets의 `updatedAt`이 storage의 `updatedAt`보다 최신이면 Sheets 본문을 쓰고, 같거나 storage가 최신이면 storage Markdown을 쓴다.
 - GitHub push로 실행된 sync는 사람이 frontmatter `updatedAt`을 직접 바꾸지 않아도 storage 파일을 최신으로 보고 Sheets에 반영한다.
 - Sheets에서 `hidden`이나 `deleted`로 둔 항목은 그 상태의 `updatedAt`이 최신이면 공개 사이트에서 숨긴다.
+
+## 수동 sync 실행
+
+GitHub 웹에서 실행한다.
+
+```txt
+1. https://github.com/cha-amu/storage 로 이동
+2. Actions 탭 클릭
+3. Sync storage repo 선택
+4. Run workflow 클릭
+5. Branch가 main인지 확인
+6. Run workflow 실행
+```
+
+수동 실행 후 같은 Actions 화면에서 초록색 체크로 끝나면 성공이다. 실행 중 새 manifest나 Markdown 파일 변경이 생기면 `github-actions[bot]`이 `Sync storage manifests` 커밋을 자동으로 만든다.
+
+## sync 확인 방법
+
+Actions 실행 상태:
+
+```txt
+cha-amu/storage > Actions > Sync storage repo
+```
+
+사이트 반영 상태:
+
+```txt
+https://cha-amu.github.io/storage/manifests/assets.json
+https://cha-amu.github.io/storage/manifests/posts.json
+```
+
+각 manifest의 `generatedAt`이 최근 시간으로 바뀌고, 새 파일 경로가 `assets` 또는 `posts` 배열에 들어 있으면 storage Pages 쪽 반영은 끝난 것이다. 메인 사이트 `/archive/`는 이 manifest를 읽는다.
+
+로컬에서 Sheets를 건드리지 않고 manifest 생성만 확인하려면 storage repo에서 dry-run을 실행한다.
+
+```sh
+STORAGE_SYNC_DRY_RUN=1 npm run sync
+```
+
+실제 Sheets까지 쓰는 로컬 sync는 `APPS_SCRIPT_URL`과 `ADMIN_PASSWORD`가 필요하므로, 보통은 GitHub Actions 수동 실행을 쓴다.
 
 ## 직접 편집하지 않는 파일
 
