@@ -66,8 +66,8 @@ export function ArchivePage() {
         ))}
       </section>
       {modalAsset ? (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label={`${modalAsset.title} 자료 상세`}>
-          <div className="modal asset-modal">
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label={`${modalAsset.title} 자료 상세`} onClick={() => setModalAsset(null)}>
+          <div className="modal asset-modal" onClick={(event) => event.stopPropagation()}>
             <button className="asset-modal__close" type="button" onClick={() => setModalAsset(null)} aria-label="닫기">
               <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <path d="M6 6l12 12M18 6L6 18" />
