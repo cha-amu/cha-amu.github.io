@@ -321,7 +321,13 @@ function AssetsAdmin({ token, onSessionExpired }: { token: string; onSessionExpi
       {selected ? (
         <form className="panel" onSubmit={save}>
           <h2>자료 표시 정보</h2>
-          <img src={selected.imageUrl} alt={selected.title} />
+          {selected.kind === 'file' ? (
+            <a className="asset-file-tile" href={selected.fileUrl || selected.sourceUrl || selected.imageUrl} target="_blank" rel="noreferrer">
+              {selected.fileName}
+            </a>
+          ) : (
+            <img src={selected.imageUrl} alt={selected.title} />
+          )}
           <div className="field"><label>표시명<input name="displayName" defaultValue={selectedOverride?.displayName || selected.title} /></label></div>
           <div className="field"><label>설명<textarea name="description" defaultValue={selectedOverride?.description || selected.description || ''} /></label></div>
           <div className="field"><label>태그<input name="tags" defaultValue={(selectedOverride?.tags || selected.tags).join(', ')} /></label></div>

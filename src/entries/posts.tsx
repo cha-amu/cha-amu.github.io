@@ -80,7 +80,7 @@ export function PostsPage() {
                 </a>
                 {expanded ? (
                   <div className="post-entry__body">
-                    <MarkdownView markdown={post.body} />
+                    <MarkdownView markdown={post.body} baseUrl={post.markdownBaseUrl} rootUrl={post.markdownRootUrl} />
                   </div>
                 ) : null}
               </article>

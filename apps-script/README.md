@@ -97,7 +97,9 @@ Who has access: Anyone
 ```txt
 VITE_APPS_SCRIPT_URL=<Apps Script Web App URL>
 VITE_TURNSTILE_SITE_KEY=<나중에 Turnstile 적용 시 입력. 지금은 비워도 됨>
-VITE_ARCHIVE_MANIFEST_URL=https://cha-amu.github.io/archive/manifest.json
+VITE_STORAGE_BASE_URL=https://cha-amu.github.io/storage
+VITE_ARCHIVE_MANIFEST_URL=https://cha-amu.github.io/storage/manifests/assets.json
+VITE_STORAGE_POSTS_MANIFEST_URL=https://cha-amu.github.io/storage/manifests/posts.json
 VITE_ADMIN_IDLE_TIMEOUT_MS=60000
 ```
 
@@ -151,4 +153,3 @@ npm run sync:apps-script-env
 ```
 
 `VITE_` 접두사를 붙이면 프론트 번들에 노출되므로 관리자 비밀번호에는 절대 붙이지 않는다.
-

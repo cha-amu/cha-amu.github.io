@@ -21,6 +21,7 @@ https://cha-amu.github.io/
 ```txt
 .github/workflows/pages.yml       → 사이트 빌드 후 GitHub Pages 배포
 .github/workflows/apps-script.yml → Apps Script 코드 배포
+.github/workflows/storage-sync.yml → Google Sheets와 cha-amu/storage repo 주기적 동기화
 ```
 
 ### 사이트 배포
@@ -43,6 +44,7 @@ https://cha-amu.github.io/
   - `APPS_SCRIPT_DEPLOYMENT_ID`
   - `SPREADSHEET_ID`
   - `ADMIN_PASSWORD`는 로컬 없이 GitHub Actions로 관리자 비밀번호를 바꿀 때만 필요
+  - `STORAGE_REPO_TOKEN`은 `cha-amu/storage` repo에 push할 수 있는 토큰
 
 `APPS_SCRIPT_DEPLOYMENT_ID`를 넣어두면 기존 `/exec` URL을 유지한 채 배포만 갱신한다. 이 값을 빼면 Actions가 새 Web App deployment를 만들 수 있으므로, 기존 사이트 URL을 유지하려면 보통 넣어둔다.
 
@@ -83,7 +85,9 @@ GitHub repo → Settings → Secrets and variables → Actions → Variables 탭
 
 ```txt
 VITE_APPS_SCRIPT_URL=<Apps Script Web App /exec URL>
-VITE_ARCHIVE_MANIFEST_URL=https://cha-amu.github.io/archive/manifest.json
+VITE_STORAGE_BASE_URL=https://cha-amu.github.io/storage
+VITE_ARCHIVE_MANIFEST_URL=https://cha-amu.github.io/storage/manifests/assets.json
+VITE_STORAGE_POSTS_MANIFEST_URL=https://cha-amu.github.io/storage/manifests/posts.json
 VITE_ADMIN_IDLE_TIMEOUT_MS=60000
 VITE_TURNSTILE_SITE_KEY=<Turnstile 적용 전에는 만들지 않아도 됨>
 ```
@@ -124,6 +128,7 @@ CLASP_JSON=<Apps Script 프로젝트 연결 JSON>
 APPS_SCRIPT_DEPLOYMENT_ID=<기존 Apps Script Web App deployment id>
 SPREADSHEET_ID=<Google Sheet ID>
 ADMIN_PASSWORD=<GitHub에서 관리자 비밀번호를 변경할 때 사용할 새 비밀번호>
+STORAGE_REPO_TOKEN=<cha-amu/storage repo push 권한 토큰>
 ```
 
 `SPREADSHEET_ID`는 공개 repo 파일에 적지 않고 Secret으로 둔다. `ADMIN_PASSWORD`는 사이트 빌드나 Apps Script 일반 배포에는 필요 없다. 로컬 `.env`를 잃어버렸거나 GitHub UI만으로 관리자 비밀번호를 바꿔야 할 때 `Update admin password` workflow가 사용한다.

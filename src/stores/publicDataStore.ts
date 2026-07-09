@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import { loadArchiveManifest, mergeAssetOverrides, readCachedArchiveAssets, writeCachedArchiveAssets } from '../api/archiveManifestClient';
-import { listGuestbook, listPosts, readCachedGuestbook, readCachedPosts, writeCachedGuestbook, writeCachedPosts } from '../api/appsScriptClient';
+import { listAssetOverrides, listGuestbook, listPosts, readCachedGuestbook, readCachedPosts, writeCachedGuestbook, writeCachedPosts } from '../api/appsScriptClient';
+import { listStoragePosts } from '../api/storageClient';
 import type { ArchiveAsset, GuestbookEntry, Post } from '../types';
 
 type ResourceStatus = 'idle' | 'loading' | 'ready' | 'error';
@@ -50,6 +51,35 @@ function byNewestGuestbook(a: GuestbookEntry, b: GuestbookEntry) {
 
 function normalizePostList(posts: Post[]) {
   return posts.filter((post) => post.status === 'published').sort(byNewestPost);
+}
+
+function mergePosts(storagePosts: Post[], sheetPosts: Post[]) {
+  const byId = new Map<string, Post>();
+  for (const post of storagePosts) byId.set(post.id, { ...post, source: post.source || 'storage' });
+  for (const post of sheetPosts) {
+    const existing = byId.get(post.id);
+    if (!existing) {
+      byId.set(post.id, { ...post, source: post.source || 'sheets' });
+      continue;
+    }
+    byId.set(post.id, {
+      ...existing,
+      ...post,
+      body: existing.body || post.body,
+      excerpt: post.excerpt || existing.excerpt,
+      tags: post.tags.length ? post.tags : existing.tags,
+      source: existing.source || post.source,
+      storagePath: existing.storagePath || post.storagePath,
+      bodyUrl: existing.bodyUrl || post.bodyUrl,
+      markdownBaseUrl: existing.markdownBaseUrl || post.markdownBaseUrl,
+      markdownRootUrl: existing.markdownRootUrl || post.markdownRootUrl
+    });
+  }
+  return Array.from(byId.values());
+}
+
+function fulfilledValue<T>(result: PromiseSettledResult<T>, fallback: T): T {
+  return result.status === 'fulfilled' ? result.value : fallback;
 }
 
 function isPendingGuestbookEntry(entry: GuestbookEntry) {
@@ -158,9 +188,15 @@ export function refreshPosts(options: { force?: boolean; silent?: boolean } = {}
   if (pending.posts && !options.force) return pending.posts as Promise<Post[]>;
   if (!options.force && state.posts.status === 'ready' && isFresh(state.posts)) return Promise.resolve(state.posts.items);
   setLoading('posts', Boolean(options.silent));
-  const request = listPosts()
-    .then((posts) => {
-      const nextPosts = normalizePostList(posts);
+  const request = Promise.allSettled([listStoragePosts(), listPosts()])
+    .then(([storageResult, sheetsResult]) => {
+      const storagePosts = fulfilledValue(storageResult, []);
+      const sheetPosts = fulfilledValue(sheetsResult, []);
+      if (!storagePosts.length && !sheetPosts.length) {
+        const firstError = storageResult.status === 'rejected' ? storageResult.reason : sheetsResult.status === 'rejected' ? sheetsResult.reason : null;
+        if (firstError) throw firstError;
+      }
+      const nextPosts = normalizePostList(mergePosts(storagePosts, sheetPosts));
       writeCachedPosts(nextPosts);
       updateResource('posts', { items: nextPosts, status: 'ready', refreshing: false, error: '', loadedAt: new Date().toISOString() });
       return nextPosts;
@@ -208,8 +244,9 @@ export function refreshArchive(options: { force?: boolean; silent?: boolean } = 
   if (!options.force && state.archive.status === 'ready' && isFresh(state.archive)) return Promise.resolve(state.archive.items);
   setLoading('archive', Boolean(options.silent));
   const request = loadArchiveManifest()
-    .then((manifest) => {
-      const nextAssets = mergeAssetOverrides(manifest.assets, []);
+    .then(async (manifest) => {
+      const overrides = await listAssetOverrides().catch(() => []);
+      const nextAssets = mergeAssetOverrides(manifest.assets, overrides);
       writeCachedArchiveAssets(nextAssets);
       updateResource('archive', { items: nextAssets, status: 'ready', refreshing: false, error: '', loadedAt: new Date().toISOString() });
       return nextAssets;

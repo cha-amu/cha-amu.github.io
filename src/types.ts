@@ -11,6 +11,11 @@ export interface Post {
   createdAt: string;
   updatedAt?: string;
   publishedAt?: string;
+  source?: 'sheets' | 'storage';
+  storagePath?: string;
+  bodyUrl?: string;
+  markdownBaseUrl?: string;
+  markdownRootUrl?: string;
 }
 
 export interface GuestbookEntry {
@@ -25,7 +30,9 @@ export interface GuestbookEntry {
 export interface ArchiveAsset {
   id: string;
   path: string;
-  imageUrl: string;
+  kind?: 'image' | 'file';
+  imageUrl?: string;
+  fileUrl?: string;
   fileName: string;
   title: string;
   description?: string;
@@ -38,6 +45,8 @@ export interface ArchiveAsset {
   sortOrder?: number;
   createdAt?: string;
   updatedAt?: string;
+  source?: 'sheets' | 'storage';
+  storagePath?: string;
 }
 
 export interface ArchiveManifest {

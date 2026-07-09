@@ -70,7 +70,10 @@ export function normalizePost(value: unknown): Post | null {
     status: normalizePostStatus(record.status),
     createdAt: asString(record.createdAt || record.updatedAt || new Date().toISOString()),
     updatedAt: asString(record.updatedAt).trim() || undefined,
-    publishedAt: asString(record.publishedAt).trim() || undefined
+    publishedAt: asString(record.publishedAt).trim() || undefined,
+    source: record.source === 'storage' ? 'storage' : 'sheets',
+    storagePath: asString(record.storagePath).trim() || undefined,
+    bodyUrl: asString(record.bodyUrl).trim() || undefined
   };
 }
 
@@ -115,6 +118,15 @@ export async function listGuestbook(): Promise<GuestbookEntry[]> {
     return visibleEntries;
   } catch (error) {
     if (error instanceof ApiNotConfiguredError) return mockGuestbook;
+    throw error;
+  }
+}
+
+export async function listAssetOverrides(): Promise<AssetOverride[]> {
+  try {
+    return await request<AssetOverride[]>('assetOverride.listPublic');
+  } catch (error) {
+    if (error instanceof ApiNotConfiguredError) return [];
     throw error;
   }
 }

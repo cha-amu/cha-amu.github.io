@@ -359,7 +359,7 @@ docs/assets/ui/search-icon.png       # 검색 아이콘
 자료 표시 데이터는 아래를 합쳐 만든다.
 
 ```txt
-archive/manifest.json
+storage/manifests/assets.json
 + Google Sheets assetOverrides
 = archive 표시 데이터
 ```

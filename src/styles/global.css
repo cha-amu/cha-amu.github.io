@@ -416,6 +416,20 @@ img {
   background: var(--color-soft-primary);
 }
 
+.asset-file-tile {
+  min-height: 210px;
+  aspect-ratio: 1 / 1;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: var(--color-soft-primary);
+  color: inherit;
+  text-align: center;
+  text-decoration: none;
+  font-weight: 900;
+  overflow-wrap: anywhere;
+}
+
 .asset-card__body {
   padding: 0.9rem;
 }

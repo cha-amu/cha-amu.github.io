@@ -50,9 +50,15 @@ export function ArchivePage() {
       <section className="archive-grid" aria-label="자료 목록">
         {filtered.map((asset) => (
           <article className={`asset-card ${window.location.hash === `#${asset.id}` ? 'list-item--active' : ''}`} id={asset.id} key={asset.id}>
-            <button className="button--ghost" type="button" onClick={() => setModalAsset(asset)} aria-label={`${asset.title} 이미지 확대`}>
-              <img src={asset.imageUrl} alt={asset.title} loading="lazy" />
-            </button>
+            {asset.kind === 'file' ? (
+              <a className="asset-file-tile" href={asset.fileUrl || asset.sourceUrl || asset.imageUrl} target="_blank" rel="noreferrer" aria-label={`${asset.title} 파일 열기`}>
+                <span>{asset.fileName}</span>
+              </a>
+            ) : (
+              <button className="button--ghost" type="button" onClick={() => setModalAsset(asset)} aria-label={`${asset.title} 이미지 확대`}>
+                <img src={asset.imageUrl} alt={asset.title} loading="lazy" />
+              </button>
+            )}
             <div className="asset-card__body">
               <h2>{asset.title}</h2>
               {asset.description ? <p>{asset.description}</p> : null}
@@ -67,7 +73,7 @@ export function ArchivePage() {
           <div className="modal">
             <button className="button" type="button" onClick={() => setModalAsset(null)}>닫기</button>
             <h2>{modalAsset.title}</h2>
-            <img src={modalAsset.imageUrl} alt={modalAsset.title} />
+            {modalAsset.imageUrl ? <img src={modalAsset.imageUrl} alt={modalAsset.title} /> : null}
           </div>
         </div>
       ) : null}

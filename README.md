@@ -8,7 +8,7 @@ GitHub Pages에 배포할 개인용 자료 아카이브 사이트입니다.
 - GitHub Pages static hosting
 - Google Apps Script + Google Sheets API backend
 - Cloudflare Turnstile for guestbook writes
-- Image archive manifest from `https://cha-amu.github.io/archive/manifest.json`
+- Storage manifests from `https://cha-amu.github.io/storage/manifests/*.json`
 
 ## Local development
 
@@ -39,8 +39,9 @@ Only public frontend values go into Vite env files. Secrets belong in GitHub Act
 배포, GitHub Actions Secrets/Variables 변경, Apps Script 배포, 관리자 비밀번호 변경 절차는 아래 문서를 따른다.
 
 - [배포와 GitHub Secrets/Variables 관리](docs/deployment.md)
+- [storage repo 포스트/자료 작성 규칙](docs/storage-authoring.md)
 
-현재 GitHub 레포는 `cha-amu/cha-amu.github.io`이고, 사이트는 `https://cha-amu.github.io/`로 배포된다.
+현재 GitHub 레포는 `cha-amu/cha-amu.github.io`이고, 사이트는 `https://cha-amu.github.io/`로 배포된다. 정적 포스트/자료 원본과 미러는 `cha-amu/storage` repo를 사용한다.
 
 관리자 비밀번호는 두 방식으로 바꿀 수 있다.
 

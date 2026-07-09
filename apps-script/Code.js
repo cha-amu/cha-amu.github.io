@@ -90,6 +90,7 @@ function route_(action, body) {
   switch (action) {
     case 'post.listPublic': return listPublicPosts_();
     case 'guestbook.listPublic': return listPublicGuestbook_();
+    case 'assetOverride.listPublic': return listPublicAssetOverrides_();
     case 'guestbook.create': return createGuestbook_(body);
     case 'guestbook.hideByPassword': return hideGuestbookByPassword_(body);
     case 'admin.login': return adminLogin_(body);
@@ -115,6 +116,10 @@ function listPublicGuestbook_() {
       .filter((entry) => entry.status === 'visible')
       .map((entry) => ({ id: String(entry.id), name: String(entry.name || ''), message: String(entry.message || ''), status: entry.status, createdAt: entry.createdAt }));
   });
+}
+
+function listPublicAssetOverrides_() {
+  return rowsToObjects_(SHEETS.assetOverrides);
 }
 
 function createGuestbook_(body) {
@@ -304,7 +309,7 @@ function seedSettings_() {
   }, {});
   const defaults = [
     { key: 'guestbookWriteMode', value: 'anonymous', description: 'anonymous 또는 google-login', updatedAt: new Date().toISOString() },
-    { key: 'archiveManifestUrl', value: 'https://cha-amu.github.io/archive/manifest.json', description: '이미지 repo manifest URL', updatedAt: new Date().toISOString() }
+    { key: 'archiveManifestUrl', value: 'https://cha-amu.github.io/storage/manifests/assets.json', description: 'storage repo asset manifest URL', updatedAt: new Date().toISOString() }
   ];
   defaults.forEach((row) => {
     if (!existing[row.key]) upsertObject_(SHEETS.settings, 'key', row);

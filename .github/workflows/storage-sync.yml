@@ -1,0 +1,55 @@
+name: Sync storage repo
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 18 * * 0'
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout site repo
+        uses: actions/checkout@v4
+        with:
+          path: site
+
+      - name: Checkout storage repo
+        uses: actions/checkout@v4
+        with:
+          repository: cha-amu/storage
+          token: ${{ secrets.STORAGE_REPO_TOKEN }}
+          path: storage-repo
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Install site dependencies
+        working-directory: site
+        run: npm ci
+
+      - name: Sync Sheets and storage manifests
+        working-directory: site
+        env:
+          STORAGE_WORKDIR: ../storage-repo
+          STORAGE_BASE_URL: https://cha-amu.github.io/storage
+          APPS_SCRIPT_URL: ${{ vars.VITE_APPS_SCRIPT_URL }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+        run: node scripts/sync-storage-repo.mjs
+
+      - name: Commit storage changes
+        working-directory: storage-repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .
+          git diff --cached --quiet && exit 0
+          git commit -m "Sync storage manifests"
+          git push
