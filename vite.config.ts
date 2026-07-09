@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
@@ -6,6 +6,7 @@ import type { Plugin, PreviewServer, ViteDevServer } from 'vite';
 
 const canonicalRoutes = new Set(['/posts', '/guestbook', '/archive', '/search', '/admin']);
 const spaRoutes = new Set(['/', '/posts/', '/guestbook/', '/archive/', '/search/', '/admin/']);
+const staticRouteDirs = ['posts', 'guestbook', 'archive', 'search', 'admin'];
 
 function splitUrl(originalUrl = '') {
   const match = originalUrl.match(/^([^?#]*)(.*)$/);
@@ -49,7 +50,14 @@ function spaRouting(): Plugin {
     writeBundle() {
       const indexPath = resolve(__dirname, 'dist/index.html');
       const fallbackPath = resolve(__dirname, 'dist/404.html');
-      if (existsSync(indexPath)) copyFileSync(indexPath, fallbackPath);
+      if (!existsSync(indexPath)) return;
+
+      copyFileSync(indexPath, fallbackPath);
+      for (const routeDir of staticRouteDirs) {
+        const outputDir = resolve(__dirname, 'dist', routeDir);
+        mkdirSync(outputDir, { recursive: true });
+        copyFileSync(indexPath, resolve(outputDir, 'index.html'));
+      }
     }
   };
 }
