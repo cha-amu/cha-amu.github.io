@@ -7,7 +7,7 @@ import { TagList } from '../components/TagList';
 import { TagFilterPanel, countTagOptions } from '../components/TagFilterPanel';
 import { refreshPosts, usePublicResource } from '../stores/publicDataStore';
 import { formatDate } from '../utils/date';
-import { excerpt } from '../utils/strings';
+import { excerpt, normalizeText } from '../utils/strings';
 
 export class PostsErrorBoundary extends Component<{ children: ReactNode }, { message: string }> {
   state = { message: '' };
@@ -36,6 +36,7 @@ export function PostsPage() {
   const posts = postsResource.items;
   const postsCount = useRef(posts.length);
   const [selectedId, setSelectedId] = useState(() => decodeURIComponent(window.location.hash.replace('#', '')));
+  const [query, setQuery] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
 
   useEffect(() => {
@@ -65,9 +66,15 @@ export function PostsPage() {
   }, [posts, selectedId]);
 
   const tagOptions = useMemo(() => countTagOptions(posts), [posts]);
-  const filteredPosts = useMemo(() => (
-    selectedTags.length === 0 ? posts : posts.filter((post) => selectedTags.every((tag) => post.tags.includes(tag)))
-  ), [posts, selectedTags]);
+  const filteredPosts = useMemo(() => {
+    const q = normalizeText(query);
+    return posts.filter((post) => {
+      const tagOk = selectedTags.length === 0 || selectedTags.every((tag) => post.tags.includes(tag));
+      const queryOk = !q || [post.title, post.excerpt || '', post.body, ...post.tags]
+        .some((part) => normalizeText(part).includes(q));
+      return tagOk && queryOk;
+    });
+  }, [posts, query, selectedTags]);
   const selectedPost = useMemo(() => filteredPosts.find((post) => post.id === selectedId) || null, [filteredPosts, selectedId]);
 
   useEffect(() => {
@@ -76,6 +83,11 @@ export function PostsPage() {
 
   const toggleTag = (tag: string) => {
     setSelectedTags((current) => current.includes(tag) ? current.filter((item) => item !== tag) : [...current, tag]);
+  };
+
+  const resetFilters = () => {
+    setQuery('');
+    setSelectedTags([]);
   };
 
   return (
@@ -87,7 +99,6 @@ export function PostsPage() {
       {postsResource.status === 'ready' && posts.length ? (
         <div className="tagged-layout">
           <section className="post-flow tagged-main" aria-label="아무 글 목록">
-            <p className="result-count" aria-live="polite">{filteredPosts.length}개 표시 중</p>
             {filteredPosts.map((post) => {
               const expanded = selectedPost?.id === post.id;
               return (
@@ -110,10 +121,15 @@ export function PostsPage() {
           </section>
           <TagFilterPanel
             label="아무 글"
+            query={query}
+            searchPlaceholder="글 검색"
+            visibleCount={filteredPosts.length}
             tags={tagOptions}
             selectedTags={selectedTags}
+            onQueryChange={setQuery}
             onToggleTag={toggleTag}
             onClearTags={() => setSelectedTags([])}
+            onClearFilters={resetFilters}
           />
         </div>
       ) : null}

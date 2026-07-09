@@ -48,11 +48,6 @@ export function ArchivePage() {
       <h1 className="sr-only">자료</h1>
       <div className="tagged-layout">
         <main className="tagged-main">
-          <section className="filter-bar panel" aria-label="자료 검색">
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="자료 이름, 설명, 태그 검색" aria-label="자료 검색어" />
-            <span className="result-count" aria-live="polite">{filtered.length}개 표시 중</span>
-            <button className="button" type="button" onClick={resetFilters}>초기화</button>
-          </section>
           {archiveResource.refreshing ? <p className="meta">최신 자료 확인 중</p> : null}
           {archiveResource.status === 'loading' ? <LoadingState /> : null}
           {archiveResource.status === 'error' ? <ErrorState message={archiveResource.error} onRetry={load} /> : null}
@@ -77,10 +72,15 @@ export function ArchivePage() {
         </main>
         <TagFilterPanel
           label="자료"
+          query={query}
+          searchPlaceholder="자료 검색"
+          visibleCount={filtered.length}
           tags={tags}
           selectedTags={selectedTags}
+          onQueryChange={setQuery}
           onToggleTag={toggleTag}
           onClearTags={() => setSelectedTags([])}
+          onClearFilters={resetFilters}
         />
       </div>
       {modalAsset ? (

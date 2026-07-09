@@ -24,7 +24,7 @@
 ## Information architecture
 - Primary navigation: `아무 글`, `자료`는 큰 정사각형 메뉴. `방명록`, `검색`, `설정`은 메뉴 옆이 아니라 사이트 상단 오른쪽 공통 도구.
 - Core routes/screens: `/`, `/posts/`, `/archive/`, `/guestbook/`, `/search/`, `/admin/`.
-- Content hierarchy: 페이지 제목 반복보다 즉시 할 일/목록/검색을 먼저 보여준다. 아무 글과 자료의 태그 탐색은 우측 보조 패널에서 개수와 함께 제공한다.
+- Content hierarchy: 페이지 제목 반복보다 즉시 할 일/목록/검색을 먼저 보여준다. 아무 글과 자료의 검색/태그 탐색은 우측 보조 레일에서 개수와 함께 제공한다.
 
 ## Design principles
 - Principle 1: 같은 위계는 같은 크기와 위치 규칙을 쓴다. 특히 공통 도구는 모든 페이지에서 전체 뷰포트 기준 fixed 오버레이와 같은 `--layout-page` 오른쪽 레일을 유지한다.
@@ -41,7 +41,7 @@
 
 ## Components
 - Existing components to reuse: `AppLayout`, `Header`, `SiteTools`, `SearchForm`, `PageState`, `TagList`.
-- New/changed components: `Header`는 홈을 제외한 모든 페이지의 상단바 단일 소스이고, `SiteTools`는 검색/방명록/설정 공통 도구를 담당한다. 개별 페이지에서 상단바를 복제하지 않는다. `TagFilterPanel`은 아무 글/자료의 우측 태그 필터를 담당하며, 태그는 많은 순으로 표시하고 다중 선택은 선택 태그를 모두 포함하는 항목으로 좁힌다.
+- New/changed components: `Header`는 홈을 제외한 모든 페이지의 상단바 단일 소스이고, `SiteTools`는 검색/방명록/설정 공통 도구를 담당한다. 개별 페이지에서 상단바를 복제하지 않는다. `TagFilterPanel`은 아무 글/자료의 우측 검색과 태그 필터를 담당하며, 태그는 많은 순으로 표시하고 다중 선택은 선택 태그를 모두 포함하는 항목으로 좁힌다.
 - Variants and states: `SiteTools`는 홈에서 검색을 숨기는 `showSearch=false` 변형을 쓴다.
 - Token/component ownership: 레이아웃 폭/색/버튼 크기는 `src/styles/global.css` 토큰과 공통 클래스에서 관리한다.
 
