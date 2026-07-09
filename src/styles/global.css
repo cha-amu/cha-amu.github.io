@@ -52,6 +52,7 @@ img {
 }
 
 .site-header {
+  position: relative;
   background: var(--color-background);
   border-bottom: 0;
 }
@@ -62,13 +63,14 @@ img {
   display: flex;
   gap: 1rem;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   padding: 1.5rem var(--layout-gutter) 1rem;
 }
 
 .topbar-brand {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-width: 0;
+  max-width: min(420px, 48vw);
   display: inline-flex;
   align-items: center;
   gap: 0.55rem;
@@ -95,6 +97,7 @@ img {
   display: flex;
   gap: 0.75rem;
   align-items: center;
+  margin-left: clamp(1rem, 3vw, 2rem);
 }
 
 .main-nav a {
@@ -480,12 +483,14 @@ img {
   margin: 0 auto;
 }
 
-.header-actions {
-  flex: 0 0 auto;
+.site-header__tools {
+  position: absolute;
+  z-index: 20;
+  top: 1.5rem;
+  right: var(--layout-gutter);
   display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  min-width: 0;
+  justify-content: flex-end;
+  max-width: calc(100vw - 2rem);
 }
 
 .site-tools {
@@ -541,32 +546,77 @@ img {
   background: var(--color-soft-primary);
 }
 
-.tool-icon-link img {
-  width: 30px;
-  height: 30px;
-  object-fit: contain;
+.guestbook-icon-vector,
+.settings-icon {
+  position: relative;
+  display: block;
+}
+
+.guestbook-icon-vector {
+  width: 22px;
+  height: 24px;
+  border: 2px solid var(--color-ink);
+  border-radius: 5px;
+  background: var(--color-surface);
+  transform: rotate(-2deg);
+}
+
+.guestbook-icon-vector::before {
+  content: '';
+  position: absolute;
+  left: 6px;
+  top: 6px;
+  width: 9px;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--color-ink);
+  box-shadow: 0 5px 0 var(--color-ink), 0 10px 0 var(--color-ink);
+}
+
+.guestbook-icon-vector::after {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 4px;
+  width: 2px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--color-ink);
 }
 
 .settings-icon {
-  position: relative;
-  width: 22px;
+  width: 24px;
   height: 22px;
-  border: 2px solid var(--color-ink);
-  border-radius: 50%;
 }
 
+.settings-icon span,
 .settings-icon::before,
 .settings-icon::after {
   content: '';
   position: absolute;
-  inset: 8px -5px auto;
-  height: 2px;
   background: var(--color-ink);
-  transform: rotate(45deg);
+}
+
+.settings-icon::before {
+  left: 0;
+  right: 0;
+  top: 3px;
+  height: 2px;
+  border-radius: 999px;
+  box-shadow: 0 8px 0 var(--color-ink), 0 16px 0 var(--color-ink);
+}
+
+.settings-icon span {
+  left: 5px;
+  top: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  box-shadow: 11px 8px 0 var(--color-ink), -3px 16px 0 var(--color-ink);
 }
 
 .settings-icon::after {
-  transform: rotate(-45deg);
+  display: none;
 }
 
 .settings-layer {
@@ -634,20 +684,28 @@ img {
     display: none;
   }
 
-  .header-actions {
-    flex: 1 1 auto;
-    justify-content: flex-end;
-    gap: 0.45rem;
+  .site-header__tools {
+    position: static;
+    width: 100%;
+    max-width: 100%;
+    padding: 0 var(--layout-gutter) 0.75rem;
   }
 
   .main-nav {
     flex: 0 1 auto;
     min-width: 0;
     gap: 0.45rem;
+    margin-left: 0.75rem;
   }
 
   .site-tools {
+    width: 100%;
+    justify-content: flex-end;
     gap: 0.35rem;
+  }
+
+  .search-form--toolbar {
+    flex: 0 1 auto;
   }
 
   .search-form--toolbar input {
@@ -799,16 +857,10 @@ img {
     flex-wrap: wrap;
   }
 
-  .header-actions {
-    width: 100%;
-    flex-wrap: wrap;
-    justify-content: space-between;
-    gap: 0.4rem;
-  }
-
   .main-nav {
     flex: 0 0 auto;
     justify-content: flex-start;
+    margin-left: 0.5rem;
   }
 
   .main-nav a {
@@ -827,8 +879,9 @@ img {
   }
 
   .site-tools {
-    flex: 0 0 100%;
+    flex: 0 1 100%;
     justify-content: flex-end;
+    gap: 0.25rem;
     min-width: 0;
   }
 
@@ -838,24 +891,31 @@ img {
   }
 
   .search-form--toolbar {
-    flex: 1 1 auto;
+    flex: 0 1 auto;
+    gap: 0.25rem;
     min-width: 0;
   }
 
   .search-form--toolbar input {
-    width: 100%;
-    min-width: 52px;
+    width: 90px;
+    min-width: 0;
+    padding-inline: 0.6rem;
   }
 
   .search-form--toolbar .search-submit,
   .tool-icon-link {
-    width: 38px;
-    height: 38px;
+    width: 36px;
+    height: 36px;
   }
 
-  .tool-icon-link img {
-    width: 28px;
-    height: 28px;
+  .guestbook-icon-vector {
+    width: 20px;
+    height: 22px;
+  }
+
+  .settings-icon {
+    width: 22px;
+    height: 20px;
   }
 
   .main-nav a {

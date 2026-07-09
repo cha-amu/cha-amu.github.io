@@ -20,17 +20,17 @@ export function Header() {
           <img src="/assets/ui/cha-amu-logo.png" alt="" />
           <span>그냥 아무거나 올리는 채널</span>
         </a>
-        <div className="header-actions">
-          <nav className="main-nav" aria-label="주요 메뉴">
-            {navItems.map((item) => (
-              <a key={item.href} href={item.href} aria-current={path === item.href ? 'page' : undefined}>
-                <img src={item.icon} alt="" />
-                <span>{item.label}</span>
-              </a>
-            ))}
-          </nav>
-          <SiteTools />
-        </div>
+        <nav className="main-nav" aria-label="주요 메뉴">
+          {navItems.map((item) => (
+            <a key={item.href} href={item.href} aria-current={path === item.href ? 'page' : undefined}>
+              <img src={item.icon} alt="" />
+              <span>{item.label}</span>
+            </a>
+          ))}
+        </nav>
+      </div>
+      <div className="site-header__tools">
+        <SiteTools />
       </div>
     </header>
   );

@@ -22,7 +22,7 @@
 - Key contexts of use: 데스크톱 중심이지만 모바일 브라우저에서도 모든 기능 수행.
 
 ## Information architecture
-- Primary navigation: `아무 글`, `자료`는 큰 정사각형 메뉴. `방명록`, `검색`, `설정`은 우측 상단 공통 도구.
+- Primary navigation: `아무 글`, `자료`는 큰 정사각형 메뉴. `방명록`, `검색`, `설정`은 메뉴 옆이 아니라 사이트 상단 오른쪽 공통 도구.
 - Core routes/screens: `/`, `/posts/`, `/archive/`, `/guestbook/`, `/search/`, `/admin/`.
 - Content hierarchy: 페이지 제목 반복보다 즉시 할 일/목록/검색을 먼저 보여준다.
 
@@ -37,7 +37,7 @@
 - Spacing/layout rhythm: `--layout-page` 본문 레일과 `--layout-gutter`를 공유한다.
 - Shape/radius/elevation: 검은 손그림 느낌 테두리, 둥근 모서리, 과한 그림자 지양.
 - Motion: 필수 상태 전환만 사용한다.
-- Imagery/iconography: 제공된 손그림 아이콘을 우선 사용하고, 검색/설정 보조 아이콘은 CSS 벡터로 만든다.
+- Imagery/iconography: 주요 콘텐츠 메뉴는 제공된 손그림 아이콘을 사용하고, 검색/방명록/설정 공통 도구는 같은 결의 CSS 벡터 아이콘으로 만든다.
 
 ## Components
 - Existing components to reuse: `AppLayout`, `Header`, `SiteTools`, `SearchForm`, `PageState`, `TagList`.
