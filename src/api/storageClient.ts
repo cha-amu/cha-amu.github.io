@@ -81,13 +81,13 @@ function parseFrontmatter(markdown: string): { meta: Record<string, string>; bod
 }
 
 async function fetchJson<T>(url: string): Promise<T> {
-  const response = await fetch(url, { method: 'GET' });
+  const response = await fetch(url, { method: 'GET', cache: 'no-cache' });
   if (!response.ok) throw new Error(`Storage manifest request failed: ${response.status}`);
   return response.json() as Promise<T>;
 }
 
 async function fetchText(url: string): Promise<string> {
-  const response = await fetch(url, { method: 'GET' });
+  const response = await fetch(url, { method: 'GET', cache: 'no-cache' });
   if (!response.ok) throw new Error(`Storage post request failed: ${response.status}`);
   return response.text();
 }

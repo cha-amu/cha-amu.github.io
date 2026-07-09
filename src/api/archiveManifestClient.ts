@@ -87,7 +87,7 @@ function normalizeAsset(value: unknown): ArchiveAsset | null {
 
 export async function loadArchiveManifest(): Promise<ArchiveManifest> {
   try {
-    const response = await fetch(config.archiveManifestUrl, { method: 'GET' });
+    const response = await fetch(config.archiveManifestUrl, { method: 'GET', cache: 'no-cache' });
     if (!response.ok) throw new Error(`Archive manifest request failed: ${response.status}`);
     const manifest = (await response.json()) as ArchiveManifest;
     const assets = Array.isArray(manifest.assets) ? manifest.assets.map(normalizeAsset).filter((asset): asset is ArchiveAsset => Boolean(asset)) : [];
