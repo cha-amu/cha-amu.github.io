@@ -87,7 +87,9 @@ img {
   gap: 0.55rem;
   color: var(--color-ink);
   text-decoration: none;
+  font-size: 1.55rem;
   font-weight: 700;
+  line-height: 1;
 }
 
 .topbar-brand img {
@@ -220,10 +222,10 @@ img {
 
 .home-copy {
   margin: 0;
-  max-width: 360px;
-  font-size: 1.7rem;
-  font-weight: 800;
-  line-height: 1.18;
+  max-width: 410px;
+  font-size: 2.05rem;
+  font-weight: 900;
+  line-height: 1.12;
   text-align: left;
   text-wrap: balance;
 }
@@ -687,8 +689,8 @@ img {
   }
 
   .home-copy {
-    max-width: 280px;
-    font-size: 1.45rem;
+    max-width: 320px;
+    font-size: 1.72rem;
     text-align: center;
   }
 
