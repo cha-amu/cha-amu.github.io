@@ -2,6 +2,10 @@ import { useEffect, useId, useState } from 'react';
 import { SearchForm } from './SearchForm';
 import { GuestbookIcon, SettingsIcon } from './ToolIcons';
 
+function currentPath(): string {
+  return window.location.pathname.endsWith('/') ? window.location.pathname : `${window.location.pathname}/`;
+}
+
 export function SiteTools({
   variant = 'default',
   showSearch = true
@@ -11,6 +15,8 @@ export function SiteTools({
 }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const titleId = useId();
+  const path = currentPath();
+  const isGuestbook = path === '/guestbook/';
 
   useEffect(() => {
     if (!settingsOpen) return;
@@ -29,7 +35,12 @@ export function SiteTools({
     <>
       <div className={`site-tools ${variant === 'home' ? 'site-tools--home' : ''}`} aria-label="공통 도구">
         {showSearch ? <SearchForm compact variant="toolbar" /> : null}
-        <a className="tool-icon-link" href="/guestbook/" aria-label="방명록">
+        <a
+          className={`tool-icon-link ${isGuestbook ? 'tool-icon-link--active' : ''}`}
+          href="/guestbook/"
+          aria-label="방명록"
+          aria-current={isGuestbook ? 'page' : undefined}
+        >
           <GuestbookIcon />
         </a>
         <button

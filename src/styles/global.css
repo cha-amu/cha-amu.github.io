@@ -524,6 +524,11 @@ img {
   background: var(--color-soft-primary);
 }
 
+.tool-icon-link--active,
+.tool-icon-link[aria-current="page"] {
+  background: var(--color-primary);
+}
+
 
 .settings-layer {
   position: fixed;

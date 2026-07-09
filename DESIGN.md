@@ -37,7 +37,7 @@
 - Spacing/layout rhythm: `--layout-page` 본문 레일과 `--layout-gutter`를 공유한다.
 - Shape/radius/elevation: 검은 손그림 느낌 테두리, 둥근 모서리, 과한 그림자 지양.
 - Motion: 필수 상태 전환만 사용한다.
-- Imagery/iconography: 주요 콘텐츠 메뉴는 제공된 손그림 아이콘을 사용하고, 검색/방명록/설정 공통 도구는 같은 결의 SVG 벡터 아이콘으로 만든다.
+- Imagery/iconography: 주요 콘텐츠 메뉴는 제공된 손그림 아이콘을 사용하고, 검색/방명록/설정 공통 도구는 같은 결의 Lucide 계열 SVG 벡터 아이콘으로 만든다.
 
 ## Components
 - Existing components to reuse: `AppLayout`, `Header`, `SiteTools`, `SearchForm`, `PageState`, `TagList`.
