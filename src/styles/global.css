@@ -702,6 +702,30 @@ img {
   margin: 0;
 }
 
+.settings-panel__close {
+  flex: 0 0 auto;
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--color-ink);
+  border-radius: 50%;
+  background: var(--color-surface);
+  color: var(--color-ink);
+  padding: 0;
+  box-shadow: 2px 3px 0 rgba(31, 31, 31, 0.14);
+}
+
+.settings-panel__close:hover,
+.settings-panel__close:focus-visible {
+  background: var(--color-soft-primary);
+}
+
+.settings-panel__close:focus-visible {
+  outline: 3px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
 .settings-section {
   display: grid;
   gap: 0.65rem;

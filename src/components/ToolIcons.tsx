@@ -3,7 +3,7 @@ type IconProps = {
 };
 
 // Icon paths are from Lucide Static v1.23.0 (ISC License):
-// search, book-open-text, sliders-horizontal.
+// search, book-open-text, sliders-horizontal, x.
 const iconProps = {
   viewBox: '0 0 24 24',
   fill: 'none',
@@ -49,6 +49,15 @@ export function SettingsIcon({ className = 'tool-icon-svg' }: IconProps) {
       <path d="M21 5h-7" />
       <path d="M8 10v4" />
       <path d="M8 12H3" />
+    </svg>
+  );
+}
+
+export function CloseIcon({ className = 'tool-icon-svg' }: IconProps) {
+  return (
+    <svg className={className} {...iconProps}>
+      <path d="M18 6 6 18" />
+      <path d="m6 6 12 12" />
     </svg>
   );
 }

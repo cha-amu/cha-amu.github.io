@@ -1,7 +1,7 @@
 import { useEffect, useId, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { SearchForm } from './SearchForm';
-import { GuestbookIcon, SettingsIcon } from './ToolIcons';
+import { CloseIcon, GuestbookIcon, SettingsIcon } from './ToolIcons';
 
 function currentPath(): string {
   return window.location.pathname.endsWith('/') ? window.location.pathname : `${window.location.pathname}/`;
@@ -55,8 +55,8 @@ export function SiteTools({ showSearch = true }: { showSearch?: boolean }) {
           <aside className="settings-panel" role="dialog" aria-modal="true" aria-labelledby={titleId}>
             <div className="settings-panel__head">
               <h2 id={titleId}>설정</h2>
-              <button className="button" type="button" onClick={() => setSettingsOpen(false)}>
-                닫기
+              <button className="settings-panel__close" type="button" onClick={() => setSettingsOpen(false)} aria-label="설정 닫기">
+                <CloseIcon />
               </button>
             </div>
 
