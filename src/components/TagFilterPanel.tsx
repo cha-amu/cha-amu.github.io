@@ -16,8 +16,6 @@ export function countTagOptions(items: Array<{ tags: string[] }>): TagOption[] {
 
 interface TagFilterPanelProps {
   label: string;
-  totalCount: number;
-  visibleCount: number;
   tags: TagOption[];
   selectedTags: string[];
   onToggleTag: (tag: string) => void;
@@ -26,7 +24,7 @@ interface TagFilterPanelProps {
 
 const COLLAPSED_TAG_LIMIT = 12;
 
-export function TagFilterPanel({ label, totalCount, visibleCount, tags, selectedTags, onToggleTag, onClearTags }: TagFilterPanelProps) {
+export function TagFilterPanel({ label, tags, selectedTags, onToggleTag, onClearTags }: TagFilterPanelProps) {
   const [expanded, setExpanded] = useState(false);
   const selectedTagSet = useMemo(() => new Set(selectedTags), [selectedTags]);
   const visibleTags = useMemo(() => {
@@ -39,7 +37,7 @@ export function TagFilterPanel({ label, totalCount, visibleCount, tags, selected
     <aside className="tag-panel" aria-label={`${label} 태그 필터`}>
       <div className="tag-panel__head">
         <h2>태그</h2>
-        <span>{visibleCount}/{totalCount}</span>
+        <span>{tags.length}개</span>
       </div>
       <div className="tag-filter-list">
         <button
@@ -49,7 +47,6 @@ export function TagFilterPanel({ label, totalCount, visibleCount, tags, selected
           aria-pressed={selectedTags.length === 0}
         >
           <span>전체</span>
-          <span>{totalCount}</span>
         </button>
         {visibleTags.map((tag) => {
           const selected = selectedTagSet.has(tag.name);

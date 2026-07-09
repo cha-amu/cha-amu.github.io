@@ -374,9 +374,16 @@ img {
 }
 
 .meta,
-.help-text {
+.help-text,
+.result-count {
   color: var(--color-muted);
   font-size: 0.92rem;
+}
+
+.result-count {
+  margin: 0;
+  font-weight: 800;
+  white-space: nowrap;
 }
 
 .tag-row {

@@ -50,6 +50,7 @@ export function ArchivePage() {
         <main className="tagged-main">
           <section className="filter-bar panel" aria-label="자료 검색">
             <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="자료 이름, 설명, 태그 검색" aria-label="자료 검색어" />
+            <span className="result-count" aria-live="polite">{filtered.length}개 표시 중</span>
             <button className="button" type="button" onClick={resetFilters}>초기화</button>
           </section>
           {archiveResource.refreshing ? <p className="meta">최신 자료 확인 중</p> : null}
@@ -76,8 +77,6 @@ export function ArchivePage() {
         </main>
         <TagFilterPanel
           label="자료"
-          totalCount={assets.length}
-          visibleCount={filtered.length}
           tags={tags}
           selectedTags={selectedTags}
           onToggleTag={toggleTag}

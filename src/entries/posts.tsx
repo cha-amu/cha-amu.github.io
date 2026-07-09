@@ -87,6 +87,7 @@ export function PostsPage() {
       {postsResource.status === 'ready' && posts.length ? (
         <div className="tagged-layout">
           <section className="post-flow tagged-main" aria-label="아무 글 목록">
+            <p className="result-count" aria-live="polite">{filteredPosts.length}개 표시 중</p>
             {filteredPosts.map((post) => {
               const expanded = selectedPost?.id === post.id;
               return (
@@ -109,8 +110,6 @@ export function PostsPage() {
           </section>
           <TagFilterPanel
             label="아무 글"
-            totalCount={posts.length}
-            visibleCount={filteredPosts.length}
             tags={tagOptions}
             selectedTags={selectedTags}
             onToggleTag={toggleTag}
