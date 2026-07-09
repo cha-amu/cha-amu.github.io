@@ -1,3 +1,5 @@
+import { useMemo, useState } from 'react';
+
 export interface TagOption {
   name: string;
   count: number;
@@ -22,8 +24,16 @@ interface TagFilterPanelProps {
   onClearTags: () => void;
 }
 
+const COLLAPSED_TAG_LIMIT = 12;
+
 export function TagFilterPanel({ label, totalCount, visibleCount, tags, selectedTags, onToggleTag, onClearTags }: TagFilterPanelProps) {
-  const selectedTagSet = new Set(selectedTags);
+  const [expanded, setExpanded] = useState(false);
+  const selectedTagSet = useMemo(() => new Set(selectedTags), [selectedTags]);
+  const visibleTags = useMemo(() => {
+    if (expanded || tags.length <= COLLAPSED_TAG_LIMIT) return tags;
+    return tags.filter((tag, index) => index < COLLAPSED_TAG_LIMIT || selectedTagSet.has(tag.name));
+  }, [expanded, selectedTagSet, tags]);
+  const hiddenCount = tags.length - visibleTags.length;
 
   return (
     <aside className="tag-panel" aria-label={`${label} 태그 필터`}>
@@ -41,7 +51,7 @@ export function TagFilterPanel({ label, totalCount, visibleCount, tags, selected
           <span>전체</span>
           <span>{totalCount}</span>
         </button>
-        {tags.map((tag) => {
+        {visibleTags.map((tag) => {
           const selected = selectedTagSet.has(tag.name);
           return (
             <button
@@ -56,6 +66,16 @@ export function TagFilterPanel({ label, totalCount, visibleCount, tags, selected
             </button>
           );
         })}
+        {expanded || hiddenCount > 0 ? (
+          <button
+            className="tag-filter tag-filter--more"
+            type="button"
+            onClick={() => setExpanded((current) => !current)}
+            aria-expanded={expanded}
+          >
+            <span>{expanded ? '태그 접기' : `태그 ${hiddenCount}개 더보기`}</span>
+          </button>
+        ) : null}
       </div>
     </aside>
   );
