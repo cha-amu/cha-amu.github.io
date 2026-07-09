@@ -9,7 +9,7 @@ export function SearchForm({
 }: {
   initialValue?: string;
   compact?: boolean;
-  variant?: 'default' | 'home' | 'toolbar';
+  variant?: 'default' | 'home';
 }) {
   const [query, setQuery] = useState(initialValue);
   const submit = (event: FormEvent) => {
@@ -20,7 +20,7 @@ export function SearchForm({
 
   return (
     <form
-      className={`search-form ${variant === 'home' ? 'search-form--home' : ''} ${variant === 'toolbar' ? 'search-form--toolbar' : ''}`}
+      className={`search-form ${variant === 'home' ? 'search-form--home' : ''}`}
       onSubmit={submit}
       role="search"
     >
@@ -28,7 +28,7 @@ export function SearchForm({
         aria-label="통합 검색어"
         value={query}
         onChange={(event) => setQuery(event.target.value)}
-        placeholder={variant === 'toolbar' ? '검색' : '검색창'}
+        placeholder="검색창"
       />
       <button className="button button--primary search-submit" type="submit" aria-label="검색">
         <SearchIcon />

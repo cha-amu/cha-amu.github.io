@@ -2,7 +2,7 @@
 
 ## Source of truth
 - Status: Active
-- Last refreshed: 2026-07-09
+- Last refreshed: 2026-07-10
 - Primary product surfaces: 홈, 아무 글, 자료, 방명록, 통합 검색, 관리자 화면
 - Evidence reviewed: `docs/ui-spec.md`, `docs/github-pages-archive-brief.md`, `src/styles/global.css`, `src/components/AppLayout.tsx`, `src/components/SiteTools.tsx`, `src/components/SearchForm.tsx`, `src/entries/home.tsx`, `docs/assets/ui/*`
 
@@ -24,10 +24,10 @@
 ## Information architecture
 - Primary navigation: `아무 글`, `자료`는 큰 정사각형 메뉴. `방명록`, `검색`, `설정`은 메뉴 옆이 아니라 사이트 상단 오른쪽 공통 도구.
 - Core routes/screens: `/`, `/posts/`, `/archive/`, `/guestbook/`, `/search/`, `/admin/`.
-- Content hierarchy: 페이지 제목 반복보다 즉시 할 일/목록/검색을 먼저 보여준다. 아무 글과 자료의 로컬 검색은 콘텐츠 위의 짧은 필터바로 상단바와 본문을 나누고, 태그 탐색은 우측 보조 레일에서 개수와 함께 제공한다.
+- Content hierarchy: 페이지 제목 반복보다 즉시 할 일/목록/검색을 먼저 보여준다. 공통 검색은 상단 아이콘에서 열리는 오버레이로 분리하고 결과는 `/search/` 본문에서 보여준다. 아무 글과 자료의 로컬 검색은 콘텐츠 위의 짧은 필터바로 상단바와 본문을 나누고, 태그 탐색은 우측 보조 레일에서 개수와 함께 제공한다.
 
 ## Design principles
-- Principle 1: 같은 위계는 같은 크기와 위치 규칙을 쓴다. 특히 공통 도구는 모든 페이지에서 전체 뷰포트 기준 fixed 오버레이와 같은 `--layout-page` 오른쪽 레일을 유지한다.
+- Principle 1: 같은 위계는 같은 크기와 위치 규칙을 쓴다. 특히 공통 도구는 모든 페이지에서 전체 뷰포트 기준 fixed 오버레이와 같은 `--layout-page` 오른쪽 레일을 유지하고, 브랜드/주요 탭보다 한 줄 위의 별도 도구 영역으로 읽히게 한다.
 - Principle 2: 홈은 중앙 검색이 있으므로 우측 도구에서 검색을 반복하지 않는다.
 - Tradeoffs: 작은 화면에서는 상단 도구가 한 줄 아래로 내려가도 잘림 없는 접근성을 우선한다.
 
@@ -41,20 +41,20 @@
 
 ## Components
 - Existing components to reuse: `AppLayout`, `Header`, `SiteTools`, `SearchForm`, `PageState`, `TagList`.
-- New/changed components: `Header`는 홈을 제외한 모든 페이지의 상단바 단일 소스이고, `SiteTools`는 검색/방명록/설정 공통 도구를 담당한다. 개별 페이지에서 상단바를 복제하지 않는다. `TagFilterPanel`은 아무 글/자료의 우측 태그 필터를 담당하며, 태그는 많은 순으로 표시하고 다중 선택은 선택 태그를 모두 포함하는 항목으로 좁힌다.
+- New/changed components: `Header`는 홈을 제외한 모든 페이지의 상단바 단일 소스이고, `SiteTools`는 검색/방명록/설정 공통 도구를 담당한다. 공통 검색은 상단 입력창이 아니라 아이콘 버튼과 포털 오버레이로 열며, 제출 시 통합 검색 본문으로 이동한다. 개별 페이지에서 상단바를 복제하지 않는다. `TagFilterPanel`은 아무 글/자료의 우측 태그 필터를 담당하며, 태그는 많은 순으로 표시하고 다중 선택은 선택 태그를 모두 포함하는 항목으로 좁힌다.
 - Variants and states: `SiteTools`는 홈에서 검색을 숨기는 `showSearch=false` 변형을 쓴다.
 - Token/component ownership: 레이아웃 폭/색/버튼 크기는 `src/styles/global.css` 토큰과 공통 클래스에서 관리한다.
 
 ## Accessibility
 - Target standard: 키보드와 스크린리더 기본 사용 가능 수준.
-- Keyboard/focus behavior: 링크/버튼은 기본 포커스 가능, 설정 사이드바는 Escape/닫기/배경 클릭으로 닫는다.
+- Keyboard/focus behavior: 링크/버튼은 기본 포커스 가능, 검색 오버레이는 열릴 때 입력창에 포커스한다. 검색 오버레이와 설정 사이드바는 Escape/닫기/배경 클릭으로 닫는다.
 - Contrast/readability: 밝은 배경 위 검은 텍스트/테두리 중심.
 - Screen-reader semantics: 주요 메뉴는 `nav`, 검색은 `role="search"`, 설정은 `role="dialog"`.
 - Reduced motion and sensory considerations: 자동 애니메이션을 필수로 두지 않는다.
 
 ## Responsive behavior
 - Supported breakpoints/devices: 데스크톱 기본, 760px/430px 이하에서 축소·줄바꿈.
-- Layout adaptations: 좁은 화면에서는 공통 도구를 fixed 상단 레일에 유지하고, 헤더 콘텐츠를 도구 줄 아래로 내려 겹침을 막는다. 우측 태그 필터 패널은 한 컬럼에서 목록 위로 이동한다.
+- Layout adaptations: 공통 도구를 fixed 상단 레일에 유지하고, 헤더 콘텐츠를 도구 줄 아래로 내려 겹침을 막는다. 좁은 화면에서도 검색은 상단 오버레이 폭을 뷰포트 안에 제한한다. 우측 태그 필터 패널은 한 컬럼에서 목록 위로 이동한다.
 - Touch/hover differences: 아이콘 버튼은 터치 가능한 크기를 유지한다. fixed 오버레이의 빈 레일은 아래 메뉴 클릭을 막지 않되, 설정 사이드바는 최상위 전체-뷰포트 오버레이로 열려 클릭/닫기/배경 클릭/Escape를 받는다.
 
 ## Interaction states
