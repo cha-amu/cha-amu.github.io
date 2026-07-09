@@ -51,31 +51,36 @@ export function ArchivePage() {
       <section className="archive-grid" aria-label="자료 목록">
         {filtered.map((asset) => (
           <article className={`asset-card ${window.location.hash === `#${asset.id}` ? 'list-item--active' : ''}`} id={asset.id} key={asset.id}>
-            {asset.kind === 'file' ? (
-              <a className="asset-file-tile" href={asset.fileUrl || asset.sourceUrl || asset.imageUrl} target="_blank" rel="noreferrer" aria-label={`${asset.title} 파일 열기`}>
-                <span>{asset.fileName}</span>
-              </a>
-            ) : (
-              <button className="button--ghost" type="button" onClick={() => setModalAsset(asset)} aria-label={`${asset.title} 이미지 확대`}>
-                <img src={asset.imageUrl} alt={asset.title} loading="lazy" />
-              </button>
-            )}
-            <div className="asset-card__body">
-              <h2>{asset.title}</h2>
-              {asset.description ? <MarkdownView markdown={asset.description} baseUrl={asset.markdownBaseUrl} rootUrl={asset.markdownRootUrl} /> : null}
-              <TagList tags={asset.tags} />
-              {asset.sourceUrl ? <p className="meta"><a href={asset.sourceUrl} target="_blank" rel="noreferrer">출처</a></p> : null}
-              <p className="meta">{asset.path}</p>
-            </div>
+            <button className="asset-card__button" type="button" onClick={() => setModalAsset(asset)} aria-label={`${asset.title} 자료 자세히 보기`}>
+              {asset.kind === 'file' ? (
+                <span className="asset-file-tile">{asset.fileName}</span>
+              ) : (
+                <img src={asset.imageUrl} alt="" loading="lazy" />
+              )}
+              <div className="asset-card__body">
+                <strong>{asset.title}</strong>
+                <TagList tags={asset.tags} />
+              </div>
+            </button>
           </article>
         ))}
       </section>
       {modalAsset ? (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="이미지 확대">
-          <div className="modal">
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label={`${modalAsset.title} 자료 상세`}>
+          <div className="modal asset-modal">
             <button className="button" type="button" onClick={() => setModalAsset(null)}>닫기</button>
             <h2>{modalAsset.title}</h2>
-            {modalAsset.imageUrl ? <img src={modalAsset.imageUrl} alt={modalAsset.title} /> : null}
+            {modalAsset.kind === 'file' ? (
+              <a className="asset-file-tile asset-file-tile--modal" href={modalAsset.fileUrl || modalAsset.sourceUrl || modalAsset.imageUrl} target="_blank" rel="noreferrer">
+                {modalAsset.fileName}
+              </a>
+            ) : (
+              <img src={modalAsset.imageUrl} alt={modalAsset.title} />
+            )}
+            {modalAsset.description ? <MarkdownView markdown={modalAsset.description} baseUrl={modalAsset.markdownBaseUrl} rootUrl={modalAsset.markdownRootUrl} /> : null}
+            <TagList tags={modalAsset.tags} />
+            {modalAsset.sourceUrl ? <p className="meta"><a href={modalAsset.sourceUrl} target="_blank" rel="noreferrer">출처</a></p> : null}
+            <p className="meta">{modalAsset.path}</p>
           </div>
         </div>
       ) : null}
