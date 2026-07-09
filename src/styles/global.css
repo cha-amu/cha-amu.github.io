@@ -74,7 +74,7 @@ img {
   display: flex;
   gap: 1rem;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   padding: calc(var(--site-tools-top) + var(--site-tools-row-height) + 0.95rem) var(--layout-gutter) 1rem;
 }
 
@@ -1165,7 +1165,7 @@ img {
 
   .main-nav {
     flex: 0 0 auto;
-    justify-content: center;
+    justify-content: flex-start;
     margin-left: 0;
   }
 
