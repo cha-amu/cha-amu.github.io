@@ -1,5 +1,6 @@
 import { createRoot } from 'react-dom/client';
 import { SearchForm } from '../components/SearchForm';
+import { SiteTools } from '../components/SiteTools';
 import '../styles/global.css';
 
 const canonicalRoutes = ['/posts', '/guestbook', '/archive', '/search', '/admin'];
@@ -9,13 +10,13 @@ if (canonicalRoutes.includes(window.location.pathname)) {
 
 const menuItems = [
   { href: '/posts/', label: '아무 글', icon: '/assets/ui/posts-icon.png' },
-  { href: '/guestbook/', label: '방명록', icon: '/assets/ui/guestbook-icon.png' },
   { href: '/archive/', label: '자료', icon: '/assets/ui/archive-icon.png' }
 ];
 
 function HomePage() {
   return (
     <main className="home-screen">
+      <SiteTools variant="home" showSearch={false} />
       <section className="home-cluster" aria-labelledby="home-title">
         <div className="home-intro">
           <img className="home-logo" src="/assets/ui/cha-amu-logo.png" alt="채아무 아이콘" />

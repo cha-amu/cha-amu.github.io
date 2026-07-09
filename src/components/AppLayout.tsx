@@ -1,9 +1,9 @@
 import type { ReactNode } from 'react';
+import { SiteTools } from './SiteTools';
 import '../styles/global.css';
 
 const navItems = [
   { href: '/posts/', label: '아무 글', icon: '/assets/ui/posts-icon.png' },
-  { href: '/guestbook/', label: '방명록', icon: '/assets/ui/guestbook-icon.png' },
   { href: '/archive/', label: '자료', icon: '/assets/ui/archive-icon.png' }
 ];
 
@@ -20,14 +20,17 @@ export function Header() {
           <img src="/assets/ui/cha-amu-logo.png" alt="" />
           <span>그냥 아무거나 올리는 채널</span>
         </a>
-        <nav className="main-nav" aria-label="주요 메뉴">
-          {navItems.map((item) => (
-            <a key={item.href} href={item.href} aria-current={path === item.href ? 'page' : undefined}>
-              <img src={item.icon} alt="" />
-              <span>{item.label}</span>
-            </a>
-          ))}
-        </nav>
+        <div className="header-actions">
+          <nav className="main-nav" aria-label="주요 메뉴">
+            {navItems.map((item) => (
+              <a key={item.href} href={item.href} aria-current={path === item.href ? 'page' : undefined}>
+                <img src={item.icon} alt="" />
+                <span>{item.label}</span>
+              </a>
+            ))}
+          </nav>
+          <SiteTools />
+        </div>
       </div>
     </header>
   );

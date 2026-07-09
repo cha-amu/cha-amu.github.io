@@ -480,6 +480,144 @@ img {
   margin: 0 auto;
 }
 
+.header-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.site-tools {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.site-tools--home {
+  position: fixed;
+  z-index: 20;
+  top: 1rem;
+  right: 1rem;
+  width: 92px;
+  max-width: calc(100vw - 2rem);
+  justify-content: flex-end;
+}
+
+.search-form--toolbar {
+  gap: 0.35rem;
+}
+
+.search-form--toolbar input {
+  width: 150px;
+  min-width: 0;
+  border-radius: 999px;
+  padding: 0.5rem 0.7rem;
+}
+
+.search-form--toolbar .search-submit {
+  width: 42px;
+  height: 42px;
+  justify-content: center;
+  padding: 0;
+  border-radius: 50%;
+}
+
+.tool-icon-link {
+  width: 42px;
+  height: 42px;
+  display: inline-grid;
+  place-items: center;
+  border: 2px solid var(--color-ink);
+  border-radius: 50%;
+  background: var(--color-surface);
+  color: var(--color-ink);
+  text-decoration: none;
+  padding: 0;
+}
+
+.tool-icon-link:hover {
+  background: var(--color-soft-primary);
+}
+
+.tool-icon-link img {
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+}
+
+.settings-icon {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--color-ink);
+  border-radius: 50%;
+}
+
+.settings-icon::before,
+.settings-icon::after {
+  content: '';
+  position: absolute;
+  inset: 8px -5px auto;
+  height: 2px;
+  background: var(--color-ink);
+  transform: rotate(45deg);
+}
+
+.settings-icon::after {
+  transform: rotate(-45deg);
+}
+
+.settings-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+}
+
+.settings-backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(31, 31, 31, 0.28);
+}
+
+.settings-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: min(360px, 92vw);
+  height: 100%;
+  overflow: auto;
+  border-left: 3px solid var(--color-ink);
+  background: var(--color-background);
+  padding: 1.25rem;
+  box-shadow: -10px 0 30px rgba(31, 31, 31, 0.16);
+}
+
+.settings-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.settings-panel__head h2,
+.settings-section h3 {
+  margin: 0;
+}
+
+.settings-section {
+  display: grid;
+  gap: 0.65rem;
+  border: 2px solid var(--color-ink);
+  border-radius: 1rem;
+  background: var(--color-surface);
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
 @media (max-width: 760px) {
   .site-header__inner {
     width: 100%;
@@ -496,10 +634,24 @@ img {
     display: none;
   }
 
+  .header-actions {
+    flex: 1 1 auto;
+    justify-content: flex-end;
+    gap: 0.45rem;
+  }
+
   .main-nav {
     flex: 0 1 auto;
     min-width: 0;
     gap: 0.45rem;
+  }
+
+  .site-tools {
+    gap: 0.35rem;
+  }
+
+  .search-form--toolbar input {
+    width: 112px;
   }
 
   .main-nav a {
@@ -533,7 +685,7 @@ img {
     display: grid;
   }
 
-  .search-form:not(.search-form--home) {
+  .search-form:not(.search-form--home):not(.search-form--toolbar) {
     display: grid;
   }
 
@@ -647,14 +799,68 @@ img {
     flex-wrap: wrap;
   }
 
-  .main-nav {
+  .header-actions {
     width: 100%;
+    flex-wrap: wrap;
     justify-content: space-between;
+    gap: 0.4rem;
+  }
+
+  .main-nav {
+    flex: 0 0 auto;
+    justify-content: flex-start;
   }
 
   .main-nav a {
-    width: 68px;
-    height: 68px;
+    width: 52px;
+    height: 52px;
+    border-radius: 14px;
+  }
+
+  .main-nav a img {
+    width: 34px;
+    height: 34px;
+  }
+
+  .main-nav a span {
+    display: none;
+  }
+
+  .site-tools {
+    flex: 0 0 100%;
+    justify-content: flex-end;
+    min-width: 0;
+  }
+
+  .site-tools--home {
+    flex: none;
+    width: 92px;
+  }
+
+  .search-form--toolbar {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .search-form--toolbar input {
+    width: 100%;
+    min-width: 52px;
+  }
+
+  .search-form--toolbar .search-submit,
+  .tool-icon-link {
+    width: 38px;
+    height: 38px;
+  }
+
+  .tool-icon-link img {
+    width: 28px;
+    height: 28px;
+  }
+
+  .main-nav a {
+    width: 52px;
+    height: 52px;
   }
 }
 
