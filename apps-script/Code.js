@@ -32,6 +32,7 @@ const SHEET_COLUMNS = {
 const SESSION_TTL_MS = Number(getProperty_('ADMIN_SESSION_TTL_MS', '60000'));
 const PASSWORD_ITERATIONS = Number(getProperty_('GUESTBOOK_PASSWORD_ITERATIONS', '1'));
 const GUESTBOOK_PASSWORD_HASH_ALGORITHM = 'SHA-256+salt+pepper';
+const DEFAULT_GUESTBOOK_NAME = 'ㅇㅁ';
 const MIN_SECRET_LENGTH = 32;
 const PUBLIC_CACHE_TTL_SECONDS = Math.max(1, Number(getProperty_('PUBLIC_CACHE_TTL_SECONDS', '300')) || 300);
 const PUBLIC_CACHE_KEYS = {
@@ -43,6 +44,9 @@ const RATE_LIMITS = {
   adminLoginWindow: { key: 'admin-login-window', limit: 8, windowSeconds: 300, message: '로그인 시도가 너무 많습니다. 5분 후 다시 시도하세요.' },
   guestbookCreateBurst: { key: 'guestbook-create-burst', limit: 1, windowSeconds: 10, message: '방명록 작성이 너무 빠릅니다. 잠시 후 다시 시도하세요.' },
   guestbookCreateWindow: { key: 'guestbook-create-window', limit: 12, windowSeconds: 3600, message: '방명록 작성이 너무 많습니다. 나중에 다시 시도하세요.' },
+  guestbookClientDuplicateWindow: { key: 'guestbook-client-duplicate-window', limit: 1, windowSeconds: 600, message: '같은 메시지가 반복되어 잠시 제한했습니다.' },
+  guestbookGlobalDuplicateWindow: { key: 'guestbook-global-duplicate-window', limit: 2, windowSeconds: 600, message: '같은 긴 메시지가 반복되어 잠시 제한했습니다.' },
+  guestbookEmergencyWindow: { key: 'guestbook-emergency-window', limit: 120, windowSeconds: 3600, message: '방명록 요청이 일시적으로 많습니다. 나중에 다시 시도하세요.' },
   guestbookDeleteWindow: { key: 'guestbook-delete-window', limit: 30, windowSeconds: 3600, message: '삭제 시도가 너무 많습니다. 나중에 다시 시도하세요.' },
   guestbookDeleteEntryWindow: { key: 'guestbook-delete-entry', limit: 5, windowSeconds: 600, message: '이 글의 삭제 비밀번호 시도가 너무 많습니다. 10분 후 다시 시도하세요.' }
 };
@@ -118,7 +122,7 @@ function listPublicGuestbook_() {
   return readPublicCache_(PUBLIC_CACHE_KEYS.guestbook, function () {
     return rowsToObjects_(SHEETS.guestbook)
       .filter((entry) => entry.status === 'visible')
-      .map((entry) => ({ id: String(entry.id), name: String(entry.name || ''), message: String(entry.message || ''), status: entry.status, createdAt: entry.createdAt }));
+      .map((entry) => ({ id: String(entry.id), name: String(entry.name || '').trim() || DEFAULT_GUESTBOOK_NAME, message: String(entry.message || ''), status: entry.status, createdAt: entry.createdAt }));
   });
 }
 
@@ -127,16 +131,27 @@ function listPublicAssetOverrides_() {
 }
 
 function createGuestbook_(body) {
-  assert_(body.name && body.message && body.deletePassword, 'Missing guestbook fields.');
-  enforceRateLimit_(RATE_LIMITS.guestbookCreateBurst);
-  enforceRateLimit_(RATE_LIMITS.guestbookCreateWindow);
+  const name = String(body.name || '').trim() || DEFAULT_GUESTBOOK_NAME;
+  const message = String(body.message || '').trim().slice(0, 1000);
+  const deletePassword = String(body.deletePassword || '');
+  assert_(!String(body.website || '').trim(), '요청을 처리할 수 없습니다.');
+  assert_(message && deletePassword, '메시지와 비밀번호를 입력해야 합니다.');
+  const clientScope = guestbookClientScope_(body);
+  enforceRateLimit_(scopedRateLimit_(RATE_LIMITS.guestbookCreateBurst, clientScope));
+  enforceRateLimit_(scopedRateLimit_(RATE_LIMITS.guestbookCreateWindow, clientScope));
   verifyTurnstile_(body.turnstileToken);
+  const messageKey = guestbookMessageKey_(message);
+  enforceRateLimit_(scopedRateLimit_(RATE_LIMITS.guestbookClientDuplicateWindow, clientScope + ':' + messageKey));
+  if (normalizeGuestbookMessage_(message).length >= 20) {
+    enforceRateLimit_(scopedRateLimit_(RATE_LIMITS.guestbookGlobalDuplicateWindow, messageKey));
+  }
+  enforceRateLimit_(RATE_LIMITS.guestbookEmergencyWindow);
   const salt = Utilities.getUuid();
-  const passwordHash = hashPassword_(body.deletePassword, salt);
+  const passwordHash = hashPassword_(deletePassword, salt);
   const entry = {
     id: Utilities.getUuid(),
-    name: String(body.name).slice(0, 40),
-    message: String(body.message).slice(0, 1000),
+    name: name.slice(0, 40),
+    message,
     status: 'visible',
     createdAt: new Date().toISOString(),
     passwordSalt: salt,
@@ -152,7 +167,8 @@ function createGuestbook_(body) {
 
 function hideGuestbookByPassword_(body) {
   assert_(body.id, 'Guestbook entry id is required.');
-  enforceRateLimit_(RATE_LIMITS.guestbookDeleteWindow);
+  assert_(body.deletePassword, '비밀번호를 입력해야 합니다.');
+  enforceRateLimit_(scopedRateLimit_(RATE_LIMITS.guestbookDeleteWindow, guestbookClientScope_(body)));
   enforceRateLimit_(Object.assign({}, RATE_LIMITS.guestbookDeleteEntryWindow, { key: RATE_LIMITS.guestbookDeleteEntryWindow.key + ':' + rateKeyPart_(body.id) }));
   const sheet = getSheet_(SHEETS.guestbook);
   const values = sheet.getDataRange().getValues();
@@ -251,7 +267,7 @@ function listAdminGuestbook_() {
   return rowsToObjects_(SHEETS.guestbook).map(function (entry) {
     return {
       id: String(entry.id),
-      name: String(entry.name || ''),
+      name: String(entry.name || '').trim() || DEFAULT_GUESTBOOK_NAME,
       message: String(entry.message || ''),
       status: entry.status,
       createdAt: entry.createdAt,
@@ -408,6 +424,21 @@ function getRequiredProperty_(key, minLength) {
 }
 function rateKeyPart_(value) {
   return String(value || '').replace(/[^A-Za-z0-9:_-]/g, '_').slice(0, 80);
+}
+function scopedRateLimit_(rule, scope) {
+  return Object.assign({}, rule, { key: rule.key + ':' + rateKeyPart_(scope) });
+}
+function guestbookClientScope_(body) {
+  const clientId = String(body.clientId || '').trim();
+  const validClientId = /^[A-Za-z0-9_-]{16,128}$/.test(clientId);
+  const source = validClientId ? 'client:' + clientId : 'password:' + String(body.deletePassword || '');
+  return hmacHex_(source, getRequiredProperty_('GUESTBOOK_SERVER_PEPPER')).slice(0, 32);
+}
+function guestbookMessageKey_(message) {
+  return sha256Hex_(normalizeGuestbookMessage_(message)).slice(0, 32);
+}
+function normalizeGuestbookMessage_(message) {
+  return String(message || '').trim().slice(0, 1000).replace(/\s+/g, ' ').toLowerCase();
 }
 function enforceRateLimit_(rule) {
   const lock = LockService.getScriptLock();

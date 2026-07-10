@@ -15,6 +15,7 @@ import type { GuestbookEntry } from '../types';
 import { formatDate } from '../utils/date';
 
 const GUESTBOOK_BATCH_SIZE = 10;
+const DEFAULT_GUESTBOOK_NAME = 'ㅇㅁ';
 
 function isPendingEntry(entry: GuestbookEntry) {
   return entry.id.startsWith('temp-');
@@ -79,13 +80,14 @@ export function GuestbookPage() {
     event.preventDefault();
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
-    const name = String(form.get('name') || '').trim();
+    const name = String(form.get('name') || '').trim() || DEFAULT_GUESTBOOK_NAME;
     const body = String(form.get('message') || '').trim();
     const deletePassword = String(form.get('deletePassword') || '');
     const turnstileToken = String(form.get('cf-turnstile-response') || '');
+    const website = String(form.get('website') || '');
 
-    if (!name || !body || !deletePassword) {
-      setMessage('이름, 메시지, 비밀번호를 모두 입력해야 합니다.');
+    if (!body || !deletePassword) {
+      setMessage('메시지와 비밀번호를 입력해야 합니다.');
       return;
     }
 
@@ -103,7 +105,7 @@ export function GuestbookPage() {
     setPublicGuestbook((current) => [optimisticEntry, ...current]);
 
     try {
-      const created = normalizeEntry(await createGuestbookEntry({ name, message: body, deletePassword, turnstileToken }));
+      const created = normalizeEntry(await createGuestbookEntry({ name, message: body, deletePassword, turnstileToken, website }));
       setPublicGuestbook((current) => [created, ...current.filter((entry) => entry.id !== optimisticEntry.id && entry.id !== created.id)].sort(byNewestFirst));
       setMessage('방명록을 남겼습니다.');
     } catch (err) {
@@ -144,9 +146,20 @@ export function GuestbookPage() {
           <form className="guestbook-form" onSubmit={submit} aria-label="방명록 글 남기기">
             <div className="guestbook-form__content">
               <div className="guestbook-form__fields">
+                <div className="field guestbook-field guestbook-field--message">
+                  <label className="sr-only" htmlFor="guestbook-message">메시지</label>
+                  <textarea id="guestbook-message" name="message" maxLength={1000} required placeholder="메시지" />
+                </div>
                 <div className="field guestbook-field">
                   <label className="sr-only" htmlFor="guestbook-name">이름</label>
-                  <input id="guestbook-name" name="name" maxLength={40} required placeholder="이름" />
+                  <input
+                    id="guestbook-name"
+                    name="name"
+                    maxLength={40}
+                    placeholder="이름 (선택)"
+                    aria-describedby="guestbook-name-help"
+                  />
+                  <span className="help-text" id="guestbook-name-help">비우면 ㅇㅁ으로 표시돼요.</span>
                 </div>
                 <div className="field guestbook-field">
                   <label className="sr-only" htmlFor="guestbook-password">비밀번호</label>
@@ -161,10 +174,10 @@ export function GuestbookPage() {
                   />
                   <span className="help-text" id="guestbook-password-help">방명록을 지울 때 사용해요.</span>
                 </div>
-                <div className="field guestbook-field guestbook-field--message">
-                  <label className="sr-only" htmlFor="guestbook-message">메시지</label>
-                  <textarea id="guestbook-message" name="message" maxLength={1000} required placeholder="메시지" />
-                </div>
+              </div>
+              <div className="guestbook-contact-field" aria-hidden="true">
+                <label htmlFor="guestbook-website">웹사이트</label>
+                <input id="guestbook-website" name="website" tabIndex={-1} autoComplete="off" />
               </div>
               <TurnstileBox />
               {message ? <p className="status-message">{message}</p> : null}
@@ -180,25 +193,26 @@ export function GuestbookPage() {
           {guestbookResource.status === 'ready' && !entries.length ? <EmptyState label="아직 방명록이 없습니다." /> : null}
           {visibleEntries.map((entry) => {
             const pending = isPendingEntry(entry);
+            const displayName = entry.name.trim() || DEFAULT_GUESTBOOK_NAME;
             return (
               <article className="list-item guestbook-entry" key={entry.id} aria-busy={pending}>
-                <header className="guestbook-entry__head">
-                  <h2>{entry.name}</h2>
-                  <div className="guestbook-entry__meta">
-                    <p className="meta">{pending ? '서버 반영 확인 중' : formatDate(entry.createdAt)}</p>
-                    <button
-                      className="button guestbook-entry__delete"
-                      type="button"
-                      disabled={pending}
-                      onClick={() => requestHide(entry)}
-                      aria-label={`${entry.name}님의 방명록 글 지우기`}
-                      title="글 지우기"
-                    >
-                      <TrashIcon />
-                    </button>
-                  </div>
-                </header>
                 <p className="guestbook-entry__message">{entry.message}</p>
+                <footer className="guestbook-entry__footer">
+                  <div className="guestbook-entry__byline">
+                    <strong className="guestbook-entry__name">{displayName}</strong>
+                    <p className="meta">{pending ? '서버 반영 확인 중' : formatDate(entry.createdAt)}</p>
+                  </div>
+                  <button
+                    className="button guestbook-entry__delete"
+                    type="button"
+                    disabled={pending}
+                    onClick={() => requestHide(entry)}
+                    aria-label={`${displayName}님의 방명록 글 지우기`}
+                    title="글 지우기"
+                  >
+                    <TrashIcon />
+                  </button>
+                </footer>
               </article>
             );
           })}

@@ -6,6 +6,8 @@ on:
     branches: [main]
     paths:
       - 'apps-script/**'
+      - 'tests/**'
+      - 'package.json'
       - '.github/workflows/apps-script.yml'
 
 permissions:
@@ -26,7 +28,7 @@ jobs:
           node-version: 24
 
       - name: Validate Apps Script source
-        run: node --check apps-script/Code.js
+        run: npm test && node --check apps-script/Code.js
 
       - name: Write clasp credentials
         run: |

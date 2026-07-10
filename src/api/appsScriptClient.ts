@@ -32,6 +32,25 @@ async function request<T>(action: string, payload: Record<string, unknown> = {})
 
 const POSTS_CACHE_KEY = 'posts:v1';
 const GUESTBOOK_CACHE_KEY = 'guestbook:v1';
+const GUESTBOOK_CLIENT_ID_CACHE_KEY = 'guestbook-client-id:v1';
+let sessionGuestbookClientId = '';
+
+function createGuestbookClientId() {
+  if (typeof globalThis.crypto?.randomUUID === 'function') return globalThis.crypto.randomUUID();
+  if (typeof globalThis.crypto?.getRandomValues === 'function') {
+    const bytes = globalThis.crypto.getRandomValues(new Uint8Array(16));
+    return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
+
+function getGuestbookClientId() {
+  const cached = readCache<unknown>(GUESTBOOK_CLIENT_ID_CACHE_KEY);
+  if (typeof cached === 'string' && /^[A-Za-z0-9_-]{16,128}$/.test(cached)) return cached;
+  if (!sessionGuestbookClientId) sessionGuestbookClientId = createGuestbookClientId();
+  writeCache(GUESTBOOK_CLIENT_ID_CACHE_KEY, sessionGuestbookClientId);
+  return sessionGuestbookClientId;
+}
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' ? value as Record<string, unknown> : null;
@@ -154,12 +173,13 @@ export async function createGuestbookEntry(input: {
   message: string;
   deletePassword: string;
   turnstileToken: string;
+  website?: string;
 }): Promise<GuestbookEntry> {
-  return request<GuestbookEntry>('guestbook.create', input);
+  return request<GuestbookEntry>('guestbook.create', { ...input, clientId: getGuestbookClientId() });
 }
 
 export async function hideGuestbookEntry(input: { id: string; deletePassword: string }): Promise<{ id: string }> {
-  return request<{ id: string }>('guestbook.hideByPassword', input);
+  return request<{ id: string }>('guestbook.hideByPassword', { ...input, clientId: getGuestbookClientId() });
 }
 
 export async function adminLogin(input: { password: string }): Promise<AdminSession> {
