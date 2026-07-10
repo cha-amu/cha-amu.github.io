@@ -69,13 +69,13 @@ img {
 }
 
 .site-header__inner {
-  width: min(var(--layout-page), 100%);
+  width: min(var(--layout-page), calc(100vw - (var(--layout-gutter) * 2)));
   margin: 0 auto;
   display: flex;
   gap: 1rem;
   align-items: center;
   justify-content: flex-start;
-  padding: calc(var(--site-tools-top) + var(--site-tools-row-height) + 0.95rem) var(--layout-gutter) 1rem;
+  padding: calc(var(--site-tools-top) + var(--site-tools-row-height) + 0.95rem) 0 1rem;
 }
 
 .topbar-brand {
