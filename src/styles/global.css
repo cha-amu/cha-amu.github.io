@@ -630,8 +630,21 @@ img {
 }
 
 .markdown-body {
+  width: 100%;
+  min-width: 0;
   max-width: var(--layout-readable);
   line-height: 1.72;
+  overflow-wrap: anywhere;
+}
+
+.markdown-body > * {
+  max-width: 100%;
+}
+
+.markdown-body pre {
+  overflow-x: auto;
+  white-space: pre;
+  overflow-wrap: normal;
 }
 
 .markdown-body img {
@@ -1247,6 +1260,7 @@ img {
 }
 
 .post-entry__body {
+  min-width: 0;
   border-top: 1.5px solid var(--color-line);
   padding: 1.1rem;
 }
