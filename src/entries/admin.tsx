@@ -231,9 +231,9 @@ function PostsAdmin({ token, onSessionExpired }: { token: string; onSessionExpir
           <aside className="panel admin-list-panel" aria-label="글 목록">
             <div className="admin-list-panel__top">
               <strong>글 목록</strong>
-              <span>{loading ? '불러오는 중' : `${posts.length}개`}</span>
+              <span>{loading && !posts.length ? '불러오는 중' : `${posts.length}개`}</span>
             </div>
-            {loading ? <p className="status-message">글 목록을 불러오는 중입니다.</p> : null}
+            {loading && !posts.length ? <p className="status-message">글 목록을 불러오는 중입니다.</p> : null}
             {!loading && !posts.length ? <p className="admin-empty-note">아직 저장된 글이 없습니다.</p> : null}
             <div className="admin-list">
               {posts.map((post) => (
@@ -359,7 +359,7 @@ function AssetsAdmin({ token, onSessionExpired }: { token: string; onSessionExpi
     }
   };
 
-  if (loading) return <EmptyState label="자료 정보를 불러오는 중입니다." />;
+  if (loading && !assets.length) return <EmptyState label="자료 정보를 불러오는 중입니다." />;
   if (!assets.length) return <EmptyState label={message || '등록된 자료가 없습니다.'} />;
 
   return (
@@ -516,10 +516,10 @@ function GuestbookAdmin({ token, onSessionExpired }: { token: string; onSessionE
 
       {limitedMode ? <p className="status-message">전체 관리 목록 연결 전이라 현재는 공개 글만 표시합니다.</p> : null}
       {message ? <p className="status-message" role="status">{message}</p> : null}
-      {loading ? <EmptyState label="방명록을 불러오는 중입니다." /> : null}
+      {loading && !entries.length ? <EmptyState label="방명록을 불러오는 중입니다." /> : null}
       {!loading && !filteredEntries.length ? <EmptyState label="해당 상태의 방명록 글이 없습니다." /> : null}
 
-      {!loading && visibleItems.length ? (
+      {visibleItems.length ? (
         <div className="admin-guestbook-list">
           <p className="result-count">{totalCount}개 중 {shownCount}개 표시</p>
           {visibleItems.map((entry) => (
