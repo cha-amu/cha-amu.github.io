@@ -41,7 +41,7 @@
 
 ## Components
 - Existing components to reuse: `AppLayout`, `Header`, `SiteTools`, `SearchForm`, `PageState`, `TagList`.
-- New/changed components: `Header`는 홈을 제외한 모든 페이지의 상단바 단일 소스이고, `SiteTools`는 검색/방명록/설정 공통 도구를 담당한다. 공통 검색은 상단 입력창이 아니라 아이콘 버튼과 포털 오버레이로 열며, 제출 시 통합 검색 본문으로 이동한다. 개별 페이지에서 상단바를 복제하지 않는다. `TagFilterPanel`은 아무 글/자료의 우측 태그 필터를 담당하며, 태그는 많은 순으로 표시하고 다중 선택은 선택 태그를 모두 포함하는 항목으로 좁힌다. 자료 모달은 외곽 프레임과 내부 스크롤 영역을 분리해 스크롤바가 검은 외곽선을 침범하지 않게 한다.
+- New/changed components: `Header`는 홈을 제외한 모든 페이지의 상단바 단일 소스이고, `SiteTools`는 검색/방명록/설정 공통 도구를 담당한다. 공통 검색은 상단 입력창이 아니라 아이콘 버튼과 포털 오버레이로 열며, 제출 시 통합 검색 본문으로 이동한다. 개별 페이지에서 상단바를 복제하지 않는다. `TagFilterPanel`은 아무 글/자료의 우측 태그 필터를 담당하며, 태그는 많은 순으로 표시하고 다중 선택은 선택 태그를 모두 포함하는 항목으로 좁힌다. 자료 모달은 외곽 프레임과 내부 스크롤 영역을 분리해 스크롤바가 검은 외곽선을 침범하지 않게 한다. `IncrementalLoadMore`는 전체 데이터 검색/태그 정확도는 유지하고 렌더링 항목만 묶어서 늘린다. `BackToTopButton`은 긴 목록에서 스크롤이 충분히 내려간 뒤에만 표시한다.
 - Variants and states: `SiteTools`는 홈에서 검색을 숨기는 `showSearch=false` 변형을 쓴다.
 - Token/component ownership: 레이아웃 폭/색/버튼 크기는 `src/styles/global.css` 토큰과 공통 클래스에서 관리한다.
 
@@ -73,7 +73,7 @@
 ## Implementation constraints
 - Framework/styling system: Vite + React + TypeScript, 전역 CSS 토큰.
 - Design-token constraints: 색상/폭/버튼 크기는 공통 토큰 변경을 우선한다.
-- Performance constraints: GitHub Pages 정적 호스팅, Apps Script 응답은 캐시 우선 표시.
+- Performance constraints: GitHub Pages 정적 호스팅, Apps Script 응답은 캐시 우선 표시. 아무 글/자료는 전체 데이터를 메모리에 둔 채 검색과 태그를 전체 대상으로 수행하고, DOM 렌더링만 초기 묶음과 추가 묶음으로 제한한다.
 - Compatibility constraints: React SPA 라우팅, GitHub Pages `404.html` fallback, 경로 직접 입력/새로고침, trailing slash 보정 유지.
 - Test/screenshot expectations: UI/라우팅 변경 후 typecheck/build, 직접 URL 진입, 내부 링크 무reload 이동, 주요 DOM 구조 확인.
 

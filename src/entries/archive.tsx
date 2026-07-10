@@ -1,12 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AppLayout } from '../components/AppLayout';
+import { BackToTopButton } from '../components/BackToTopButton';
+import { IncrementalLoadMore } from '../components/IncrementalLoadMore';
 import { MarkdownView } from '../components/MarkdownView';
 import { EmptyState, ErrorState, LoadingState } from '../components/PageState';
 import { TagList } from '../components/TagList';
 import { TagFilterPanel, countTagOptions } from '../components/TagFilterPanel';
+import { useIncrementalItems } from '../hooks/useIncrementalItems';
 import { refreshArchive, usePublicResource } from '../stores/publicDataStore';
 import type { ArchiveAsset } from '../types';
 import { normalizeText } from '../utils/strings';
+
+const ARCHIVE_BATCH_SIZE = 24;
 
 export function ArchivePage() {
   const archiveResource = usePublicResource('archive');
@@ -33,6 +38,13 @@ export function ArchivePage() {
       return tagOk && queryOk;
     });
   }, [assets, query, selectedTags]);
+  const {
+    visibleItems: visibleAssets,
+    shownCount,
+    totalCount,
+    hasMore,
+    loadMore
+  } = useIncrementalItems(filtered, ARCHIVE_BATCH_SIZE);
 
   const toggleTag = (tag: string) => {
     setSelectedTags((current) => current.includes(tag) ? current.filter((item) => item !== tag) : [...current, tag]);
@@ -48,7 +60,9 @@ export function ArchivePage() {
       <h1 className="sr-only">자료</h1>
       <section className="content-filter-bar" aria-label="자료 검색">
         <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="자료 검색" aria-label="자료 검색어" />
-        <span className="result-count" aria-live="polite">{filtered.length}개 표시 중</span>
+        <span className="result-count" aria-live="polite">
+          {shownCount === totalCount ? `${totalCount}개 표시 중` : `${totalCount}개 중 ${shownCount}개 표시`}
+        </span>
         {query.trim() || selectedTags.length ? <button className="filter-reset" type="button" onClick={resetFilters}>초기화</button> : null}
       </section>
       <div className="tagged-layout">
@@ -58,7 +72,7 @@ export function ArchivePage() {
           {archiveResource.status === 'error' ? <ErrorState message={archiveResource.error} onRetry={load} /> : null}
           {archiveResource.status === 'ready' && !filtered.length ? <EmptyState label="조건에 맞는 자료가 없습니다." /> : null}
           <section className="archive-grid" aria-label="자료 목록">
-            {filtered.map((asset) => (
+            {visibleAssets.map((asset) => (
               <article className={`asset-card ${window.location.hash === `#${asset.id}` ? 'list-item--active' : ''}`} id={asset.id} key={asset.id}>
                 <button className="asset-card__button" type="button" onClick={() => setModalAsset(asset)} aria-label={`${asset.title} 자료 자세히 보기`}>
                   {asset.kind === 'file' ? (
@@ -74,6 +88,11 @@ export function ArchivePage() {
               </article>
             ))}
           </section>
+          <IncrementalLoadMore
+            hasMore={hasMore}
+            label={`자료 ${Math.min(ARCHIVE_BATCH_SIZE, totalCount - shownCount)}개 더보기`}
+            onLoadMore={loadMore}
+          />
         </main>
         <TagFilterPanel
           label="자료"
@@ -108,6 +127,7 @@ export function ArchivePage() {
           </div>
         </div>
       ) : null}
+      <BackToTopButton />
     </AppLayout>
   );
 }
