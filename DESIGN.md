@@ -35,13 +35,13 @@
 - Color: primary `#B7DDBF`, background `#F9F9F9`, danger `#F88A87`.
 - Typography: 시스템 산세리프, 한국어 가독성 우선.
 - Spacing/layout rhythm: `--layout-page` 본문 레일과 `--layout-gutter`를 공유한다.
-- Shape/radius/elevation: 검은 손그림 느낌 테두리, 둥근 모서리, 과한 그림자 지양.
+- Shape/radius/elevation: 검은 손그림 느낌 테두리를 유지한다. 카드는 큰 둥근 모서리, 한 줄 입력은 pill, 여러 줄 입력은 둥근 사각형, 아이콘 버튼은 원형으로 구분하고 과한 그림자는 지양한다.
 - Motion: 필수 상태 전환만 사용한다. 주요 탭의 compact 전환은 스크롤 진행률에 맞춰 위치, 크기, 투명도만 보간하고, 채널명 텍스트는 폭을 줄이지 않고 제자리에서 페이드한다.
 - Imagery/iconography: 주요 콘텐츠 메뉴는 제공된 손그림 아이콘을 사용하고, 검색/방명록/설정 공통 도구는 같은 결의 Lucide 계열 SVG 벡터 아이콘으로 만든다.
 
 ## Components
 - Existing components to reuse: `AppLayout`, `Header`, `SiteTools`, `SearchForm`, `PageState`, `TagList`.
-- New/changed components: `Header`는 홈을 제외한 모든 페이지의 상단바 단일 소스이고, 스크롤 진행률에 맞춰 큰 `아무 글`/`자료` 메뉴와 상단 아이콘 compact 메뉴를 교차 전환한다. `SiteTools`는 검색/방명록/설정 공통 도구를 담당한다. 공통 검색은 상단 입력창이 아니라 아이콘 버튼과 포털 오버레이로 열며, 제출 시 통합 검색 본문으로 이동한다. 개별 페이지에서 상단바를 복제하지 않는다. `TagFilterPanel`은 아무 글/자료의 우측 태그 필터를 담당하며, 태그는 많은 순으로 표시하고 다중 선택은 선택 태그를 모두 포함하는 항목으로 좁힌다. 자료 모달은 외곽 프레임과 내부 스크롤 영역을 분리해 스크롤바가 검은 외곽선을 침범하지 않게 한다. `IncrementalLoadMore`는 전체 데이터 검색/태그 정확도는 유지하고 렌더링 항목만 묶어서 늘린다. `BackToTopButton`은 긴 목록에서 스크롤이 충분히 내려간 뒤에만 표시한다.
+- New/changed components: `Header`는 홈을 제외한 모든 페이지의 상단바 단일 소스이고, 스크롤 진행률에 맞춰 큰 `아무 글`/`자료` 메뉴와 상단 아이콘 compact 메뉴를 교차 전환한다. `SiteTools`는 검색/방명록/설정 공통 도구를 담당한다. 공통 검색은 상단 입력창이 아니라 아이콘 버튼과 포털 오버레이로 열며, 제출 시 통합 검색 본문으로 이동한다. 개별 페이지에서 상단바를 복제하지 않는다. `TagFilterPanel`은 아무 글/자료의 우측 태그 필터를 담당하며, 태그는 많은 순으로 표시하고 다중 선택은 선택 태그를 모두 포함하는 항목으로 좁힌다. 방명록 작성 영역은 공통 `2px` 카드 외곽선 안에서 기본 접힘 상태로 시작하고, 펼치면 폼이 카드 폭을 사용한다. 입력 이름은 플레이스홀더로 표시하면서 의미상 `label`은 스크린리더용으로 유지한다. 방명록 항목은 이름과 날짜를 같은 헤더 행에 두고, 글 지우기는 날짜 옆의 테두리 없는 휴지통 아이콘으로 제공하되 hover/focus 상태와 접근 가능한 이름을 유지한다. 자료 모달은 외곽 프레임과 내부 스크롤 영역을 분리해 스크롤바가 검은 외곽선을 침범하지 않게 한다. `IncrementalLoadMore`는 전체 데이터의 순서와 정확도는 유지하고 아무 글·자료·방명록의 렌더링 항목만 묶어서 늘린다. `BackToTopButton`은 이들 긴 목록에서 스크롤이 충분히 내려간 뒤에만 표시한다.
 - Variants and states: `SiteTools`는 홈에서 검색을 숨기는 `showSearch=false` 변형을 쓴다.
 - Token/component ownership: 레이아웃 폭/색/버튼 크기는 `src/styles/global.css` 토큰과 공통 클래스에서 관리한다.
 
@@ -68,7 +68,7 @@
 ## Content voice
 - Tone: 짧고 직접적인 한국어.
 - Terminology: `아무 글`, `자료`, `방명록`, `설정`, `검색`을 고정 사용.
-- Microcopy rules: 관리자/방문자 기능을 혼동하지 않게 분리해서 적는다.
+- Microcopy rules: 관리자/방문자 기능을 혼동하지 않게 분리해서 적는다. 방명록 입력에서는 `비밀번호`로 짧게 표기하고 `방명록을 지울 때 사용해요.`라는 보조 문구로 용도를 설명한다.
 
 ## Implementation constraints
 - Framework/styling system: Vite + React + TypeScript, 전역 CSS 토큰.

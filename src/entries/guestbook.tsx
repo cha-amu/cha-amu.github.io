@@ -4,11 +4,17 @@ import {
   hideGuestbookEntry
 } from '../api/appsScriptClient';
 import { AppLayout } from '../components/AppLayout';
+import { BackToTopButton } from '../components/BackToTopButton';
+import { IncrementalLoadMore } from '../components/IncrementalLoadMore';
 import { EmptyState, ErrorState, LoadingState } from '../components/PageState';
+import { ChevronDownIcon, TrashIcon } from '../components/ToolIcons';
 import { TurnstileBox } from '../components/TurnstileBox';
+import { useIncrementalItems } from '../hooks/useIncrementalItems';
 import { refreshGuestbook, setPublicGuestbook, usePublicResource } from '../stores/publicDataStore';
 import type { GuestbookEntry } from '../types';
 import { formatDate } from '../utils/date';
+
+const GUESTBOOK_BATCH_SIZE = 10;
 
 function isPendingEntry(entry: GuestbookEntry) {
   return entry.id.startsWith('temp-');
@@ -41,6 +47,13 @@ function mergeGuestbookEntries(serverEntries: GuestbookEntry[], currentEntries: 
 export function GuestbookPage() {
   const guestbookResource = usePublicResource('guestbook');
   const entries = guestbookResource.items;
+  const {
+    visibleItems: visibleEntries,
+    shownCount,
+    totalCount,
+    hasMore,
+    loadMore
+  } = useIncrementalItems(entries, GUESTBOOK_BATCH_SIZE);
   const entriesCount = useRef(entries.length);
   const locallyHiddenIds = useRef(new Set<string>());
   const [message, setMessage] = useState('');
@@ -72,7 +85,7 @@ export function GuestbookPage() {
     const turnstileToken = String(form.get('cf-turnstile-response') || '');
 
     if (!name || !body || !deletePassword) {
-      setMessage('이름, 메시지, 삭제용 비밀번호를 모두 입력해야 합니다.');
+      setMessage('이름, 메시지, 비밀번호를 모두 입력해야 합니다.');
       return;
     }
 
@@ -103,7 +116,7 @@ export function GuestbookPage() {
 
   const requestHide = async (entry: GuestbookEntry) => {
     if (isPendingEntry(entry)) return;
-    const deletePassword = window.prompt('글을 숨김 처리하려면 작성 시 입력한 삭제용 비밀번호를 입력하세요.');
+    const deletePassword = window.prompt('글을 지우려면 작성할 때 입력한 비밀번호를 입력하세요.');
     if (!deletePassword) return;
 
     locallyHiddenIds.current.add(entry.id);
@@ -123,43 +136,80 @@ export function GuestbookPage() {
     <AppLayout>
       <h1 className="sr-only">방명록</h1>
       <section className="guestbook-flow">
-        <form className="panel" onSubmit={submit} aria-labelledby="guestbook-form-title">
-          <h2 id="guestbook-form-title">글 남기기</h2>
-          <p className="section-note">익명 이름과 삭제용 비밀번호로 남깁니다.</p>
-          <div className="field">
-            <label htmlFor="guestbook-name">이름</label>
-            <input id="guestbook-name" name="name" maxLength={40} required placeholder="아무이름" />
-          </div>
-          <div className="field">
-            <label htmlFor="guestbook-message">메시지</label>
-            <textarea id="guestbook-message" name="message" maxLength={1000} required placeholder="남기고 싶은 글" />
-          </div>
-          <div className="field">
-            <label htmlFor="guestbook-password">삭제용 비밀번호</label>
-            <input id="guestbook-password" name="deletePassword" type="password" required autoComplete="new-password" />
-            <span className="help-text">비밀번호는 서버에서 salt/hash 처리되어 저장됩니다.</span>
-          </div>
-          <TurnstileBox />
-          {message ? <p className="status-message">{message}</p> : null}
-          <button className="button button--primary" type="submit" disabled={saving}>{saving ? '전송 중' : '작성'}</button>
-        </form>
+        <details className="panel guestbook-composer">
+          <summary className="guestbook-composer__summary">
+            <span>글 남기기</span>
+            <ChevronDownIcon className="guestbook-composer__icon" />
+          </summary>
+          <form className="guestbook-form" onSubmit={submit} aria-label="방명록 글 남기기">
+            <div className="guestbook-form__content">
+              <div className="guestbook-form__fields">
+                <div className="field guestbook-field">
+                  <label className="sr-only" htmlFor="guestbook-name">이름</label>
+                  <input id="guestbook-name" name="name" maxLength={40} required placeholder="이름" />
+                </div>
+                <div className="field guestbook-field">
+                  <label className="sr-only" htmlFor="guestbook-password">비밀번호</label>
+                  <input
+                    id="guestbook-password"
+                    name="deletePassword"
+                    type="password"
+                    required
+                    autoComplete="new-password"
+                    placeholder="비밀번호"
+                    aria-describedby="guestbook-password-help"
+                  />
+                  <span className="help-text" id="guestbook-password-help">방명록을 지울 때 사용해요.</span>
+                </div>
+                <div className="field guestbook-field guestbook-field--message">
+                  <label className="sr-only" htmlFor="guestbook-message">메시지</label>
+                  <textarea id="guestbook-message" name="message" maxLength={1000} required placeholder="메시지" />
+                </div>
+              </div>
+              <TurnstileBox />
+              {message ? <p className="status-message">{message}</p> : null}
+              <div className="guestbook-form__actions">
+                <button className="button button--primary" type="submit" disabled={saving}>{saving ? '전송 중' : '작성'}</button>
+              </div>
+            </div>
+          </form>
+        </details>
         <section className="stack" aria-label="방명록 목록">
           {guestbookResource.status === 'loading' ? <LoadingState /> : null}
           {guestbookResource.status === 'error' ? <ErrorState message={guestbookResource.error} onRetry={() => load({ force: true })} /> : null}
           {guestbookResource.status === 'ready' && !entries.length ? <EmptyState label="아직 방명록이 없습니다." /> : null}
-          {entries.map((entry) => {
+          {visibleEntries.map((entry) => {
             const pending = isPendingEntry(entry);
             return (
-              <article className="list-item" key={entry.id} aria-busy={pending}>
-                <h2>{entry.name}</h2>
-                <p>{entry.message}</p>
-                <p className="meta">{pending ? '서버 반영 확인 중' : formatDate(entry.createdAt)}</p>
-                <button className="button button--danger" type="button" disabled={pending} onClick={() => requestHide(entry)}>삭제/숨김</button>
+              <article className="list-item guestbook-entry" key={entry.id} aria-busy={pending}>
+                <header className="guestbook-entry__head">
+                  <h2>{entry.name}</h2>
+                  <div className="guestbook-entry__meta">
+                    <p className="meta">{pending ? '서버 반영 확인 중' : formatDate(entry.createdAt)}</p>
+                    <button
+                      className="button guestbook-entry__delete"
+                      type="button"
+                      disabled={pending}
+                      onClick={() => requestHide(entry)}
+                      aria-label={`${entry.name}님의 방명록 글 지우기`}
+                      title="글 지우기"
+                    >
+                      <TrashIcon />
+                    </button>
+                  </div>
+                </header>
+                <p className="guestbook-entry__message">{entry.message}</p>
               </article>
             );
           })}
+          <IncrementalLoadMore
+            hasMore={hasMore}
+            label={`방명록 ${Math.min(GUESTBOOK_BATCH_SIZE, totalCount - shownCount)}개 더보기`}
+            onLoadMore={loadMore}
+          />
         </section>
       </section>
+      <BackToTopButton />
     </AppLayout>
   );
 }

@@ -9,12 +9,16 @@
   --color-primary: #b7ddbf;
   --color-background: #f9f9f9;
   --color-danger: #f88a87;
+  --color-soft-danger: #fde5e4;
   --color-ink: #1f1f1f;
   --color-muted: #6d6d6d;
   --color-surface: #ffffff;
   --color-line: #d9d9d2;
   --color-soft-primary: #e8f4eb;
   --shadow-soft: 0 12px 30px rgba(31, 31, 31, 0.08);
+  --radius-control: 999px;
+  --radius-textarea: 14px;
+  --radius-card: 1.25rem;
   --layout-page: 960px;
   --layout-readable: 70ch;
   --layout-gutter: clamp(1rem, 4vw, 2rem);
@@ -353,7 +357,7 @@ img {
 .field select {
   width: 100%;
   border: 1.5px solid var(--color-ink);
-  border-radius: 0;
+  border-radius: var(--radius-control);
   background: var(--color-surface);
   padding: 0.65rem 0.75rem;
 }
@@ -361,7 +365,7 @@ img {
 .search-form--home input {
   width: 170px;
   border: 2px solid var(--color-ink);
-  border-radius: 14px;
+  border-radius: var(--radius-control);
   background: var(--color-surface);
   padding: 0.55rem 0.75rem;
 }
@@ -392,6 +396,7 @@ img {
 }
 
 .field textarea {
+  border-radius: var(--radius-textarea);
   min-height: 140px;
   resize: vertical;
 }
@@ -400,7 +405,7 @@ img {
 .list-item,
 .state-box {
   border: 2px solid var(--color-ink);
-  border-radius: 1.25rem;
+  border-radius: var(--radius-card);
   background: rgba(255, 255, 255, 0.82);
   padding: 1rem;
   box-shadow: 3px 4px 0 rgba(31, 31, 31, 0.12);
@@ -1303,10 +1308,146 @@ img {
   width: 100%;
 }
 
-.guestbook-flow > form,
+.guestbook-flow > .guestbook-composer,
 .guestbook-flow > .stack,
 .guestbook-flow .list-item {
   width: 100%;
+}
+
+.guestbook-composer {
+  overflow: hidden;
+  padding: 0;
+}
+
+.guestbook-composer__summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: 64px;
+  padding: 1rem 1.25rem;
+  cursor: pointer;
+  font-size: 1.25rem;
+  font-weight: 900;
+  list-style: none;
+}
+
+.guestbook-composer__summary::-webkit-details-marker {
+  display: none;
+}
+
+.guestbook-composer__summary:hover {
+  background: var(--color-soft-primary);
+}
+
+.guestbook-composer__summary:focus-visible {
+  outline: 3px solid var(--color-primary);
+  outline-offset: -5px;
+}
+
+.guestbook-composer__icon {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  transition: transform 160ms ease;
+}
+
+.guestbook-composer[open] .guestbook-composer__icon {
+  transform: rotate(180deg);
+}
+
+.guestbook-form {
+  border-top: 1.5px solid var(--color-line);
+  padding: 1.25rem;
+}
+
+.guestbook-form__content {
+  display: grid;
+  gap: 1rem;
+  width: 100%;
+}
+
+.guestbook-form__fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.guestbook-field {
+  align-content: start;
+  margin: 0;
+}
+
+.guestbook-field--message {
+  grid-column: 1 / -1;
+}
+
+.guestbook-field textarea {
+  min-height: 72px;
+}
+
+.guestbook-form__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.guestbook-entry {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.guestbook-entry__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.guestbook-entry__meta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.65rem;
+}
+
+.guestbook-entry__delete {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 auto;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  border: 1.5px solid transparent;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-muted);
+}
+
+.guestbook-entry__delete:hover {
+  border-color: var(--color-ink);
+  background: var(--color-soft-danger);
+  color: var(--color-ink);
+}
+
+.guestbook-entry__delete:focus-visible {
+  border-color: var(--color-ink);
+  outline: 2px solid var(--color-danger);
+  outline-offset: 2px;
+}
+
+.guestbook-entry__delete .tool-icon-svg {
+  width: 19px;
+  height: 19px;
+}
+
+.guestbook-entry__head h2,
+.guestbook-entry__head .meta,
+.guestbook-entry__message {
+  margin: 0;
+}
+
+.guestbook-entry__message {
+  white-space: pre-wrap;
 }
 
 
@@ -1574,6 +1715,25 @@ img {
 
 
 @media (max-width: 760px) {
+  .guestbook-form__fields {
+    grid-template-columns: 1fr;
+  }
+
+  .guestbook-field--message {
+    grid-column: auto;
+  }
+
+  .guestbook-entry__head {
+    display: grid;
+    justify-content: stretch;
+    gap: 0.25rem;
+  }
+
+  .guestbook-entry__meta {
+    width: 100%;
+    justify-content: space-between;
+  }
+
   .admin-page-head,
   .admin-section-head,
   .admin-editor__bar {
