@@ -678,7 +678,7 @@ img {
   background: var(--color-surface);
   border: 3px solid var(--color-ink);
   border-radius: 1.5rem;
-  padding: 0.35rem;
+  padding: 0.35rem 0 0.35rem 0.35rem;
 }
 
 .modal img {
