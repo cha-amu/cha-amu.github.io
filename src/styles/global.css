@@ -22,8 +22,8 @@
   --site-tools-top: 1rem;
   --site-tools-row-height: 42px;
   --header-tabs-top-gap: 4.75rem;
-  --header-tabs-bottom-gap: 0.35rem;
-  --page-top-gap: 0.45rem;
+  --header-tabs-bottom-gap: 0rem;
+  --page-top-gap: var(--layout-section-gap);
   --nav-tile-size: 74px;
   --home-tile-size: 92px;
   font-family: 'OmuDaye', ui-rounded, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
@@ -953,8 +953,8 @@ img {
 @media (max-width: 760px) {
   :root {
     --header-tabs-top-gap: 1.8rem;
-    --header-tabs-bottom-gap: 0.45rem;
-    --page-top-gap: 0.75rem;
+    --header-tabs-bottom-gap: 0rem;
+    --page-top-gap: var(--layout-section-gap);
   }
 
   .site-header__inner {
