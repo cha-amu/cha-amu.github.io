@@ -41,7 +41,7 @@
 
 ## Components
 - Existing components to reuse: `AppLayout`, `Header`, `SiteTools`, `SearchForm`, `PageState`, `TagList`.
-- New/changed components: `Header`는 홈을 제외한 모든 페이지의 상단바 단일 소스이고, `SiteTools`는 검색/방명록/설정 공통 도구를 담당한다. 공통 검색은 상단 입력창이 아니라 아이콘 버튼과 포털 오버레이로 열며, 제출 시 통합 검색 본문으로 이동한다. 개별 페이지에서 상단바를 복제하지 않는다. `TagFilterPanel`은 아무 글/자료의 우측 태그 필터를 담당하며, 태그는 많은 순으로 표시하고 다중 선택은 선택 태그를 모두 포함하는 항목으로 좁힌다.
+- New/changed components: `Header`는 홈을 제외한 모든 페이지의 상단바 단일 소스이고, `SiteTools`는 검색/방명록/설정 공통 도구를 담당한다. 공통 검색은 상단 입력창이 아니라 아이콘 버튼과 포털 오버레이로 열며, 제출 시 통합 검색 본문으로 이동한다. 개별 페이지에서 상단바를 복제하지 않는다. `TagFilterPanel`은 아무 글/자료의 우측 태그 필터를 담당하며, 태그는 많은 순으로 표시하고 다중 선택은 선택 태그를 모두 포함하는 항목으로 좁힌다. 자료 모달은 외곽 프레임과 내부 스크롤 영역을 분리해 스크롤바가 검은 외곽선을 침범하지 않게 한다.
 - Variants and states: `SiteTools`는 홈에서 검색을 숨기는 `showSearch=false` 변형을 쓴다.
 - Token/component ownership: 레이아웃 폭/색/버튼 크기는 `src/styles/global.css` 토큰과 공통 클래스에서 관리한다.
 

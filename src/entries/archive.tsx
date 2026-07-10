@@ -91,18 +91,20 @@ export function ArchivePage() {
                 <path d="M6 6l12 12M18 6L6 18" />
               </svg>
             </button>
-            <h2>{modalAsset.title}</h2>
-            {modalAsset.kind === 'file' ? (
-              <a className="asset-file-tile asset-file-tile--modal" href={modalAsset.fileUrl || modalAsset.sourceUrl || modalAsset.imageUrl} target="_blank" rel="noreferrer">
-                {modalAsset.fileName}
-              </a>
-            ) : (
-              <img src={modalAsset.imageUrl} alt={modalAsset.title} />
-            )}
-            {modalAsset.description ? <MarkdownView markdown={modalAsset.description} baseUrl={modalAsset.markdownBaseUrl} rootUrl={modalAsset.markdownRootUrl} /> : null}
-            <TagList tags={modalAsset.tags} />
-            {modalAsset.sourceUrl ? <p className="meta"><a href={modalAsset.sourceUrl} target="_blank" rel="noreferrer">출처</a></p> : null}
-            <p className="meta">{modalAsset.path}</p>
+            <div className="asset-modal__scroll">
+              <h2>{modalAsset.title}</h2>
+              {modalAsset.kind === 'file' ? (
+                <a className="asset-file-tile asset-file-tile--modal" href={modalAsset.fileUrl || modalAsset.sourceUrl || modalAsset.imageUrl} target="_blank" rel="noreferrer">
+                  {modalAsset.fileName}
+                </a>
+              ) : (
+                <img src={modalAsset.imageUrl} alt={modalAsset.title} />
+              )}
+              {modalAsset.description ? <MarkdownView markdown={modalAsset.description} baseUrl={modalAsset.markdownBaseUrl} rootUrl={modalAsset.markdownRootUrl} /> : null}
+              <TagList tags={modalAsset.tags} />
+              {modalAsset.sourceUrl ? <p className="meta"><a href={modalAsset.sourceUrl} target="_blank" rel="noreferrer">출처</a></p> : null}
+              <p className="meta">{modalAsset.path}</p>
+            </div>
           </div>
         </div>
       ) : null}

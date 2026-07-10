@@ -674,11 +674,11 @@ img {
   position: relative;
   max-width: min(920px, 100%);
   max-height: 90vh;
-  overflow: auto;
+  overflow: hidden;
   background: var(--color-surface);
   border: 3px solid var(--color-ink);
   border-radius: 1.5rem;
-  padding: 1.15rem;
+  padding: 0.75rem;
 }
 
 .modal img {
@@ -689,15 +689,14 @@ img {
 }
 
 .asset-modal {
-  display: grid;
-  gap: 0.8rem;
-  padding-top: 3.4rem;
+  display: block;
 }
 
 .asset-modal__close {
   position: absolute;
-  top: 0.85rem;
-  right: 0.85rem;
+  top: 1.35rem;
+  right: 1.35rem;
+  z-index: 1;
   width: 42px;
   height: 42px;
   display: grid;
@@ -727,6 +726,16 @@ img {
   stroke: currentColor;
   stroke-width: 2.5;
   stroke-linecap: round;
+}
+
+.asset-modal__scroll {
+  max-height: calc(90vh - 1.5rem);
+  overflow: auto;
+  scrollbar-gutter: stable;
+  display: grid;
+  gap: 0.8rem;
+  border-radius: 0.9rem;
+  padding: 3.5rem 1.25rem 1rem;
 }
 
 .asset-modal .asset-file-tile--modal {
