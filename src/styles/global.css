@@ -1786,7 +1786,7 @@ img {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   height: 41px;
   border: 1.5px solid var(--color-ink);
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   background: var(--color-surface);
   overflow: hidden;
 }
