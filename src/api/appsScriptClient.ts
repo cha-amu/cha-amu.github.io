@@ -178,8 +178,16 @@ export async function adminSavePost(token: string, post: Partial<Post>): Promise
   return request<Post>('admin.post.save', { token, post });
 }
 
+export async function adminListGuestbook(token: string): Promise<GuestbookEntry[]> {
+  return request<GuestbookEntry[]>('admin.guestbook.list', { token });
+}
+
 export async function adminHideGuestbook(token: string, id: string, hiddenReason: string): Promise<{ id: string }> {
   return request<{ id: string }>('admin.guestbook.hide', { token, id, hiddenReason });
+}
+
+export async function adminRestoreGuestbook(token: string, id: string): Promise<{ id: string }> {
+  return request<{ id: string }>('admin.guestbook.restore', { token, id });
 }
 
 export async function adminListAssetOverrides(token: string): Promise<AssetOverride[]> {

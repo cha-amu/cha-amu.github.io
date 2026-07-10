@@ -3,7 +3,8 @@ type IconProps = {
 };
 
 // Icon paths are from Lucide Static v1.23.0 (ISC License):
-// search, book-open-text, sliders-horizontal, x, arrow-up, chevron-down, trash-2.
+// search, book-open-text, sliders-horizontal, x, arrow-up, chevron-down, trash-2,
+// log-out, eye-off, rotate-ccw.
 const iconProps = {
   viewBox: '0 0 24 24',
   fill: 'none',
@@ -87,6 +88,36 @@ export function TrashIcon({ className = 'tool-icon-svg' }: IconProps) {
       <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
       <path d="M10 11v6" />
       <path d="M14 11v6" />
+    </svg>
+  );
+}
+
+export function LogOutIcon({ className = 'tool-icon-svg' }: IconProps) {
+  return (
+    <svg className={className} {...iconProps}>
+      <path d="m16 17 5-5-5-5" />
+      <path d="M21 12H9" />
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+    </svg>
+  );
+}
+
+export function EyeOffIcon({ className = 'tool-icon-svg' }: IconProps) {
+  return (
+    <svg className={className} {...iconProps}>
+      <path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.8 10.8 0 0 1-1.444 2.49" />
+      <path d="M14.084 14.158a3 3 0 0 1-4.242-4.242" />
+      <path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143" />
+      <path d="m2 2 20 20" />
+    </svg>
+  );
+}
+
+export function RestoreIcon({ className = 'tool-icon-svg' }: IconProps) {
+  return (
+    <svg className={className} {...iconProps}>
+      <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+      <path d="M3 3v5h5" />
     </svg>
   );
 }

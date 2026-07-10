@@ -1,22 +1,28 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { loadArchiveManifest } from '../api/archiveManifestClient';
-import { adminHideGuestbook, adminListAssetOverrides, adminListPosts, adminLogin, adminRefreshSession, adminSaveAssetOverride, adminSavePost, listGuestbook } from '../api/appsScriptClient';
+import { adminHideGuestbook, adminListAssetOverrides, adminListGuestbook, adminListPosts, adminLogin, adminRefreshSession, adminRestoreGuestbook, adminSaveAssetOverride, adminSavePost, listGuestbook } from '../api/appsScriptClient';
 import { AppLayout } from '../components/AppLayout';
+import { BackToTopButton } from '../components/BackToTopButton';
+import { IncrementalLoadMore } from '../components/IncrementalLoadMore';
 import { MarkdownView } from '../components/MarkdownView';
 import { EmptyState } from '../components/PageState';
 import { TagList } from '../components/TagList';
+import { CloseIcon, EyeOffIcon, LogOutIcon, RestoreIcon } from '../components/ToolIcons';
+import { useIncrementalItems } from '../hooks/useIncrementalItems';
 import { syncPublicPost } from '../stores/publicDataStore';
 import type { ArchiveAsset, AssetOverride, GuestbookEntry, Post } from '../types';
+import { formatDate } from '../utils/date';
 import { clearAdminSession, loadAdminSession, refreshAdminSession, saveAdminSession } from '../utils/session';
 import { splitTags } from '../utils/strings';
 
-type Tab = 'posts' | 'assets' | 'guestbook' | 'settings';
+type Tab = 'posts' | 'assets' | 'guestbook';
+type GuestbookFilter = 'all' | GuestbookEntry['status'];
+type EditorView = 'edit' | 'preview';
 
 const TAB_LABELS: Record<Tab, string> = {
   posts: '아무 글',
   assets: '자료',
-  guestbook: '방명록',
-  settings: '설정'
+  guestbook: '방명록'
 };
 
 const POST_STATUS_LABELS: Record<Post['status'], string> = {
@@ -24,6 +30,14 @@ const POST_STATUS_LABELS: Record<Post['status'], string> = {
   draft: '임시저장',
   hidden: '숨김'
 };
+
+const GUESTBOOK_STATUS_LABELS: Record<GuestbookEntry['status'], string> = {
+  visible: '공개',
+  hidden: '숨김',
+  deleted: '삭제됨'
+};
+
+const GUESTBOOK_BATCH_SIZE = 10;
 
 
 const ADMIN_POST_DRAFT_KEY = 'cha-amu:admin-post-draft:v1';
@@ -94,7 +108,6 @@ function LoginPanel({ onLogin, initialMessage = '' }: { onLogin: () => void; ini
         <div className="field">
           <label htmlFor="admin-password">관리자 비밀번호</label>
           <input id="admin-password" name="password" type="password" autoComplete="current-password" required />
-          <span className="help-text">세션 유지 테스트 기본값은 활동 없음 1분입니다.</span>
         </div>
         {message ? <p className="status-message status-message--danger">{message}</p> : null}
         <button className="button button--primary" type="submit" disabled={saving}>{saving ? '확인 중' : '로그인'}</button>
@@ -113,20 +126,31 @@ function PostsAdmin({ token, onSessionExpired }: { token: string; onSessionExpir
   const [posts, setPosts] = useState<Post[]>([]);
   const [current, setCurrent] = useState<Partial<Post>>(() => restoredDraft?.current || blankPost());
   const [tagsText, setTagsText] = useState(restoredDraft?.tagsText || '');
+  const [editorView, setEditorView] = useState<EditorView>('edit');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const editorRef = useRef<HTMLFormElement>(null);
+
+  const moveToEditorOnMobile = () => {
+    if (!window.matchMedia('(max-width: 760px)').matches) return;
+    window.requestAnimationFrame(() => editorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  };
 
   const selectPost = (post: Post) => {
     setCurrent(post);
     setTagsText((post.tags || []).join(', '));
+    setEditorView('edit');
     setMessage('');
+    moveToEditorOnMobile();
   };
 
   const startNewPost = () => {
     setCurrent(blankPost());
     setTagsText('');
+    setEditorView('edit');
     setMessage('새 글을 작성합니다. 상태가 공개면 저장 후 /posts/에 표시됩니다.');
+    moveToEditorOnMobile();
   };
 
   const load = () => {
@@ -158,6 +182,13 @@ function PostsAdmin({ token, onSessionExpired }: { token: string; onSessionExpir
       status: (current.status || 'published') as Post['status']
     };
 
+    if (!post.body?.trim()) {
+      setEditorView('edit');
+      setMessage('본문을 입력하세요.');
+      window.requestAnimationFrame(() => document.getElementById('post-body')?.focus());
+      return;
+    }
+
     setSaving(true);
     setMessage('저장 중입니다.');
     try {
@@ -186,79 +217,87 @@ function PostsAdmin({ token, onSessionExpired }: { token: string; onSessionExpir
           <h2>아무 글 관리</h2>
           <p className="help-text">상태가 공개인 글만 방문자 `/posts/` 화면에 표시됩니다.</p>
         </div>
-        <button className="button button--primary" type="button" onClick={startNewPost}>새 글 작성</button>
+        <div className="admin-section-head__actions">
+          <div className="admin-view-switch" role="tablist" aria-label="글 작성 화면">
+            <button id="admin-edit-tab" className={editorView === 'edit' ? 'admin-view-switch__active' : ''} type="button" role="tab" aria-selected={editorView === 'edit'} aria-controls="admin-edit-panel" onClick={() => setEditorView('edit')}>편집</button>
+            <button id="admin-preview-tab" className={editorView === 'preview' ? 'admin-view-switch__active' : ''} type="button" role="tab" aria-selected={editorView === 'preview'} aria-controls="admin-preview-panel" onClick={() => setEditorView('preview')}>미리보기</button>
+          </div>
+          <button className="button button--primary" type="button" onClick={startNewPost}>새 글 작성</button>
+        </div>
       </header>
 
-      <div className="admin-post-layout">
-        <aside className="panel admin-list-panel" aria-label="글 목록">
-          <div className="admin-list-panel__top">
-            <strong>글 목록</strong>
-            <span>{posts.length}개</span>
-          </div>
-          {loading ? <p className="status-message">글 목록을 불러오는 중입니다.</p> : null}
-          {!loading && !posts.length ? <EmptyState label="아직 저장된 글이 없습니다." /> : null}
-          <div className="admin-list">
-            {posts.map((post) => (
-              <button className={`admin-list-card ${current.id === post.id ? 'admin-list-card--active' : ''}`} type="button" key={post.id} onClick={() => selectPost(post)}>
-                <span className={`status-chip status-chip--${post.status}`}>{POST_STATUS_LABELS[post.status]}</span>
-                <strong>{post.title || '(제목 없음)'}</strong>
-                <small>{post.updatedAt || post.createdAt || '날짜 없음'}</small>
-              </button>
-            ))}
-          </div>
-        </aside>
+      {editorView === 'edit' ? (
+        <div id="admin-edit-panel" className="admin-post-layout" role="tabpanel" aria-labelledby="admin-edit-tab">
+          <aside className="panel admin-list-panel" aria-label="글 목록">
+            <div className="admin-list-panel__top">
+              <strong>글 목록</strong>
+              <span>{loading ? '불러오는 중' : `${posts.length}개`}</span>
+            </div>
+            {loading ? <p className="status-message">글 목록을 불러오는 중입니다.</p> : null}
+            {!loading && !posts.length ? <p className="admin-empty-note">아직 저장된 글이 없습니다.</p> : null}
+            <div className="admin-list">
+              {posts.map((post) => (
+                <button className={`admin-list-card ${current.id === post.id ? 'admin-list-card--active' : ''}`} type="button" key={post.id} onClick={() => selectPost(post)} aria-pressed={current.id === post.id}>
+                  <span className={`status-chip status-chip--${post.status}`}>{POST_STATUS_LABELS[post.status]}</span>
+                  <strong>{post.title || '(제목 없음)'}</strong>
+                  <small>{formatDate(post.updatedAt || post.createdAt) || '날짜 없음'}</small>
+                </button>
+              ))}
+            </div>
+          </aside>
 
-        <form className="panel admin-editor" onSubmit={save}>
-          <div className="admin-editor__bar">
-            <h3>{current.id ? '글 수정' : '새 글 작성'}</h3>
-            <button className="button button--primary" type="submit" disabled={saving}>{saving ? '저장 중' : '저장'}</button>
-          </div>
+          <form className="panel admin-editor" onSubmit={save} ref={editorRef}>
+            <div className="admin-editor__bar">
+              <h3>{current.id ? '글 수정' : '새 글 작성'}</h3>
+              <button className="button button--primary" type="submit" disabled={saving}>{saving ? '저장 중' : '저장'}</button>
+            </div>
 
-          <div className="admin-form-grid">
-            <div className="field admin-field--wide">
-              <label htmlFor="post-title">제목</label>
-              <input id="post-title" name="title" value={current.title || ''} onChange={(event) => updateCurrent('title', event.target.value)} required />
-            </div>
-            <div className="field">
-              <label htmlFor="post-status">상태</label>
-              <select id="post-status" name="status" value={current.status || 'published'} onChange={(event) => updateCurrent('status', event.target.value as Post['status'])}>
-                <option value="published">공개</option>
-                <option value="draft">임시저장</option>
-                <option value="hidden">숨김</option>
-              </select>
-            </div>
-            <div className="field">
-              <label htmlFor="post-tags">태그</label>
-              <input id="post-tags" name="tags" value={tagsText} onChange={(event) => setTagsText(event.target.value)} placeholder="쉼표로 구분" />
-            </div>
-            <div className="field admin-field--wide">
-              <label htmlFor="post-excerpt">요약</label>
-              <input id="post-excerpt" name="excerpt" value={current.excerpt || ''} onChange={(event) => updateCurrent('excerpt', event.target.value)} />
-            </div>
-          </div>
-
-          <div className="field admin-writing-rail">
-            <label htmlFor="post-body">본문 Markdown</label>
-            <textarea className="admin-markdown-input" id="post-body" name="body" value={current.body || ''} onChange={(event) => updateCurrent('body', event.target.value)} required />
-            <span className="help-text">입력창과 아래 미리보기는 공개 글 본문 폭과 같은 기준으로 맞춥니다. 작성 중인 내용은 브라우저에 임시 보관됩니다.</span>
-          </div>
-          {message ? <p className="status-message" role="status">{message}</p> : null}
-          <section className="admin-live-preview" aria-label="공개 글 미리보기">
-            <div className="admin-preview__head">공개 글 미리보기</div>
-            <article className="post-entry post-entry--active">
-              <div className="post-entry__summary">
-                <h2>{previewTitle}</h2>
-                {previewExcerpt ? <p>{previewExcerpt}</p> : null}
-                {previewTags.length ? <TagList tags={previewTags} /> : null}
-                <p className="meta">저장 후 공개 페이지와 같은 폭으로 보입니다.</p>
+            <div className="admin-form-grid">
+              <div className="field admin-field--wide">
+                <label htmlFor="post-title">제목</label>
+                <input id="post-title" name="title" value={current.title || ''} onChange={(event) => updateCurrent('title', event.target.value)} required />
               </div>
-              <div className="post-entry__body">
-                {current.body ? <MarkdownView markdown={current.body} /> : <p className="help-text">본문을 입력하면 실제 공개 글 본문 폭으로 미리보기가 표시됩니다.</p>}
+              <div className="field">
+                <label htmlFor="post-status">상태</label>
+                <select id="post-status" name="status" value={current.status || 'published'} onChange={(event) => updateCurrent('status', event.target.value as Post['status'])}>
+                  <option value="published">공개</option>
+                  <option value="draft">임시저장</option>
+                  <option value="hidden">숨김</option>
+                </select>
               </div>
-            </article>
-          </section>
-        </form>
-      </div>
+              <div className="field">
+                <label htmlFor="post-tags">태그</label>
+                <input id="post-tags" name="tags" value={tagsText} onChange={(event) => setTagsText(event.target.value)} placeholder="쉼표로 구분" />
+              </div>
+              <div className="field admin-field--wide">
+                <label htmlFor="post-excerpt">요약</label>
+                <input id="post-excerpt" name="excerpt" value={current.excerpt || ''} onChange={(event) => updateCurrent('excerpt', event.target.value)} />
+              </div>
+            </div>
+
+            <div className="field admin-writing-rail">
+              <label htmlFor="post-body">본문 Markdown</label>
+              <textarea className="admin-markdown-input" id="post-body" name="body" value={current.body || ''} onChange={(event) => updateCurrent('body', event.target.value)} required />
+              <span className="help-text">작성 중인 내용은 이 브라우저에 임시 보관됩니다.</span>
+            </div>
+          </form>
+        </div>
+      ) : (
+        <section id="admin-preview-panel" className="admin-live-preview" role="tabpanel" aria-labelledby="admin-preview-tab">
+          <article className="post-entry post-entry--active">
+            <div className="post-entry__summary">
+              <h2>{previewTitle}</h2>
+              {previewExcerpt ? <p>{previewExcerpt}</p> : null}
+              {previewTags.length ? <TagList tags={previewTags} /> : null}
+              <p className="meta">공개 페이지와 같은 너비로 표시됩니다.</p>
+            </div>
+            <div className="post-entry__body">
+              {current.body ? <MarkdownView markdown={current.body} /> : <p className="help-text">본문을 입력하면 미리보기가 표시됩니다.</p>}
+            </div>
+          </article>
+        </section>
+      )}
+      {message ? <p className="status-message" role="status">{message}</p> : null}
     </section>
   );
 }
@@ -267,19 +306,28 @@ function AssetsAdmin({ token, onSessionExpired }: { token: string; onSessionExpi
   const [assets, setAssets] = useState<ArchiveAsset[]>([]);
   const [overrides, setOverrides] = useState<AssetOverride[]>([]);
   const [selectedId, setSelectedId] = useState('');
+  const [query, setQuery] = useState('');
   const [message, setMessage] = useState('');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    setLoading(true);
     Promise.all([loadArchiveManifest(), adminListAssetOverrides(token)])
       .then(([manifest, nextOverrides]) => { setAssets(manifest.assets); setOverrides(nextOverrides); })
       .catch((err) => {
         if (isAdminSessionError(err)) { onSessionExpired(); return; }
         setMessage(err instanceof Error ? err.message : '자료 정보를 불러오지 못했습니다.');
-      });
+      })
+      .finally(() => setLoading(false));
   }, [token]);
 
   const selected = useMemo(() => assets.find((asset) => asset.id === selectedId) || assets[0], [assets, selectedId]);
   const selectedOverride = overrides.find((override) => override.assetId === selected?.id);
+  const filteredAssets = useMemo(() => {
+    const normalizedQuery = query.trim().toLocaleLowerCase('ko-KR');
+    if (!normalizedQuery) return assets;
+    return assets.filter((asset) => [asset.title, asset.path, ...(asset.tags || [])].join(' ').toLocaleLowerCase('ko-KR').includes(normalizedQuery));
+  }, [assets, query]);
 
   const save = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -304,36 +352,42 @@ function AssetsAdmin({ token, onSessionExpired }: { token: string; onSessionExpi
     }
   };
 
-  if (!assets.length) return <EmptyState label="manifest에 등록된 자료가 없습니다." />;
+  if (loading) return <EmptyState label="자료 정보를 불러오는 중입니다." />;
+  if (!assets.length) return <EmptyState label={message || '등록된 자료가 없습니다.'} />;
 
   return (
-    <section className="two-column">
-      <div className="stack">
-        <p className="status-message">이미지 업로드/commit은 관리자 페이지에서 하지 않습니다. 이 화면은 manifest 자료의 표시 정보만 보정합니다.</p>
-        {assets.map((asset) => (
-          <button className="list-item" type="button" key={asset.id} onClick={() => setSelectedId(asset.id)}>
-            <strong>{asset.title}</strong>
-            <p className="meta">{asset.path}</p>
-            <TagList tags={asset.tags} />
-          </button>
-        ))}
+    <section className="two-column admin-asset-layout">
+      <div className="panel admin-asset-list-panel">
+        <p className="status-message">이미지 파일은 저장소에서 관리합니다. 여기서는 표시 정보만 수정합니다.</p>
+        <label className="sr-only" htmlFor="admin-asset-search">자료 검색</label>
+        <input id="admin-asset-search" className="admin-search-input" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="자료 검색" />
+        <div className="admin-asset-list" aria-label="자료 목록">
+          {filteredAssets.map((asset) => (
+            <button className={`admin-asset-row ${selected?.id === asset.id ? 'admin-asset-row--active' : ''}`} type="button" key={asset.id} onClick={() => setSelectedId(asset.id)} aria-pressed={selected?.id === asset.id}>
+              <strong>{asset.title}</strong>
+              <span className="meta">{asset.path}</span>
+              <TagList tags={asset.tags} />
+            </button>
+          ))}
+          {!filteredAssets.length ? <p className="admin-empty-note">검색 결과가 없습니다.</p> : null}
+        </div>
       </div>
       {selected ? (
-        <form className="panel" onSubmit={save}>
+        <form className="panel admin-asset-editor" key={selected.id} onSubmit={save}>
           <h2>자료 표시 정보</h2>
           {selected.kind === 'file' ? (
             <a className="asset-file-tile" href={selected.fileUrl || selected.sourceUrl || selected.imageUrl} target="_blank" rel="noreferrer">
               {selected.fileName}
             </a>
           ) : (
-            <img src={selected.imageUrl} alt={selected.title} />
+            <img className="admin-asset-preview" src={selected.imageUrl} alt={selected.title} />
           )}
           <div className="field"><label>표시명<input name="displayName" defaultValue={selectedOverride?.displayName || selected.title} /></label></div>
           <div className="field"><label>설명<textarea name="description" defaultValue={selectedOverride?.description || selected.description || ''} /></label></div>
           <div className="field"><label>태그<input name="tags" defaultValue={(selectedOverride?.tags || selected.tags).join(', ')} /></label></div>
           <div className="field"><label>출처 URL<input name="sourceUrl" defaultValue={selectedOverride?.sourceUrl || selected.sourceUrl || ''} /></label></div>
-          <div className="field"><label>상태<select name="status" defaultValue={selectedOverride?.status || selected.status}><option value="visible">visible</option><option value="hidden">hidden</option><option value="deleted">deleted</option></select></label></div>
-          <div className="field"><label>정렬값<input name="sortOrder" type="number" defaultValue={selectedOverride?.sortOrder || selected.sortOrder || 9999} /></label></div>
+          <div className="field"><label>상태<select name="status" defaultValue={selectedOverride?.status || selected.status}><option value="visible">공개</option><option value="hidden">숨김</option><option value="deleted">삭제됨</option></select></label></div>
+          <div className="field"><label>정렬값<input name="sortOrder" type="number" defaultValue={selectedOverride?.sortOrder ?? selected.sortOrder ?? 9999} /></label></div>
           {message ? <p className="status-message">{message}</p> : null}
           <button className="button button--primary" type="submit">저장</button>
         </form>
@@ -344,35 +398,172 @@ function AssetsAdmin({ token, onSessionExpired }: { token: string; onSessionExpi
 
 function GuestbookAdmin({ token, onSessionExpired }: { token: string; onSessionExpired: () => void }) {
   const [entries, setEntries] = useState<GuestbookEntry[]>([]);
+  const [filter, setFilter] = useState<GuestbookFilter>('all');
   const [message, setMessage] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [limitedMode, setLimitedMode] = useState(false);
+  const [hideTarget, setHideTarget] = useState<GuestbookEntry | null>(null);
+  const [hiddenReason, setHiddenReason] = useState('');
+  const [changingId, setChangingId] = useState('');
 
   useEffect(() => {
-    listGuestbook().then(setEntries).catch((err) => setMessage(err instanceof Error ? err.message : '방명록을 불러오지 못했습니다.'));
-  }, []);
+    let active = true;
+    const load = async () => {
+      setLoading(true);
+      setMessage('');
+      setLimitedMode(false);
+      try {
+        const items = await adminListGuestbook(token);
+        if (active) setEntries([...items].sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+      } catch (err) {
+        if (isAdminSessionError(err)) { onSessionExpired(); return; }
+        const errorMessage = err instanceof Error ? err.message : String(err || '');
+        if (errorMessage.includes('Unknown action: admin.guestbook.list')) {
+          try {
+            const publicItems = await listGuestbook();
+            if (active) {
+              setEntries([...publicItems].sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+              setLimitedMode(true);
+            }
+          } catch (fallbackError) {
+            if (active) setMessage(fallbackError instanceof Error ? fallbackError.message : '방명록을 불러오지 못했습니다.');
+          }
+        } else if (active) {
+          setMessage(errorMessage || '방명록을 불러오지 못했습니다.');
+        }
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+    void load();
+    return () => { active = false; };
+  }, [token]);
 
-  const hide = async (entry: GuestbookEntry) => {
-    const hiddenReason = window.prompt('숨김 사유를 입력하세요.') || '';
-    if (!hiddenReason) return;
+  useEffect(() => {
+    if (!hideTarget) return undefined;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !changingId) setHideTarget(null);
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [hideTarget, changingId]);
+
+  const filteredEntries = useMemo(() => filter === 'all' ? entries : entries.filter((entry) => entry.status === filter), [entries, filter]);
+  const { visibleItems, shownCount, totalCount, hasMore, loadMore } = useIncrementalItems(filteredEntries, GUESTBOOK_BATCH_SIZE);
+
+  const statusCount = (status: GuestbookEntry['status']) => entries.filter((entry) => entry.status === status).length;
+
+  const hide = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!hideTarget || !hiddenReason.trim()) return;
+    setChangingId(hideTarget.id);
     try {
-      await adminHideGuestbook(token, entry.id, hiddenReason);
-      setEntries((items) => items.filter((item) => item.id !== entry.id));
+      await adminHideGuestbook(token, hideTarget.id, hiddenReason.trim());
+      setEntries((items) => items.map((item) => item.id === hideTarget.id ? { ...item, status: 'hidden', hiddenReason: hiddenReason.trim() } : item));
+      setMessage('방명록 글을 숨겼습니다.');
+      setHideTarget(null);
+      setHiddenReason('');
     } catch (err) {
       if (isAdminSessionError(err)) { onSessionExpired(); return; }
       setMessage(err instanceof Error ? err.message : '숨김 처리에 실패했습니다.');
+    } finally {
+      setChangingId('');
+    }
+  };
+
+  const restore = async (entry: GuestbookEntry) => {
+    setChangingId(entry.id);
+    setMessage('');
+    try {
+      await adminRestoreGuestbook(token, entry.id);
+      setEntries((items) => items.map((item) => item.id === entry.id ? { ...item, status: 'visible', hiddenReason: '' } : item));
+      setMessage('방명록 글을 다시 공개했습니다.');
+    } catch (err) {
+      if (isAdminSessionError(err)) { onSessionExpired(); return; }
+      setMessage(err instanceof Error ? err.message : '복구에 실패했습니다.');
+    } finally {
+      setChangingId('');
     }
   };
 
   return (
-    <section className="stack">
-      {message ? <p className="status-message">{message}</p> : null}
-      {entries.map((entry) => (
-        <article className="list-item" key={entry.id}>
-          <h2>{entry.name}</h2>
-          <p>{entry.message}</p>
-          <p className="meta">{entry.status}</p>
-          <button className="button button--danger" type="button" onClick={() => hide(entry)}>숨김 처리</button>
-        </article>
-      ))}
+    <section className="admin-guestbook">
+      <header className="panel admin-guestbook-toolbar">
+        <div>
+          <h2>방명록 관리</h2>
+          <p className="help-text">이름, 작성일, 공개 상태를 확인하고 숨김 여부를 관리합니다.</p>
+        </div>
+        <div className="admin-status-filters" aria-label="방명록 상태 필터">
+          {([
+            ['all', '전체', entries.length],
+            ['visible', '공개', statusCount('visible')],
+            ['hidden', '숨김', statusCount('hidden')],
+            ['deleted', '삭제됨', statusCount('deleted')]
+          ] as Array<[GuestbookFilter, string, number]>).map(([value, label, count]) => (
+            <button className={filter === value ? 'admin-status-filter--active' : ''} type="button" key={value} onClick={() => setFilter(value)} aria-pressed={filter === value}>
+              {label} <span>{count}</span>
+            </button>
+          ))}
+        </div>
+      </header>
+
+      {limitedMode ? <p className="status-message">전체 관리 목록 연결 전이라 현재는 공개 글만 표시합니다.</p> : null}
+      {message ? <p className="status-message" role="status">{message}</p> : null}
+      {loading ? <EmptyState label="방명록을 불러오는 중입니다." /> : null}
+      {!loading && !filteredEntries.length ? <EmptyState label="해당 상태의 방명록 글이 없습니다." /> : null}
+
+      {!loading && visibleItems.length ? (
+        <div className="admin-guestbook-list">
+          <p className="result-count">{totalCount}개 중 {shownCount}개 표시</p>
+          {visibleItems.map((entry) => (
+            <article className="admin-guestbook-row" key={entry.id}>
+              <div className="admin-guestbook-row__head">
+                <strong>{entry.name}</strong>
+                <span className={`status-chip status-chip--${entry.status}`}>{GUESTBOOK_STATUS_LABELS[entry.status]}</span>
+              </div>
+              <p className="admin-guestbook-row__message">{entry.message}</p>
+              {entry.hiddenReason ? <p className="admin-guestbook-row__reason">숨김 사유: {entry.hiddenReason}</p> : null}
+              <div className="admin-guestbook-row__footer">
+                <time className="meta" dateTime={entry.createdAt}>{formatDate(entry.createdAt)}</time>
+                {entry.status === 'visible' ? (
+                  <button className="admin-row-action admin-row-action--danger" type="button" onClick={() => { setHideTarget(entry); setHiddenReason(''); }} disabled={Boolean(changingId)}>
+                    <EyeOffIcon /> 숨기기
+                  </button>
+                ) : null}
+                {entry.status === 'hidden' ? (
+                  <button className="admin-row-action" type="button" onClick={() => restore(entry)} disabled={Boolean(changingId)}>
+                    <RestoreIcon /> {changingId === entry.id ? '복구 중' : '다시 보이기'}
+                  </button>
+                ) : null}
+              </div>
+            </article>
+          ))}
+          <IncrementalLoadMore hasMore={hasMore} label={`${totalCount - shownCount}개 더보기`} onLoadMore={loadMore} />
+        </div>
+      ) : null}
+
+      {hideTarget ? (
+        <div className="modal-backdrop admin-dialog-backdrop" role="presentation" onMouseDown={() => { if (!changingId) setHideTarget(null); }}>
+          <section className="modal admin-dialog" role="dialog" aria-modal="true" aria-labelledby="admin-hide-title" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="admin-dialog__head">
+              <h2 id="admin-hide-title">방명록 글 숨기기</h2>
+              <button className="admin-dialog__close" type="button" onClick={() => setHideTarget(null)} aria-label="닫기" disabled={Boolean(changingId)}><CloseIcon /></button>
+            </div>
+            <p><strong>{hideTarget.name}</strong>님의 글을 공개 목록에서 숨깁니다.</p>
+            <form onSubmit={hide}>
+              <div className="field">
+                <label htmlFor="guestbook-hidden-reason">숨김 사유</label>
+                <input id="guestbook-hidden-reason" value={hiddenReason} onChange={(event) => setHiddenReason(event.target.value)} autoFocus required />
+              </div>
+              <div className="admin-dialog__actions">
+                <button className="button" type="button" onClick={() => setHideTarget(null)} disabled={Boolean(changingId)}>취소</button>
+                <button className="button button--danger" type="submit" disabled={Boolean(changingId)}>{changingId ? '처리 중' : '숨기기'}</button>
+              </div>
+            </form>
+          </section>
+        </div>
+      ) : null}
+      <BackToTopButton />
     </section>
   );
 }
@@ -438,19 +629,20 @@ export function AdminApp() {
           <h1 id="admin-title" className="page-title">관리자</h1>
           <p className="lead">글 작성, 자료 표시 정보, 방명록 관리를 처리합니다.</p>
         </div>
-        <button className="button button--danger" type="button" onClick={logout}>로그아웃</button>
+        <button className="button admin-logout" type="button" onClick={logout}><LogOutIcon /> 로그아웃</button>
       </section>
 
       <div className="tabs admin-tabs" role="tablist" aria-label="관리자 메뉴">
-        {(['posts', 'assets', 'guestbook', 'settings'] as Tab[]).map((item) => (
-          <button className={`button ${tab === item ? 'button--primary' : ''}`} type="button" key={item} onClick={() => setTab(item)}>{TAB_LABELS[item]}</button>
+        {(['posts', 'assets', 'guestbook'] as Tab[]).map((item) => (
+          <button id={`admin-tab-${item}`} className={`button ${tab === item ? 'button--primary' : ''}`} type="button" role="tab" key={item} aria-selected={tab === item} aria-controls={`admin-panel-${item}`} onClick={() => setTab(item)}>{TAB_LABELS[item]}</button>
         ))}
       </div>
 
-      {tab === 'posts' ? <PostsAdmin token={session.token} onSessionExpired={handleSessionExpired} /> : null}
-      {tab === 'assets' ? <AssetsAdmin token={session.token} onSessionExpired={handleSessionExpired} /> : null}
-      {tab === 'guestbook' ? <GuestbookAdmin token={session.token} onSessionExpired={handleSessionExpired} /> : null}
-      {tab === 'settings' ? <section className="panel"><h2>설정/로그</h2><p>비밀값은 표시하거나 수정하지 않습니다. settings와 auditLog 조회 API 연결 지점입니다.</p></section> : null}
+      <div id={`admin-panel-${tab}`} className="admin-tab-panel" role="tabpanel" aria-labelledby={`admin-tab-${tab}`}>
+        {tab === 'posts' ? <PostsAdmin token={session.token} onSessionExpired={handleSessionExpired} /> : null}
+        {tab === 'assets' ? <AssetsAdmin token={session.token} onSessionExpired={handleSessionExpired} /> : null}
+        {tab === 'guestbook' ? <GuestbookAdmin token={session.token} onSessionExpired={handleSessionExpired} /> : null}
+      </div>
     </AppLayout>
   );
 }

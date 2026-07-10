@@ -99,7 +99,9 @@ function route_(action, body) {
     case 'admin.post.list': requireAdmin_(body.token); return rowsToObjects_(SHEETS.posts);
     case 'admin.post.save': requireAdmin_(body.token); return savePost_(body.post);
     case 'admin.post.syncFromStorage': requireAdmin_(body.token); return syncPostFromStorage_(body.post);
+    case 'admin.guestbook.list': requireAdmin_(body.token); return listAdminGuestbook_();
     case 'admin.guestbook.hide': requireAdmin_(body.token); return adminHideGuestbook_(body);
+    case 'admin.guestbook.restore': requireAdmin_(body.token); return adminRestoreGuestbook_(body);
     case 'admin.assetOverride.list': requireAdmin_(body.token); return rowsToObjects_(SHEETS.assetOverrides);
     case 'admin.assetOverride.save': requireAdmin_(body.token); return saveAssetOverride_(body.override);
     default: throw new Error('Unknown action: ' + action);
@@ -245,6 +247,19 @@ function saveAssetOverride_(override) {
   return next;
 }
 
+function listAdminGuestbook_() {
+  return rowsToObjects_(SHEETS.guestbook).map(function (entry) {
+    return {
+      id: String(entry.id),
+      name: String(entry.name || ''),
+      message: String(entry.message || ''),
+      status: entry.status,
+      createdAt: entry.createdAt,
+      hiddenReason: String(entry.hiddenReason || '')
+    };
+  });
+}
+
 function adminHideGuestbook_(body) {
   const sheet = getSheet_(SHEETS.guestbook);
   const values = sheet.getDataRange().getValues();
@@ -258,6 +273,25 @@ function adminHideGuestbook_(body) {
       if (reasonIndex >= 0) sheet.getRange(row + 1, reasonIndex + 1).setValue(body.hiddenReason || '');
       invalidatePublicCache_(PUBLIC_CACHE_KEYS.guestbook);
       audit_('guestbook.hide', 'guestbook', body.id);
+      return { id: body.id };
+    }
+  }
+  throw new Error('Guestbook entry not found.');
+}
+
+function adminRestoreGuestbook_(body) {
+  const sheet = getSheet_(SHEETS.guestbook);
+  const values = sheet.getDataRange().getValues();
+  const headers = values[0];
+  const idIndex = headers.indexOf('id');
+  const statusIndex = headers.indexOf('status');
+  const reasonIndex = headers.indexOf('hiddenReason');
+  for (let row = 1; row < values.length; row++) {
+    if (values[row][idIndex] === body.id) {
+      sheet.getRange(row + 1, statusIndex + 1).setValue('visible');
+      if (reasonIndex >= 0) sheet.getRange(row + 1, reasonIndex + 1).setValue('');
+      invalidatePublicCache_(PUBLIC_CACHE_KEYS.guestbook);
+      audit_('guestbook.restore', 'guestbook', body.id);
       return { id: body.id };
     }
   }
