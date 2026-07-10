@@ -1763,15 +1763,21 @@ img {
   gap: 0 0.75rem;
 }
 
-.admin-post-status {
-  min-width: 0;
-  border: 0;
-  margin: 0;
-  padding: 0;
+.admin-form-grid > .field > label,
+.admin-post-status__label {
+  min-height: 18px;
+  line-height: 18px;
 }
 
-.admin-post-status legend {
-  margin: 0;
+.admin-form-grid > .field > input {
+  height: 41px;
+}
+
+.admin-post-status {
+  min-width: 0;
+}
+
+.admin-post-status__label {
   font-weight: 800;
 }
 

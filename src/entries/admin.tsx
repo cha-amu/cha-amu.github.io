@@ -257,8 +257,8 @@ function PostsAdmin({ token, onSessionExpired }: { token: string; onSessionExpir
                 <label htmlFor="post-title">제목</label>
                 <input id="post-title" name="title" value={current.title || ''} onChange={(event) => updateCurrent('title', event.target.value)} required />
               </div>
-              <fieldset className="field admin-post-status">
-                <legend>상태</legend>
+              <div className="field admin-post-status" role="radiogroup" aria-labelledby="post-status-label">
+                <span id="post-status-label" className="admin-post-status__label">상태</span>
                 <div className="admin-post-status__options">
                   {([
                     ['published', '공개'],
@@ -271,7 +271,7 @@ function PostsAdmin({ token, onSessionExpired }: { token: string; onSessionExpir
                     </label>
                   ))}
                 </div>
-              </fieldset>
+              </div>
               <div className="field">
                 <label htmlFor="post-tags">태그</label>
                 <input id="post-tags" name="tags" value={tagsText} onChange={(event) => setTagsText(event.target.value)} placeholder="쉼표로 구분" />
