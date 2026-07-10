@@ -1260,9 +1260,15 @@ img {
 }
 
 .post-entry__body {
+  width: 100%;
   min-width: 0;
+  max-width: none;
   border-top: 1.5px solid var(--color-line);
   padding: 1.1rem;
+}
+
+.post-entry__body .markdown-body {
+  max-width: none;
 }
 
 .sr-only {
@@ -1310,7 +1316,6 @@ img {
 }
 
 .post-entry__summary p,
-.post-entry__body,
 .list-item p {
   max-width: var(--layout-readable);
 }
@@ -1890,11 +1895,6 @@ img {
 
 .admin-live-preview > .post-entry {
   width: 100%;
-}
-
-.admin-live-preview .post-entry__body {
-  /* Same constraint as the public /posts/ article body. */
-  max-width: var(--layout-readable);
 }
 
 .status-chip--visible {
