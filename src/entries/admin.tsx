@@ -257,14 +257,21 @@ function PostsAdmin({ token, onSessionExpired }: { token: string; onSessionExpir
                 <label htmlFor="post-title">제목</label>
                 <input id="post-title" name="title" value={current.title || ''} onChange={(event) => updateCurrent('title', event.target.value)} required />
               </div>
-              <div className="field">
-                <label htmlFor="post-status">상태</label>
-                <select id="post-status" name="status" value={current.status || 'published'} onChange={(event) => updateCurrent('status', event.target.value as Post['status'])}>
-                  <option value="published">공개</option>
-                  <option value="draft">임시저장</option>
-                  <option value="hidden">숨김</option>
-                </select>
-              </div>
+              <fieldset className="field admin-post-status">
+                <legend>상태</legend>
+                <div className="admin-post-status__options">
+                  {([
+                    ['published', '공개'],
+                    ['draft', '임시저장'],
+                    ['hidden', '숨김']
+                  ] as Array<[Post['status'], string]>).map(([value, label]) => (
+                    <label key={value}>
+                      <input type="radio" name="status" value={value} checked={(current.status || 'published') === value} onChange={() => updateCurrent('status', value)} />
+                      <span>{label}</span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
               <div className="field">
                 <label htmlFor="post-tags">태그</label>
                 <input id="post-tags" name="tags" value={tagsText} onChange={(event) => setTagsText(event.target.value)} placeholder="쉼표로 구분" />
@@ -583,8 +590,10 @@ export function AdminApp() {
 
   const touchSession = () => {
     const current = refreshAdminSession();
-    setSession(current);
-    if (!current) return;
+    if (!current) {
+      setSession(null);
+      return;
+    }
 
     const now = Date.now();
     if (refreshInFlight.current || now - lastServerRefreshAt.current < 20_000) return;
@@ -606,7 +615,15 @@ export function AdminApp() {
   };
 
   useEffect(() => {
-    const interval = window.setInterval(() => setSession(loadAdminSession()), 5_000);
+    const checkSession = () => {
+      const current = loadAdminSession();
+      setSession((existing) => {
+        if (!current) return null;
+        if (!existing || current.token !== existing.token || current.expiresAt !== existing.expiresAt) return current;
+        return existing;
+      });
+    };
+    const interval = window.setInterval(checkSession, 5_000);
     window.addEventListener('click', touchSession);
     window.addEventListener('keydown', touchSession);
     window.addEventListener('input', touchSession);

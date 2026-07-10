@@ -1758,6 +1758,70 @@ img {
   gap: 0 0.75rem;
 }
 
+.admin-post-status {
+  min-width: 0;
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.admin-post-status legend {
+  margin-bottom: 0.35rem;
+  font-weight: 800;
+}
+
+.admin-post-status__options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  min-height: 41px;
+  border: 1.5px solid var(--color-ink);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+  padding: 0.18rem;
+}
+
+.admin-post-status__options label {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  place-items: center;
+  cursor: pointer;
+}
+
+.admin-post-status__options input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.admin-post-status__options span {
+  width: 100%;
+  min-width: 0;
+  border-radius: var(--radius-control);
+  padding: 0.38rem 0.25rem;
+  color: var(--color-muted);
+  font-size: 0.86rem;
+  font-weight: 800;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.admin-post-status__options label:hover span,
+.admin-post-status__options input:focus-visible + span {
+  background: var(--color-soft-primary);
+  color: var(--color-ink);
+}
+
+.admin-post-status__options input:checked + span {
+  background: var(--color-primary);
+  box-shadow: inset 0 0 0 1.5px var(--color-ink);
+  color: var(--color-ink);
+}
+
 .admin-field--wide {
   grid-column: 1 / -1;
 }
