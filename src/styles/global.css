@@ -21,7 +21,9 @@
   --layout-section-gap: 1.25rem;
   --site-tools-top: 1rem;
   --site-tools-row-height: 42px;
-  --site-tools-mobile-clearance: 0.85rem;
+  --header-tabs-top-gap: 4.75rem;
+  --header-tabs-bottom-gap: 0.35rem;
+  --page-top-gap: 0.45rem;
   --nav-tile-size: 74px;
   --home-tile-size: 92px;
   font-family: 'OmuDaye', ui-rounded, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
@@ -75,7 +77,7 @@ img {
   gap: 1rem;
   align-items: center;
   justify-content: flex-start;
-  padding: calc(var(--site-tools-top) + var(--site-tools-row-height) + 0.95rem) 0 1rem;
+  padding: calc(var(--site-tools-top) + var(--site-tools-row-height) + var(--header-tabs-top-gap)) 0 var(--header-tabs-bottom-gap);
 }
 
 .topbar-brand {
@@ -181,7 +183,7 @@ img {
 
 .page {
   width: 100%;
-  padding: 1.25rem var(--layout-gutter) 4rem;
+  padding: var(--page-top-gap) var(--layout-gutter) 4rem;
 }
 
 .page__inner {
@@ -949,10 +951,16 @@ img {
 }
 
 @media (max-width: 760px) {
+  :root {
+    --header-tabs-top-gap: 1.8rem;
+    --header-tabs-bottom-gap: 0.45rem;
+    --page-top-gap: 0.75rem;
+  }
+
   .site-header__inner {
-    width: 100%;
+    width: min(var(--layout-page), calc(100vw - (var(--layout-gutter) * 2)));
     gap: 0.6rem;
-    padding: calc(var(--site-tools-top) + var(--site-tools-row-height) + var(--site-tools-mobile-clearance)) var(--layout-gutter) 1rem;
+    padding: calc(var(--site-tools-top) + var(--site-tools-row-height) + var(--header-tabs-top-gap)) 0 var(--header-tabs-bottom-gap);
     overflow: visible;
   }
 
