@@ -33,6 +33,14 @@ export interface GuestbookAdminEntry extends GuestbookEntry {
   relatedEntryCount?: number;
 }
 
+export interface GuestbookIpBan {
+  sourceEntryId: string | null;
+  reason: string;
+  bannedAt: string;
+  relatedEntryCount: number;
+  relatedEntryIds: string[];
+}
+
 export interface ArchiveAsset {
   id: string;
   path: string;

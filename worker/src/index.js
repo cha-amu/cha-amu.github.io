@@ -447,6 +447,59 @@ async function countRelatedEntries(db, ipHash) {
   return Number(row?.count || 0);
 }
 
+async function getActiveBanBySourceEntry(db, entryId) {
+  return db.prepare(
+    `SELECT ip_hash
+       FROM ip_bans
+      WHERE scope = ? AND source_entry_id = ? AND revoked_at IS NULL
+      LIMIT 1`
+  ).bind(IP_BAN_SCOPE, entryId).first();
+}
+
+async function handleIpBanList(body, env, dependencies) {
+  await requireAdminSession(body, env, dependencies.fetch);
+  const db = requireDatabase(env);
+  const result = await db.prepare(
+    `SELECT b.ip_hash,
+            b.reason,
+            b.source_entry_id,
+            b.banned_at,
+            related.entry_id AS related_entry_id
+       FROM ip_bans b
+       LEFT JOIN guestbook_entry_ips related
+         ON related.ip_hash = b.ip_hash AND related.state = 'active'
+      WHERE b.scope = ? AND b.revoked_at IS NULL
+      ORDER BY b.banned_at DESC, related.created_at, related.entry_id`
+  ).bind(IP_BAN_SCOPE).all();
+
+  const bansByHash = new Map();
+  for (const row of result?.results || []) {
+    const ipHash = String(row.ip_hash || '');
+    if (!ipHash) continue;
+    let ban = bansByHash.get(ipHash);
+    if (!ban) {
+      ban = {
+        sourceEntryId: row.source_entry_id ? String(row.source_entry_id) : null,
+        reason: String(row.reason || ''),
+        bannedAt: String(row.banned_at || ''),
+        relatedEntryIds: []
+      };
+      bansByHash.set(ipHash, ban);
+    }
+    if (row.related_entry_id) ban.relatedEntryIds.push(String(row.related_entry_id));
+  }
+
+  return {
+    ok: true,
+    data: {
+      bans: Array.from(bansByHash.values(), (ban) => ({
+        ...ban,
+        relatedEntryCount: ban.relatedEntryIds.length
+      }))
+    }
+  };
+}
+
 async function handleIpBan(body, env, dependencies, blocked) {
   await requireAdminSession(body, env, dependencies.fetch);
   const db = requireDatabase(env);
@@ -454,7 +507,8 @@ async function handleIpBan(body, env, dependencies, blocked) {
   const entryId = typeof requestedEntryId === 'string' ? requestedEntryId.trim() : '';
   if (!entryId) throw new GatewayError(400, '방명록 글 식별자가 필요합니다.');
   const mapping = await getActiveMapping(db, entryId);
-  if (!mapping) throw new GatewayError(404, '이 글에는 IP 정보가 없습니다.');
+  const target = mapping || (!blocked ? await getActiveBanBySourceEntry(db, entryId) : null);
+  if (!target) throw new GatewayError(404, '이 글에는 IP 정보가 없습니다.');
 
   const now = dependencies.nowIso();
   if (blocked) {
@@ -469,24 +523,24 @@ async function handleIpBan(body, env, dependencies, blocked) {
            source_entry_id = excluded.source_entry_id,
            banned_at = excluded.banned_at,
            revoked_at = NULL`
-      ).bind(IP_BAN_SCOPE, mapping.ip_hash, reason, entryId, now),
+      ).bind(IP_BAN_SCOPE, target.ip_hash, reason, entryId, now),
       db.prepare(
         `INSERT INTO ip_ban_events
           (scope, ip_hash, action, source_entry_id, reason, created_at)
          VALUES (?, ?, 'ban', ?, ?, ?)`
-      ).bind(IP_BAN_SCOPE, mapping.ip_hash, entryId, reason, now)
+      ).bind(IP_BAN_SCOPE, target.ip_hash, entryId, reason, now)
     ]);
   } else {
     await db.batch([
       db.prepare(
         `UPDATE ip_bans SET revoked_at = ?
           WHERE scope = ? AND ip_hash = ? AND revoked_at IS NULL`
-      ).bind(now, IP_BAN_SCOPE, mapping.ip_hash),
+      ).bind(now, IP_BAN_SCOPE, target.ip_hash),
       db.prepare(
         `INSERT INTO ip_ban_events
           (scope, ip_hash, action, source_entry_id, reason, created_at)
          VALUES (?, ?, 'unban', ?, '', ?)`
-      ).bind(IP_BAN_SCOPE, mapping.ip_hash, entryId, now)
+      ).bind(IP_BAN_SCOPE, target.ip_hash, entryId, now)
     ]);
   }
 
@@ -495,7 +549,7 @@ async function handleIpBan(body, env, dependencies, blocked) {
     data: {
       entryId,
       ipBlocked: blocked,
-      relatedEntryCount: await countRelatedEntries(db, mapping.ip_hash)
+      relatedEntryCount: await countRelatedEntries(db, target.ip_hash)
     }
   };
 }
@@ -518,6 +572,9 @@ async function routeApi(body, request, env, dependencies) {
   }
   if (action === 'admin.guestbook.ip.ban') {
     return handleIpBan(body, env, dependencies, true);
+  }
+  if (action === 'admin.guestbook.ip.bans.list') {
+    return handleIpBanList(body, env, dependencies);
   }
   if (action === 'admin.guestbook.ip.unban') {
     return handleIpBan(body, env, dependencies, false);

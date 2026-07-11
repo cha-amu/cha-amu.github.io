@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { loadArchiveManifest } from '../api/archiveManifestClient';
-import { adminBanGuestbookIp, adminHideGuestbook, adminListAssetOverrides, adminListGuestbook, adminListPosts, adminLogin, adminRefreshSession, adminRestoreGuestbook, adminSaveAssetOverride, adminSavePost, adminUnbanGuestbookIp, listGuestbook } from '../api/appsScriptClient';
+import { adminBanGuestbookIp, adminHideGuestbook, adminListAssetOverrides, adminListGuestbook, adminListGuestbookIpBans, adminListPosts, adminLogin, adminRefreshSession, adminRestoreGuestbook, adminSaveAssetOverride, adminSavePost, adminUnbanGuestbookIp, listGuestbook } from '../api/appsScriptClient';
 import { AppLayout } from '../components/AppLayout';
 import { BackToTopButton } from '../components/BackToTopButton';
 import { IncrementalLoadMore } from '../components/IncrementalLoadMore';
@@ -11,13 +11,14 @@ import { CloseIcon, EyeOffIcon, LogOutIcon, RestoreIcon, ShieldBanIcon, ShieldCh
 import { TurnstileBox } from '../components/TurnstileBox';
 import { useIncrementalItems } from '../hooks/useIncrementalItems';
 import { syncPublicPost } from '../stores/publicDataStore';
-import type { ArchiveAsset, AssetOverride, GuestbookAdminEntry, GuestbookEntry, Post } from '../types';
+import type { ArchiveAsset, AssetOverride, GuestbookAdminEntry, GuestbookEntry, GuestbookIpBan, Post } from '../types';
 import { formatDate } from '../utils/date';
 import { clearAdminSession, loadAdminSession, refreshAdminSession, saveAdminSession } from '../utils/session';
 import { splitTags } from '../utils/strings';
 
 type Tab = 'posts' | 'assets' | 'guestbook';
 type GuestbookFilter = 'all' | GuestbookEntry['status'];
+type GuestbookAdminView = 'entries' | 'bans';
 type EditorView = 'edit' | 'preview';
 
 const TAB_LABELS: Record<Tab, string> = {
@@ -419,9 +420,13 @@ function AssetsAdmin({ token, onSessionExpired }: { token: string; onSessionExpi
 
 function GuestbookAdmin({ token, onSessionExpired }: { token: string; onSessionExpired: () => void }) {
   const [entries, setEntries] = useState<GuestbookAdminEntry[]>([]);
+  const [ipBans, setIpBans] = useState<GuestbookIpBan[]>([]);
+  const [view, setView] = useState<GuestbookAdminView>('entries');
   const [filter, setFilter] = useState<GuestbookFilter>('all');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(true);
+  const [bansLoading, setBansLoading] = useState(true);
+  const [banListError, setBanListError] = useState('');
   const [limitedMode, setLimitedMode] = useState(false);
   const [hideTarget, setHideTarget] = useState<GuestbookEntry | null>(null);
   const [hiddenReason, setHiddenReason] = useState('');
@@ -429,7 +434,7 @@ function GuestbookAdmin({ token, onSessionExpired }: { token: string; onSessionE
 
   useEffect(() => {
     let active = true;
-    const load = async () => {
+    const loadEntries = async () => {
       setLoading(true);
       setMessage('');
       setLimitedMode(false);
@@ -456,7 +461,21 @@ function GuestbookAdmin({ token, onSessionExpired }: { token: string; onSessionE
         if (active) setLoading(false);
       }
     };
-    void load();
+    const loadBans = async () => {
+      setBansLoading(true);
+      setBanListError('');
+      try {
+        const bans = await adminListGuestbookIpBans(token);
+        if (active) setIpBans(bans);
+      } catch (err) {
+        if (isAdminSessionError(err)) { onSessionExpired(); return; }
+        if (active) setBanListError(err instanceof Error ? err.message : 'IP 차단 목록을 불러오지 못했습니다.');
+      } finally {
+        if (active) setBansLoading(false);
+      }
+    };
+    void loadEntries();
+    void loadBans();
     return () => { active = false; };
   }, [token]);
 
@@ -521,11 +540,18 @@ function GuestbookAdmin({ token, onSessionExpired }: { token: string; onSessionE
       setEntries((items) => items.map((item) => item.id === entry.id
         ? { ...item, ipBlocked: blocked, relatedEntryCount }
         : item));
+      if (!blocked) {
+        setIpBans((items) => items.filter((ban) => ban.sourceEntryId !== entry.id && !ban.relatedEntryIds.includes(entry.id)));
+      }
       const relatedNote = relatedEntryCount && relatedEntryCount > 1 ? ` 같은 IP로 연결된 글은 ${relatedEntryCount}개입니다.` : '';
       setMessage(blocked ? `이 작성자의 IP를 차단했습니다.${relatedNote}` : `이 작성자의 IP 차단을 해제했습니다.${relatedNote}`);
       try {
-        const refreshedEntries = await adminListGuestbook(token);
+        const [refreshedEntries, refreshedBans] = await Promise.all([
+          adminListGuestbook(token),
+          adminListGuestbookIpBans(token)
+        ]);
         setEntries([...refreshedEntries].sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+        setIpBans(refreshedBans);
       } catch (_) {
         // The mutation already succeeded; keep the updated target row if refresh is unavailable.
       }
@@ -537,84 +563,208 @@ function GuestbookAdmin({ token, onSessionExpired }: { token: string; onSessionE
     }
   };
 
+  const unbanFromList = async (ban: GuestbookIpBan) => {
+    const entryId = ban.sourceEntryId || ban.relatedEntryIds[0];
+    if (!entryId) {
+      setMessage('차단 해제에 사용할 연결 글을 찾지 못했습니다.');
+      return;
+    }
+
+    setChangingId(entryId);
+    setMessage('');
+    try {
+      await adminUnbanGuestbookIp(token, entryId);
+      setIpBans((items) => items.filter((item) => item !== ban));
+      setEntries((items) => items.map((entry) => ban.relatedEntryIds.includes(entry.id) ? { ...entry, ipBlocked: false } : entry));
+      setMessage('IP 차단을 해제했습니다.');
+      try {
+        const [refreshedEntries, refreshedBans] = await Promise.all([
+          adminListGuestbook(token),
+          adminListGuestbookIpBans(token)
+        ]);
+        setEntries([...refreshedEntries].sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+        setIpBans(refreshedBans);
+      } catch (_) {
+        // The mutation succeeded; retain the local unblocked state if refresh is unavailable.
+      }
+    } catch (err) {
+      if (isAdminSessionError(err)) { onSessionExpired(); return; }
+      setMessage(err instanceof Error ? err.message : 'IP 차단 해제에 실패했습니다.');
+    } finally {
+      setChangingId('');
+    }
+  };
+
+  const showBanList = async () => {
+    setView('bans');
+    setBansLoading(true);
+    setBanListError('');
+    setIpBans([]);
+    try {
+      setIpBans(await adminListGuestbookIpBans(token));
+    } catch (err) {
+      if (isAdminSessionError(err)) { onSessionExpired(); return; }
+      setBanListError(err instanceof Error ? err.message : 'IP 차단 목록을 불러오지 못했습니다.');
+    } finally {
+      setBansLoading(false);
+    }
+  };
+
+  const entriesById = useMemo(() => new Map(entries.map((entry) => [entry.id, entry])), [entries]);
+
   return (
     <section className="admin-guestbook">
       <header className="panel admin-guestbook-toolbar">
         <div>
           <h2>방명록 관리</h2>
-          <p className="help-text">이름, 작성일, 공개 상태를 확인하고 숨김 여부를 관리합니다.</p>
+          <p className="help-text">{view === 'entries' ? '작성 내용과 공개 상태를 관리합니다.' : '현재 차단 중인 항목과 관련 글을 확인하고 해제합니다.'}</p>
         </div>
-        <div className="admin-status-filters" aria-label="방명록 상태 필터">
-          {([
-            ['all', '전체', entries.length],
-            ['visible', '공개', statusCount('visible')],
-            ['hidden', '숨김', statusCount('hidden')],
-            ['deleted', '삭제됨', statusCount('deleted')]
-          ] as Array<[GuestbookFilter, string, number]>).map(([value, label, count]) => (
-            <button className={filter === value ? 'admin-status-filter--active' : ''} type="button" key={value} onClick={() => setFilter(value)} aria-pressed={filter === value}>
-              {label} <span>{count}</span>
-            </button>
-          ))}
+        <div className="admin-view-switch admin-guestbook-view-switch" role="group" aria-label="방명록 관리 화면">
+          <button className={view === 'entries' ? 'admin-view-switch__active' : ''} type="button" aria-pressed={view === 'entries'} onClick={() => setView('entries')}>글 목록</button>
+          <button className={view === 'bans' ? 'admin-view-switch__active' : ''} type="button" aria-pressed={view === 'bans'} onClick={() => { void showBanList(); }}>
+            IP 차단 <span className="admin-view-switch__count">{ipBans.length}</span>
+          </button>
         </div>
+        {view === 'entries' ? (
+          <div className="admin-status-filters" aria-label="방명록 상태 필터">
+            {([
+              ['all', '전체', entries.length],
+              ['visible', '공개', statusCount('visible')],
+              ['hidden', '숨김', statusCount('hidden')],
+              ['deleted', '삭제됨', statusCount('deleted')]
+            ] as Array<[GuestbookFilter, string, number]>).map(([value, label, count]) => (
+              <button className={filter === value ? 'admin-status-filter--active' : ''} type="button" key={value} onClick={() => setFilter(value)} aria-pressed={filter === value}>
+                {label} <span>{count}</span>
+              </button>
+            ))}
+          </div>
+        ) : null}
       </header>
 
-      {limitedMode ? <p className="status-message">전체 관리 목록 연결 전이라 현재는 공개 글만 표시합니다.</p> : null}
       {message ? <p className="status-message" role="status">{message}</p> : null}
-      {loading && !entries.length ? <EmptyState label="방명록을 불러오는 중입니다." /> : null}
-      {!loading && !filteredEntries.length ? <EmptyState label="해당 상태의 방명록 글이 없습니다." /> : null}
+      {view === 'entries' ? (
+        <div className="admin-guestbook-panel">
+          {limitedMode ? <p className="status-message">전체 관리 목록 연결 전이라 현재는 공개 글만 표시합니다.</p> : null}
+          {loading && !entries.length ? <EmptyState label="방명록을 불러오는 중입니다." /> : null}
+          {!loading && !filteredEntries.length ? <EmptyState label="해당 상태의 방명록 글이 없습니다." /> : null}
 
-      {visibleItems.length ? (
-        <div className="admin-guestbook-list">
-          <p className="result-count">{totalCount}개 중 {shownCount}개 표시</p>
-          {visibleItems.map((entry) => (
-            <article className="admin-guestbook-row" key={entry.id}>
-              <div className="admin-guestbook-row__head">
-                <strong>{entry.name}</strong>
-                <span className={`status-chip status-chip--${entry.status}`}>{GUESTBOOK_STATUS_LABELS[entry.status]}</span>
-              </div>
-              <p className="admin-guestbook-row__message">{entry.message}</p>
-              {entry.hiddenReason ? <p className="admin-guestbook-row__reason">숨김 사유: {entry.hiddenReason}</p> : null}
-              <div className="admin-guestbook-row__footer">
-                <time className="meta" dateTime={entry.createdAt}>{formatDate(entry.createdAt)}</time>
-                <div className="admin-guestbook-row__controls">
-                  <span className={`admin-ip-status ${entry.ipBlocked ? 'admin-ip-status--blocked' : ''}`}>
-                    {entry.ipBlocked
-                      ? 'IP 차단 중'
-                      : entry.ipBanAvailable
-                        ? entry.relatedEntryCount && entry.relatedEntryCount > 1
-                          ? `IP 차단 가능 · 연결 ${entry.relatedEntryCount}개`
-                          : 'IP 차단 가능'
-                        : 'IP 정보 없음'}
-                  </span>
-                  {entry.ipBanAvailable ? (
-                    <button
-                      className={`admin-ip-action ${entry.ipBlocked ? 'admin-ip-action--restore' : 'admin-ip-action--danger'}`}
-                      type="button"
-                      onClick={() => updateIpBlock(entry, !entry.ipBlocked)}
-                      disabled={Boolean(changingId)}
-                      aria-label={entry.ipBlocked ? `${entry.name} 작성자의 IP 차단 해제` : `${entry.name} 작성자의 IP 차단`}
-                      title={entry.ipBlocked ? 'IP 차단 해제' : 'IP 차단'}
-                    >
-                      {entry.ipBlocked ? <ShieldCheckIcon /> : <ShieldBanIcon />}
-                    </button>
-                  ) : null}
-                  {entry.status === 'visible' ? (
-                    <button className="admin-row-action admin-row-action--danger" type="button" onClick={() => { setHideTarget(entry); setHiddenReason(''); }} disabled={Boolean(changingId)}>
-                      <EyeOffIcon /> 숨기기
-                    </button>
-                  ) : null}
-                  {entry.status === 'hidden' ? (
-                    <button className="admin-row-action" type="button" onClick={() => restore(entry)} disabled={Boolean(changingId)}>
-                      <RestoreIcon /> {changingId === entry.id ? '복구 중' : '다시 보이기'}
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-            </article>
-          ))}
-          <IncrementalLoadMore hasMore={hasMore} label={`${totalCount - shownCount}개 더보기`} onLoadMore={loadMore} />
+          {visibleItems.length ? (
+            <div className="admin-guestbook-list">
+              <p className="result-count">{totalCount}개 중 {shownCount}개 표시</p>
+              {visibleItems.map((entry) => (
+                <article className="admin-guestbook-row" key={entry.id}>
+                  <div className="admin-guestbook-row__head">
+                    <strong>{entry.name}</strong>
+                    <span className={`status-chip status-chip--${entry.status}`}>{GUESTBOOK_STATUS_LABELS[entry.status]}</span>
+                  </div>
+                  <p className="admin-guestbook-row__message">{entry.message}</p>
+                  {entry.hiddenReason ? <p className="admin-guestbook-row__reason">숨김 사유: {entry.hiddenReason}</p> : null}
+                  <div className="admin-guestbook-row__footer">
+                    <time className="meta" dateTime={entry.createdAt}>{formatDate(entry.createdAt)}</time>
+                    <div className="admin-guestbook-row__controls">
+                      <span className={`admin-ip-status ${entry.ipBlocked ? 'admin-ip-status--blocked' : ''}`}>
+                        {entry.ipBlocked
+                          ? 'IP 차단 중'
+                          : entry.ipBanAvailable
+                            ? entry.relatedEntryCount && entry.relatedEntryCount > 1
+                              ? `IP 차단 가능 · 연결 ${entry.relatedEntryCount}개`
+                              : 'IP 차단 가능'
+                            : 'IP 정보 없음'}
+                      </span>
+                      {entry.ipBanAvailable ? (
+                        <button
+                          className={`admin-ip-action ${entry.ipBlocked ? 'admin-ip-action--restore' : 'admin-ip-action--danger'}`}
+                          type="button"
+                          onClick={() => updateIpBlock(entry, !entry.ipBlocked)}
+                          disabled={Boolean(changingId)}
+                          aria-label={entry.ipBlocked ? `${entry.name} 작성자의 IP 차단 해제` : `${entry.name} 작성자의 IP 차단`}
+                          title={entry.ipBlocked ? 'IP 차단 해제' : 'IP 차단'}
+                        >
+                          {entry.ipBlocked ? <ShieldCheckIcon /> : <ShieldBanIcon />}
+                        </button>
+                      ) : null}
+                      {entry.status === 'visible' ? (
+                        <button className="admin-row-action admin-row-action--danger" type="button" onClick={() => { setHideTarget(entry); setHiddenReason(''); }} disabled={Boolean(changingId)}>
+                          <EyeOffIcon /> 숨기기
+                        </button>
+                      ) : null}
+                      {entry.status === 'hidden' ? (
+                        <button className="admin-row-action" type="button" onClick={() => restore(entry)} disabled={Boolean(changingId)}>
+                          <RestoreIcon /> {changingId === entry.id ? '복구 중' : '다시 보이기'}
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                </article>
+              ))}
+              <IncrementalLoadMore hasMore={hasMore} label={`${totalCount - shownCount}개 더보기`} onLoadMore={loadMore} />
+            </div>
+          ) : null}
         </div>
-      ) : null}
+      ) : (
+        <div className="admin-guestbook-panel">
+          {banListError ? <p className="status-message status-message--danger">{banListError}</p> : null}
+          {bansLoading && !ipBans.length ? <EmptyState label="IP 차단 목록을 불러오는 중입니다." /> : null}
+          {!bansLoading && !banListError && !ipBans.length ? <EmptyState label="차단 중인 IP가 없습니다." /> : null}
+          {ipBans.length ? (
+            <div className="admin-ban-list" aria-label="IP 차단 목록">
+              <p className="result-count">차단 중 {ipBans.length}개</p>
+              {ipBans.map((ban) => {
+                const relatedEntries = ban.relatedEntryIds.map((id) => entriesById.get(id)).filter((entry): entry is GuestbookAdminEntry => Boolean(entry));
+                const sourceEntry = ban.sourceEntryId ? entriesById.get(ban.sourceEntryId) : undefined;
+                const sourcePreviewEntry = sourceEntry || relatedEntries[0];
+                const usesRelatedFallback = !sourceEntry && Boolean(sourcePreviewEntry);
+                const unbanEntryId = ban.sourceEntryId || ban.relatedEntryIds[0] || '';
+                return (
+                  <article className="admin-ban-row" key={`${ban.sourceEntryId || 'unknown'}-${ban.bannedAt}`}>
+                    <div className="admin-ban-row__head">
+                      <div className="admin-ban-row__state">
+                        <span className="admin-ip-status admin-ip-status--blocked">차단 중</span>
+                        <time className="meta" dateTime={ban.bannedAt}>{formatDate(ban.bannedAt)}</time>
+                      </div>
+                      <button className="admin-row-action" type="button" onClick={() => unbanFromList(ban)} disabled={Boolean(changingId) || !unbanEntryId}>
+                        <ShieldCheckIcon /> {changingId === unbanEntryId ? '해제 중' : '차단 해제'}
+                      </button>
+                    </div>
+                    <div className="admin-ban-row__source">
+                      <span className="admin-ban-row__label">{usesRelatedFallback ? '연결된 글 미리보기' : '차단 기준 글'}</span>
+                      {sourcePreviewEntry ? (
+                        <>
+                          <strong>{sourcePreviewEntry.name}</strong>
+                          <p>{sourcePreviewEntry.message}</p>
+                        </>
+                      ) : (
+                        <p className="help-text">차단 기준 글과 연결된 글을 현재 목록에서 찾지 못했습니다.</p>
+                      )}
+                    </div>
+                    <dl className="admin-ban-row__meta">
+                      <div><dt>사유</dt><dd>{ban.reason || '관리자 수동 차단'}</dd></div>
+                      <div><dt>연결된 글</dt><dd>{ban.relatedEntryCount}개</dd></div>
+                    </dl>
+                    {relatedEntries.length ? (
+                      <details className="admin-ban-related">
+                        <summary>연결된 글 {ban.relatedEntryCount}개 보기</summary>
+                        <ul>
+                          {relatedEntries.map((entry) => (
+                            <li key={entry.id}>
+                              <div>
+                                <strong>{entry.name}</strong>
+                                <span className={`status-chip status-chip--${entry.status}`}>{GUESTBOOK_STATUS_LABELS[entry.status]}</span>
+                              </div>
+                              <p>{entry.message}</p>
+                            </li>
+                          ))}
+                        </ul>
+                        {relatedEntries.length < ban.relatedEntryCount ? <p className="help-text">현재 방명록 목록에서 {relatedEntries.length}개를 확인할 수 있습니다.</p> : null}
+                      </details>
+                    ) : null}
+                  </article>
+                );
+              })}
+            </div>
+          ) : null}
+        </div>
+      )}
 
       {hideTarget ? (
         <div className="modal-backdrop admin-dialog-backdrop" role="presentation" onMouseDown={() => { if (!changingId) setHideTarget(null); }}>

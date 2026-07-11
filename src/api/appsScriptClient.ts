@@ -1,6 +1,6 @@
 import { config, isApiConfigured } from '../config';
 import { mockGuestbook, mockPosts } from '../data/mockData';
-import type { AdminSession, ApiEnvelope, AssetOverride, GuestbookAdminEntry, GuestbookEntry, Post } from '../types';
+import type { AdminSession, ApiEnvelope, AssetOverride, GuestbookAdminEntry, GuestbookEntry, GuestbookIpBan, Post } from '../types';
 import { readCache, readCachePayload, writeCache, type CachePayload } from '../utils/localCache';
 
 export class ApiNotConfiguredError extends Error {
@@ -217,6 +217,11 @@ export async function adminSavePost(token: string, post: Partial<Post>): Promise
 
 export async function adminListGuestbook(token: string): Promise<GuestbookAdminEntry[]> {
   return request<GuestbookAdminEntry[]>('admin.guestbook.list', { token });
+}
+
+export async function adminListGuestbookIpBans(token: string): Promise<GuestbookIpBan[]> {
+  const result = await request<{ bans: GuestbookIpBan[] }>('admin.guestbook.ip.bans.list', { token });
+  return Array.isArray(result.bans) ? result.bans : [];
 }
 
 export async function adminHideGuestbook(token: string, id: string, hiddenReason: string): Promise<{ id: string }> {

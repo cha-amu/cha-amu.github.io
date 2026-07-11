@@ -31,6 +31,15 @@ class FakeD1Statement {
       const mapping = this.database.mappings.get(this.values[0]);
       return mapping?.state === 'active' ? { ip_hash: mapping.ipHash } : null;
     }
+    if (this.sql.includes('FROM ip_bans') && this.sql.includes('source_entry_id = ?')) {
+      const [scope, sourceEntryId] = this.values;
+      const ban = Array.from(this.database.bans.values()).find((candidate) => (
+        candidate.scope === scope &&
+        candidate.sourceEntryId === sourceEntryId &&
+        !candidate.revokedAt
+      ));
+      return ban ? { ip_hash: ban.ipHash } : null;
+    }
     if (this.sql.includes('SELECT COUNT(*) AS count')) {
       const [ipHash] = this.values;
       const count = Array.from(this.database.mappings.values())
@@ -51,6 +60,41 @@ class FakeD1Statement {
       };
     }
     if (!this.sql.includes('FROM guestbook_entry_ips m')) {
+      if (this.sql.includes('FROM ip_bans b')) {
+        const [scope] = this.values;
+        const results = [];
+        const activeBans = Array.from(this.database.bans.values())
+          .filter((ban) => ban.scope === scope && !ban.revokedAt)
+          .sort((left, right) => right.bannedAt.localeCompare(left.bannedAt));
+        for (const ban of activeBans) {
+          const relatedEntries = Array.from(this.database.mappings.entries())
+            .filter(([, mapping]) => mapping.ipHash === ban.ipHash && mapping.state === 'active')
+            .sort((left, right) => {
+              const byCreatedAt = String(left[1].createdAt || '').localeCompare(String(right[1].createdAt || ''));
+              return byCreatedAt || left[0].localeCompare(right[0]);
+            });
+          if (!relatedEntries.length) {
+            results.push({
+              ip_hash: ban.ipHash,
+              reason: ban.reason,
+              source_entry_id: ban.sourceEntryId,
+              banned_at: ban.bannedAt,
+              related_entry_id: null
+            });
+            continue;
+          }
+          for (const [entryId] of relatedEntries) {
+            results.push({
+              ip_hash: ban.ipHash,
+              reason: ban.reason,
+              source_entry_id: ban.sourceEntryId,
+              banned_at: ban.bannedAt,
+              related_entry_id: entryId
+            });
+          }
+        }
+        return { success: true, results };
+      }
       throw new Error(`Unhandled all SQL: ${this.sql}`);
     }
     const [scope] = this.values;
@@ -416,6 +460,148 @@ test('admin can create and revoke an indefinite ban by entryId after session ver
   assert.ok(database.bans.get(`guestbook.create:${'b'.repeat(64)}`).revokedAt);
   assert.equal(database.events.length, 2);
   assert.equal(appCalls.length, 2);
+});
+
+test('authenticated admin can list active bans without exposing IP identifiers', async () => {
+  const database = new FakeD1();
+  const firstHash = 'c'.repeat(64);
+  const secondHash = 'd'.repeat(64);
+  database.mappings.set('first-source', {
+    ipHash: firstHash,
+    state: 'active',
+    createdAt: '2026-07-10T01:00:00.000Z'
+  });
+  database.mappings.set('first-related', {
+    ipHash: firstHash,
+    state: 'active',
+    createdAt: '2026-07-10T02:00:00.000Z'
+  });
+  database.mappings.set('revoked-related', {
+    ipHash: secondHash,
+    state: 'active',
+    createdAt: '2026-07-10T03:00:00.000Z'
+  });
+  database.bans.set(`guestbook.create:${firstHash}`, {
+    scope: 'guestbook.create',
+    ipHash: firstHash,
+    reason: '반복 광고',
+    sourceEntryId: 'first-source',
+    bannedAt: '2026-07-11T02:00:00.000Z',
+    revokedAt: null
+  });
+  database.bans.set(`guestbook.create:${secondHash}`, {
+    scope: 'guestbook.create',
+    ipHash: secondHash,
+    reason: '해제됨',
+    sourceEntryId: 'revoked-related',
+    bannedAt: '2026-07-11T01:00:00.000Z',
+    revokedAt: '2026-07-11T03:00:00.000Z'
+  });
+  const { gateway, appCalls } = fixture({
+    appHandler: (body) => {
+      assert.equal(body.action, 'admin.session.verify');
+      assert.equal(body.token, 'admin-token');
+      return { ok: true, data: { valid: true } };
+    }
+  });
+
+  const response = await gateway.fetch(apiRequest('admin.guestbook.ip.bans.list', {
+    token: 'admin-token'
+  }), createEnv(database));
+  const envelope = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(envelope, {
+    ok: true,
+    data: {
+      bans: [{
+        sourceEntryId: 'first-source',
+        reason: '반복 광고',
+        bannedAt: '2026-07-11T02:00:00.000Z',
+        relatedEntryIds: ['first-source', 'first-related'],
+        relatedEntryCount: 2
+      }]
+    }
+  });
+  assert.equal(appCalls.length, 1);
+  assert.equal(JSON.stringify(envelope).includes(firstHash), false);
+  assert.equal(JSON.stringify(envelope).includes(secondHash), false);
+  assert.equal(JSON.stringify(envelope).includes(RAW_IP), false);
+});
+
+test('ban list rejects a missing or invalid admin session before reading D1', async () => {
+  const database = new FakeD1();
+  database.bans.set(`guestbook.create:${'e'.repeat(64)}`, {
+    scope: 'guestbook.create',
+    ipHash: 'e'.repeat(64),
+    reason: 'must stay private',
+    sourceEntryId: 'private-entry',
+    bannedAt: '2026-07-11T02:00:00.000Z',
+    revokedAt: null
+  });
+  const { gateway, appCalls } = fixture({
+    appHandler: () => ({ ok: false, error: 'expired' })
+  });
+
+  const missingToken = await gateway.fetch(
+    apiRequest('admin.guestbook.ip.bans.list'),
+    createEnv(database)
+  );
+  const invalidToken = await gateway.fetch(
+    apiRequest('admin.guestbook.ip.bans.list', { token: 'expired-token' }),
+    createEnv(database)
+  );
+
+  assert.equal(missingToken.status, 401);
+  assert.equal(invalidToken.status, 401);
+  assert.equal(appCalls.length, 1);
+  assert.equal(JSON.stringify(await invalidToken.json()).includes('must stay private'), false);
+});
+
+test('a listed ban remains revocable by sourceEntryId after all related mappings are gone', async () => {
+  const database = new FakeD1();
+  const staleHash = 'f'.repeat(64);
+  database.bans.set(`guestbook.create:${staleHash}`, {
+    scope: 'guestbook.create',
+    ipHash: staleHash,
+    reason: '오래된 반복 광고',
+    sourceEntryId: 'stale-source',
+    bannedAt: '2026-07-11T04:00:00.000Z',
+    revokedAt: null
+  });
+  const { gateway, appCalls } = fixture({
+    appHandler: (body) => {
+      assert.equal(body.action, 'admin.session.verify');
+      assert.equal(body.token, 'admin-token');
+      return { ok: true, data: { valid: true } };
+    }
+  });
+  const env = createEnv(database);
+
+  const listed = await gateway.fetch(apiRequest('admin.guestbook.ip.bans.list', {
+    token: 'admin-token'
+  }), env);
+  const listedEnvelope = await listed.json();
+  assert.deepEqual(listedEnvelope.data.bans, [{
+    sourceEntryId: 'stale-source',
+    reason: '오래된 반복 광고',
+    bannedAt: '2026-07-11T04:00:00.000Z',
+    relatedEntryIds: [],
+    relatedEntryCount: 0
+  }]);
+
+  const unbanned = await gateway.fetch(apiRequest('admin.guestbook.ip.unban', {
+    token: 'admin-token', entryId: 'stale-source'
+  }), env);
+  assert.equal(unbanned.status, 200);
+  assert.deepEqual((await unbanned.json()).data, {
+    entryId: 'stale-source',
+    ipBlocked: false,
+    relatedEntryCount: 0
+  });
+  assert.equal(database.bans.get(`guestbook.create:${staleHash}`).revokedAt, '2026-07-11T00:00:00.000Z');
+  assert.equal(appCalls.length, 2);
+  assert.equal(JSON.stringify(listedEnvelope).includes(staleHash), false);
 });
 
 test('clear upstream rejection removes pending mapping while ambiguous failure keeps it', async () => {
