@@ -2051,7 +2051,7 @@ img {
   position: sticky;
   top: calc(var(--site-tools-top) + var(--site-tools-row-height) + 0.75rem);
   display: grid;
-  grid-template-rows: auto auto 1fr;
+  grid-template-rows: auto auto minmax(0, 1fr);
   gap: 0.75rem;
   height: min(100vh - (var(--site-tools-top) + var(--site-tools-row-height) + 1.5rem), 100vh - 3rem);
   max-height: min(100vh - (var(--site-tools-top) + var(--site-tools-row-height) + 1.5rem), 100vh - 3rem);
@@ -2169,7 +2169,7 @@ img {
 .admin-list {
   display: grid;
   grid-template-columns: 1fr;
-  flex: 1 1 0;
+  grid-auto-rows: max-content;
   align-content: start;
   gap: 0.55rem;
   min-height: 0;
@@ -2182,6 +2182,7 @@ img {
 .admin-list-card {
   display: grid;
   grid-template-columns: 44px minmax(0, 1fr);
+  min-height: 88px;
   width: 100%;
   border: 1.5px solid var(--color-line);
   border-radius: 8px;
@@ -2439,7 +2440,7 @@ img {
   position: sticky;
   top: calc(var(--site-tools-top) + var(--site-tools-row-height) + 0.75rem);
   display: grid;
-  grid-template-rows: auto auto auto 1fr;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
   gap: 0.75rem;
   height: min(100vh - (var(--site-tools-top) + var(--site-tools-row-height) + 1.5rem), 100vh - 3rem);
   max-height: min(100vh - (var(--site-tools-top) + var(--site-tools-row-height) + 1.5rem), 100vh - 3rem);
@@ -2457,7 +2458,7 @@ img {
 
 .admin-asset-list {
   display: grid;
-  flex: 1 1 0;
+  grid-auto-rows: max-content;
   align-content: start;
   gap: 0.5rem;
   min-height: 0;
@@ -2470,6 +2471,7 @@ img {
 .admin-asset-row {
   display: grid;
   grid-template-columns: 44px minmax(0, 1fr);
+  min-height: 112px;
   width: 100%;
   border: 1.5px solid var(--color-line);
   border-radius: 8px;
