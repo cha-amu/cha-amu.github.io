@@ -1032,15 +1032,16 @@ img {
 
 .settings-panel {
   position: absolute;
-  top: 0;
-  right: 0;
-  width: min(360px, 92vw);
-  height: 100%;
+  top: 1rem;
+  right: 1rem;
+  width: min(360px, calc(100vw - 2rem));
+  max-height: calc(100% - 2rem);
   overflow: auto;
-  border-left: 3px solid var(--color-ink);
+  border: 2px solid var(--color-ink);
+  border-radius: var(--radius-card);
   background: var(--color-background);
   padding: 1.25rem;
-  box-shadow: -10px 0 30px rgba(31, 31, 31, 0.16);
+  box-shadow: 6px 8px 0 rgba(31, 31, 31, 0.14);
 }
 
 .settings-panel__head {
@@ -1088,11 +1089,7 @@ img {
 .settings-section {
   display: grid;
   gap: 0.65rem;
-  border: 2px solid var(--color-ink);
-  border-radius: 1rem;
-  background: var(--color-surface);
-  padding: 1rem;
-  margin-bottom: 1rem;
+  margin: 0;
 }
 
 .language-options {
@@ -1151,11 +1148,6 @@ img {
 .language-options input:focus-visible + span {
   outline: 3px solid var(--color-primary);
   outline-offset: -3px;
-}
-
-.language-status {
-  min-height: 2.5em;
-  margin: 0;
 }
 
 @media (max-width: 760px) {

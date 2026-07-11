@@ -9,7 +9,7 @@ function currentPath(): string {
 }
 
 export function SiteTools({ showSearch = true }: { showSearch?: boolean }) {
-  const { language, preference, setLanguagePreference, t } = useI18n();
+  const { preference, setLanguagePreference, t } = useI18n();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -19,7 +19,6 @@ export function SiteTools({ showSearch = true }: { showSearch?: boolean }) {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const path = currentPath();
   const isGuestbook = path === '/guestbook/';
-  const displayedLanguage = language === 'ko' ? t('settings.languageKorean') : t('settings.languageEnglish');
   const languageOptions: Array<{ value: LanguagePreference; label: string }> = [
     { value: 'auto', label: t('settings.auto') },
     { value: 'ko', label: t('settings.korean') },
@@ -137,7 +136,6 @@ export function SiteTools({ showSearch = true }: { showSearch?: boolean }) {
 
             <section className="settings-section" aria-labelledby={`${settingsTitleId}-language`}>
               <h3 id={`${settingsTitleId}-language`}>{t('settings.language')}</h3>
-              <p className="help-text">{t('settings.languageHelp')}</p>
               <fieldset className="language-options">
                 <legend className="sr-only">{t('settings.language')}</legend>
                 {languageOptions.map((option) => (
@@ -153,20 +151,7 @@ export function SiteTools({ showSearch = true }: { showSearch?: boolean }) {
                   </label>
                 ))}
               </fieldset>
-              <p className="help-text language-status" aria-live="polite">
-                {t(preference === 'auto' ? 'settings.autoStatus' : 'settings.fixedStatus', { language: displayedLanguage })}
-              </p>
             </section>
-
-            <section className="settings-section" aria-labelledby={`${settingsTitleId}-theme`}>
-              <h3 id={`${settingsTitleId}-theme`}>{t('settings.theme')}</h3>
-              <p className="help-text">{t('settings.themeHelp')}</p>
-              <button className="button button--primary" type="button" disabled>
-                {t('settings.lightTheme')}
-              </button>
-            </section>
-
-            <p className="help-text">{t('settings.storageHelp')}</p>
           </aside>
         </div>,
         document.body
