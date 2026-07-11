@@ -16,6 +16,16 @@ export function readAppLocation(): AppLocation {
   };
 }
 
+export function readHashId(hash = window.location.hash): string {
+  const value = hash.replace(/^#/, '');
+  if (!value) return '';
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
 export function canonicalizeUrl(pathname: string, search = '', hash = ''): string {
   const normalizedPath = pathname || '/';
   const path = CANONICAL_ROUTES.has(normalizedPath) ? `${normalizedPath}/` : normalizedPath;

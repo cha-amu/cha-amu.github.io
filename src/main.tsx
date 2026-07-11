@@ -21,6 +21,8 @@ const PAGE_TITLE_KEYS: Record<string, TranslationKey> = {
   '/admin/': 'nav.admin'
 };
 
+const BROWSER_TITLE = '채아무';
+
 function NotFoundPage() {
   const { t } = useI18n();
   return (
@@ -74,7 +76,7 @@ function App() {
 
   useEffect(() => {
     const pageTitleKey = PAGE_TITLE_KEYS[location.pathname];
-    document.title = pageTitleKey ? `${t('brand.name')} - ${t(pageTitleKey)}` : t('brand.name');
+    document.title = pageTitleKey ? `${BROWSER_TITLE} - ${t(pageTitleKey)}` : BROWSER_TITLE;
   }, [language, location.pathname, t]);
 
   return <RouteView pathname={location.pathname} routeKey={`${location.pathname}${location.search}`} />;

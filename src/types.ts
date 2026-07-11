@@ -90,6 +90,10 @@ export interface SearchResult {
   excerpt: string;
   tags: string[];
   href: string;
+  date?: string;
+  fileName?: string;
+  imageUrl?: string;
+  kind?: ArchiveAsset['kind'];
 }
 
 export interface ApiEnvelope<T> {

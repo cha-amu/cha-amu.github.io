@@ -11,6 +11,7 @@ import { useIncrementalItems } from '../hooks/useIncrementalItems';
 import { translate, useI18n } from '../i18n';
 import { refreshPosts, usePublicResource } from '../stores/publicDataStore';
 import { formatDate } from '../utils/date';
+import { readHashId } from '../utils/router';
 import { excerpt, normalizeText } from '../utils/strings';
 
 const POSTS_BATCH_SIZE = 10;
@@ -42,7 +43,7 @@ export function PostsPage() {
   const postsResource = usePublicResource('posts');
   const posts = postsResource.items;
   const postsCount = useRef(posts.length);
-  const [selectedId, setSelectedId] = useState(() => decodeURIComponent(window.location.hash.replace('#', '')));
+  const [selectedId, setSelectedId] = useState(() => readHashId());
   const [query, setQuery] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
 
@@ -59,7 +60,7 @@ export function PostsPage() {
   }, [load]);
 
   useEffect(() => {
-    const syncHash = () => setSelectedId(decodeURIComponent(window.location.hash.replace('#', '')));
+    const syncHash = () => setSelectedId(readHashId());
     window.addEventListener('hashchange', syncHash);
     window.addEventListener('popstate', syncHash);
     return () => {
@@ -101,6 +102,18 @@ export function PostsPage() {
     ensureVisible(selectedIndex);
   }, [ensureVisible, selectedIndex]);
 
+  useEffect(() => {
+    if (!selectedId || readHashId() !== selectedId) return;
+    if (!visiblePosts.some((post) => post.id === selectedId)) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      const target = document.getElementById(selectedId);
+      target?.scrollIntoView({ block: 'start' });
+      target?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [selectedId, visiblePosts]);
+
   const toggleTag = (tag: string) => {
     setSelectedTags((current) => current.includes(tag) ? current.filter((item) => item !== tag) : [...current, tag]);
   };
@@ -130,7 +143,7 @@ export function PostsPage() {
               {visiblePosts.map((post) => {
                 const expanded = selectedPost?.id === post.id;
                 return (
-                  <article className={`post-entry ${expanded ? 'post-entry--active' : ''}`} id={post.id} key={post.id}>
+                  <article className={`post-entry ${expanded ? 'post-entry--active' : ''}`} id={post.id} key={post.id} tabIndex={expanded ? -1 : undefined}>
                     <a className="post-entry__summary" href={`#${encodeURIComponent(post.id)}`} onClick={() => setSelectedId(post.id)}>
                       <h2>{post.title}</h2>
                       <p>{post.excerpt || excerpt(post.body)}</p>
