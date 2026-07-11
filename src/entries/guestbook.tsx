@@ -59,6 +59,9 @@ export function GuestbookPage() {
   const locallyHiddenIds = useRef(new Set<string>());
   const [message, setMessage] = useState('');
   const [saving, setSaving] = useState(false);
+  const [composerOpen, setComposerOpen] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState('');
+  const [turnstileResetKey, setTurnstileResetKey] = useState(0);
 
   useEffect(() => {
     entriesCount.current = entries.length;
@@ -83,11 +86,14 @@ export function GuestbookPage() {
     const name = String(form.get('name') || '').trim() || DEFAULT_GUESTBOOK_NAME;
     const body = String(form.get('message') || '').trim();
     const deletePassword = String(form.get('deletePassword') || '');
-    const turnstileToken = String(form.get('cf-turnstile-response') || '');
     const website = String(form.get('website') || '');
 
     if (!body || !deletePassword) {
       setMessage('메시지와 비밀번호를 입력해야 합니다.');
+      return;
+    }
+    if (!turnstileToken) {
+      setMessage('사람인지 확인을 완료해 주세요.');
       return;
     }
 
@@ -113,6 +119,8 @@ export function GuestbookPage() {
       setMessage(err instanceof Error ? err.message : '저장에 실패했습니다.');
     } finally {
       setSaving(false);
+      setTurnstileToken('');
+      setTurnstileResetKey((key) => key + 1);
     }
   };
 
@@ -138,7 +146,14 @@ export function GuestbookPage() {
     <AppLayout>
       <h1 className="sr-only">방명록</h1>
       <section className="guestbook-flow">
-        <details className="panel guestbook-composer">
+        <details
+          className="panel guestbook-composer"
+          onToggle={(event) => {
+            const open = event.currentTarget.open;
+            setComposerOpen(open);
+            if (!open) setTurnstileToken('');
+          }}
+        >
           <summary className="guestbook-composer__summary">
             <span>글 남기기</span>
             <ChevronDownIcon className="guestbook-composer__icon" />
@@ -179,7 +194,13 @@ export function GuestbookPage() {
                 <label htmlFor="guestbook-website">웹사이트</label>
                 <input id="guestbook-website" name="website" tabIndex={-1} autoComplete="off" />
               </div>
-              <TurnstileBox />
+              {composerOpen ? (
+                <TurnstileBox
+                  action="guestbook_create"
+                  onTokenChange={setTurnstileToken}
+                  resetKey={turnstileResetKey}
+                />
+              ) : null}
               {message ? <p className="status-message">{message}</p> : null}
               <div className="guestbook-form__actions">
                 <button className="button button--primary" type="submit" disabled={saving}>{saving ? '전송 중' : '작성'}</button>

@@ -70,7 +70,7 @@ ADMIN_SESSION_SECRET=<generated>
 GUESTBOOK_SERVER_PEPPER=<generated>
 GUESTBOOK_PASSWORD_ITERATIONS=1
 ADMIN_SESSION_TTL_MS=60000
-TURNSTILE_SECRET_KEY=<나중에 Turnstile 적용 시 입력. 지금은 비워도 됨>
+GATEWAY_SHARED_SECRET=<Worker와 동일한 32자 이상 비밀값>
 ```
 
 관리자 비밀번호 관련 값은 로컬에서 생성한다.
@@ -78,6 +78,8 @@ TURNSTILE_SECRET_KEY=<나중에 Turnstile 적용 시 입력. 지금은 비워도
 ```bash
 npm run secrets:apps-script
 ```
+
+GitHub Actions로 배포할 때는 `ADMIN_PASSWORD_PEPPER`, `ADMIN_SESSION_SECRET`, `GUESTBOOK_SERVER_PEPPER`도 Repository Secrets에 같은 값으로 보관한다. 특히 `GUESTBOOK_SERVER_PEPPER`를 재생성하면 기존 방명록의 삭제 비밀번호를 더 이상 검증할 수 없다.
 
 ## 4. 웹앱 배포
 
@@ -95,8 +97,8 @@ Who has access: Anyone
 로컬 `.env` 또는 GitHub Pages Actions Variables에 설정한다.
 
 ```txt
-VITE_APPS_SCRIPT_URL=<Apps Script Web App URL>
-VITE_TURNSTILE_SITE_KEY=<나중에 Turnstile 적용 시 입력. 지금은 비워도 됨>
+VITE_API_URL=https://cha-amu-gateway.yiyaaang.workers.dev/api
+VITE_TURNSTILE_SITE_KEY=0x4AAAAAADzr-jSxSMZf9xcv
 VITE_STORAGE_BASE_URL=https://cha-amu.github.io/storage
 VITE_ARCHIVE_MANIFEST_URL=https://cha-amu.github.io/storage/manifests/assets.json
 VITE_STORAGE_POSTS_MANIFEST_URL=https://cha-amu.github.io/storage/manifests/posts.json
@@ -108,7 +110,7 @@ VITE_ADMIN_IDLE_TIMEOUT_MS=60000
 브라우저에서 확인:
 
 ```txt
-<Apps Script Web App URL>?action=health
+https://cha-amu-gateway.yiyaaang.workers.dev/health
 ```
 
 응답 예시:
@@ -122,15 +124,9 @@ VITE_ADMIN_IDLE_TIMEOUT_MS=60000
 }
 ```
 
-## 주의: 브라우저 CORS
+## 보안 게이트웨이
 
-GitHub Pages에서 Apps Script Web App을 직접 `fetch`할 때 브라우저 CORS 제한이 걸릴 수 있다. 현재 프론트는 단순 요청 형태로 구현되어 있지만, 실제 배포 환경에서 CORS가 막히면 다음 중 하나로 조정해야 한다.
-
-- Apps Script가 HTML 서비스로 프론트까지 함께 제공
-- JSONP/폼 submit 방식으로 일부 공개 기능만 우회
-- Cloudflare Worker 같은 얇은 프록시 사용
-
-관리자 로그인처럼 응답을 읽어야 하는 기능은 CORS가 막히면 프록시 또는 같은 출처 배포가 필요하다.
+브라우저는 Apps Script Web App을 직접 호출하지 않는다. 모든 프론트 API 요청은 Cloudflare Worker를 거치며, Apps Script는 공개 조회 외 액션에 `GATEWAY_SHARED_SECRET`을 요구한다. Worker/D1 배포와 비밀값 목록은 `worker/README.md`를 따른다.
 
 ## 현재 배포 URL
 

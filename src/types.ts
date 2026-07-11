@@ -27,6 +27,12 @@ export interface GuestbookEntry {
   hiddenReason?: string;
 }
 
+export interface GuestbookAdminEntry extends GuestbookEntry {
+  ipBanAvailable?: boolean;
+  ipBlocked?: boolean;
+  relatedEntryCount?: number;
+}
+
 export interface ArchiveAsset {
   id: string;
   path: string;
@@ -82,6 +88,7 @@ export interface ApiEnvelope<T> {
   ok: boolean;
   data?: T;
   error?: string;
+  code?: string;
 }
 
 export interface AdminSession {

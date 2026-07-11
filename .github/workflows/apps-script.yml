@@ -16,8 +16,6 @@ permissions:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    env:
-      HAS_APPS_SCRIPT_DEPLOYMENT_ID: ${{ secrets.APPS_SCRIPT_DEPLOYMENT_ID != '' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -35,30 +33,38 @@ jobs:
           cat > ~/.clasprc.json <<'JSON'
           ${{ secrets.CLASPRC_JSON }}
           JSON
-          cat > apps-script/.clasp.json <<'JSON'
-          ${{ secrets.CLASP_JSON }}
-          JSON
+          node <<'NODE'
+          const fs = require('node:fs');
+          const clasp = JSON.parse(process.env.CLASP_JSON || '{}');
+          if (!clasp.scriptId) throw new Error('CLASP_JSON secret must include scriptId.');
+          clasp.rootDir = 'apps-script';
+          clasp.scriptExtensions ||= ['.js', '.gs'];
+          clasp.htmlExtensions ||= ['.html'];
+          clasp.jsonExtensions ||= ['.json'];
+          clasp.filePushOrder ||= [];
+          clasp.skipSubdirectories = Boolean(clasp.skipSubdirectories);
+          fs.writeFileSync('.clasp.json', JSON.stringify(clasp, null, 2));
+          NODE
+        env:
+          CLASP_JSON: ${{ secrets.CLASP_JSON }}
 
-      - name: Push Apps Script source
-        working-directory: apps-script
-        run: npx @google/clasp push --force
-
-      - name: Create Apps Script version
-        id: script_version
-        working-directory: apps-script
+      - name: Sync protected properties and deploy Apps Script
+        env:
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+          ADMIN_PASSWORD_PEPPER: ${{ secrets.ADMIN_PASSWORD_PEPPER }}
+          ADMIN_SESSION_SECRET: ${{ secrets.ADMIN_SESSION_SECRET }}
+          APPS_SCRIPT_DEPLOYMENT_ID: ${{ secrets.APPS_SCRIPT_DEPLOYMENT_ID }}
+          GATEWAY_SHARED_SECRET: ${{ secrets.GATEWAY_SHARED_SECRET }}
+          GUESTBOOK_PASSWORD_ITERATIONS: '1'
+          GUESTBOOK_SERVER_PEPPER: ${{ secrets.GUESTBOOK_SERVER_PEPPER }}
+          ADMIN_SESSION_TTL_MS: ${{ vars.VITE_ADMIN_IDLE_TIMEOUT_MS || '60000' }}
+          SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID }}
         run: |
-          VERSION_OUTPUT="$(npx @google/clasp create-version "GitHub ${GITHUB_SHA::7}")"
-          printf '%s\n' "$VERSION_OUTPUT"
-          VERSION="$(printf '%s\n' "$VERSION_OUTPUT" | grep -Eo '[0-9]+' | tail -1)"
-          test -n "$VERSION"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-
-      - name: Update existing web app deployment
-        if: env.HAS_APPS_SCRIPT_DEPLOYMENT_ID == 'true'
-        working-directory: apps-script
-        run: npx @google/clasp update-deployment "${{ secrets.APPS_SCRIPT_DEPLOYMENT_ID }}" --versionNumber "${{ steps.script_version.outputs.version }}" --description "GitHub ${{ github.sha }}"
-
-      - name: Create first web app deployment
-        if: env.HAS_APPS_SCRIPT_DEPLOYMENT_ID != 'true'
-        working-directory: apps-script
-        run: npx @google/clasp create-deployment --versionNumber "${{ steps.script_version.outputs.version }}" --description "GitHub ${{ github.sha }}"
+          test -n "$ADMIN_PASSWORD" || { echo 'ADMIN_PASSWORD repository secret is required.'; exit 1; }
+          test -n "$ADMIN_PASSWORD_PEPPER" || { echo 'ADMIN_PASSWORD_PEPPER repository secret is required.'; exit 1; }
+          test -n "$ADMIN_SESSION_SECRET" || { echo 'ADMIN_SESSION_SECRET repository secret is required.'; exit 1; }
+          test -n "$APPS_SCRIPT_DEPLOYMENT_ID" || { echo 'APPS_SCRIPT_DEPLOYMENT_ID repository secret is required.'; exit 1; }
+          test -n "$GATEWAY_SHARED_SECRET" || { echo 'GATEWAY_SHARED_SECRET repository secret is required.'; exit 1; }
+          test -n "$GUESTBOOK_SERVER_PEPPER" || { echo 'GUESTBOOK_SERVER_PEPPER repository secret is required.'; exit 1; }
+          test -n "$SPREADSHEET_ID" || { echo 'SPREADSHEET_ID repository secret is required.'; exit 1; }
+          npm run sync:apps-script-env

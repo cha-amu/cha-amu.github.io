@@ -44,10 +44,6 @@ function serializeEnv(baseText, values) {
   return next.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd() + '\n';
 }
 
-function randomHex() {
-  return randomBytes(32).toString('hex');
-}
-
 function requireEnvValue(key, value) {
   if (!value || String(value).includes('<')) {
     throw new Error(`${key} is required. Put it in local .env or GitHub Actions Secrets.`);
@@ -108,12 +104,12 @@ const adminPassword = await readAdminPassword(env);
 const valuesForEnv = {
   SPREADSHEET_ID: requireEnvValue('SPREADSHEET_ID', env.SPREADSHEET_ID),
   ADMIN_PASSWORD: adminPassword,
-  ADMIN_PASSWORD_PEPPER: env.ADMIN_PASSWORD_PEPPER || randomHex(),
-  ADMIN_SESSION_SECRET: env.ADMIN_SESSION_SECRET || randomHex(),
-  GUESTBOOK_SERVER_PEPPER: env.GUESTBOOK_SERVER_PEPPER || randomHex(),
+  ADMIN_PASSWORD_PEPPER: requireEnvValue('ADMIN_PASSWORD_PEPPER', env.ADMIN_PASSWORD_PEPPER),
+  ADMIN_SESSION_SECRET: requireEnvValue('ADMIN_SESSION_SECRET', env.ADMIN_SESSION_SECRET),
+  GUESTBOOK_SERVER_PEPPER: requireEnvValue('GUESTBOOK_SERVER_PEPPER', env.GUESTBOOK_SERVER_PEPPER),
   GUESTBOOK_PASSWORD_ITERATIONS: env.GUESTBOOK_PASSWORD_ITERATIONS || '1',
   ADMIN_SESSION_TTL_MS: env.ADMIN_SESSION_TTL_MS || '60000',
-  TURNSTILE_SECRET_KEY: env.TURNSTILE_SECRET_KEY || ''
+  GATEWAY_SHARED_SECRET: requireEnvValue('GATEWAY_SHARED_SECRET', env.GATEWAY_SHARED_SECRET)
 };
 valuesForEnv.ADMIN_PASSWORD_HASH = createHash('sha256')
   .update(valuesForEnv.ADMIN_PASSWORD + valuesForEnv.ADMIN_PASSWORD_PEPPER)
@@ -127,7 +123,7 @@ const properties = {
   GUESTBOOK_SERVER_PEPPER: valuesForEnv.GUESTBOOK_SERVER_PEPPER,
   GUESTBOOK_PASSWORD_ITERATIONS: valuesForEnv.GUESTBOOK_PASSWORD_ITERATIONS,
   ADMIN_SESSION_TTL_MS: valuesForEnv.ADMIN_SESSION_TTL_MS,
-  TURNSTILE_SECRET_KEY: valuesForEnv.TURNSTILE_SECRET_KEY
+  GATEWAY_SHARED_SECRET: valuesForEnv.GATEWAY_SHARED_SECRET
 };
 
 await writeFile(ENV_PATH, serializeEnv(envText, valuesForEnv));
@@ -152,4 +148,4 @@ try {
 
 console.log('관리자 비밀번호 기반 Apps Script Properties 동기화 완료.');
 console.log('직접 입력한 값: ADMIN_PASSWORD 하나');
-console.log('자동 생성/반영된 값: ADMIN_PASSWORD_HASH, ADMIN_PASSWORD_PEPPER, ADMIN_SESSION_SECRET, GUESTBOOK_SERVER_PEPPER');
+console.log('자동 생성/반영된 값: ADMIN_PASSWORD_HASH, ADMIN_PASSWORD_PEPPER, ADMIN_SESSION_SECRET, GUESTBOOK_SERVER_PEPPER, GATEWAY_SHARED_SECRET');

@@ -1418,6 +1418,23 @@ img {
   justify-content: flex-end;
 }
 
+.turnstile-box {
+  display: grid;
+  gap: 0.55rem;
+  width: 100%;
+  min-height: 65px;
+  overflow: hidden;
+}
+
+.turnstile-box > div:first-child {
+  width: 100%;
+  max-width: 100%;
+}
+
+.turnstile-box .status-message {
+  margin: 0;
+}
+
 .guestbook-entry {
   display: grid;
   gap: 0.8rem;
@@ -1598,7 +1615,17 @@ img {
 }
 
 .admin-login-panel {
+  display: grid;
+  gap: 0.9rem;
   max-width: 520px;
+}
+
+.admin-login-panel .field {
+  margin-bottom: 0;
+}
+
+.admin-login-panel .button {
+  justify-self: start;
 }
 
 .admin-tabs {
@@ -2093,6 +2120,73 @@ img {
   overflow-wrap: anywhere;
 }
 
+.admin-guestbook-row__controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.admin-ip-status {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  border: 1.5px solid var(--color-line);
+  border-radius: var(--radius-control);
+  background: var(--color-background);
+  padding: 0.18rem 0.5rem;
+  color: var(--color-muted);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.admin-ip-status--blocked {
+  border-color: var(--color-danger);
+  background: var(--color-soft-danger);
+  color: var(--color-ink);
+}
+
+.admin-ip-action {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  display: inline-grid;
+  place-items: center;
+  border: 1.5px solid transparent;
+  border-radius: 50%;
+  background: transparent;
+  padding: 0;
+  color: var(--color-muted);
+}
+
+.admin-ip-action svg {
+  width: 18px;
+  height: 18px;
+}
+
+.admin-ip-action:hover,
+.admin-ip-action:focus-visible {
+  border-color: var(--color-ink);
+  color: var(--color-ink);
+}
+
+.admin-ip-action--danger:hover,
+.admin-ip-action--danger:focus-visible {
+  background: var(--color-soft-danger);
+}
+
+.admin-ip-action--restore:hover,
+.admin-ip-action--restore:focus-visible {
+  background: var(--color-soft-primary);
+}
+
+.admin-ip-action:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .admin-guestbook-row__reason {
   width: fit-content;
   border-left: 4px solid var(--color-danger);
@@ -2266,6 +2360,12 @@ img {
   }
 
   .admin-guestbook-row__footer {
-    align-items: flex-end;
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .admin-guestbook-row__controls {
+    width: 100%;
+    justify-content: flex-end;
   }
 }

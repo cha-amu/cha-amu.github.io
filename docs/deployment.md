@@ -16,11 +16,12 @@ https://cha-amu.github.io/
 
 ## 1. 배포 구조
 
-이 프로젝트는 메인 사이트 레포의 GitHub Actions workflow 2개로 배포한다.
+이 프로젝트는 GitHub Pages, Cloudflare Worker/D1, Apps Script 세 계층으로 배포한다.
 
 ```txt
 .github/workflows/pages.yml       → 사이트 빌드 후 GitHub Pages 배포
 .github/workflows/apps-script.yml → Apps Script 코드 배포
+worker/                           → 보안 게이트웨이와 IP 차단 D1
 ```
 
 Google Sheets와 `cha-amu/storage` repo의 동기화는 storage repo 자신의 `Sync storage repo` workflow에서 실행한다. storage repo가 자기 파일과 manifest만 커밋하므로 별도 cross-repo push 토큰은 쓰지 않는다. storage repo에 직접 push하면 즉시 Sheets에 본문까지 반영하고, 주기적 실행은 Sheets의 최신 수정본을 storage Markdown으로 되돌려 맞춘다.
@@ -30,10 +31,19 @@ Google Sheets와 `cha-amu/storage` repo의 동기화는 storage repo 자신의 `
 - 트리거: `main` 브랜치에 push하거나 수동 실행
 - 결과: `https://cha-amu.github.io/` 갱신
 - 필요한 GitHub Actions Variables:
-  - `VITE_APPS_SCRIPT_URL`
+  - `VITE_API_URL` (기본값: `https://cha-amu-gateway.yiyaaang.workers.dev/api`)
   - `VITE_ARCHIVE_MANIFEST_URL`
   - `VITE_ADMIN_IDLE_TIMEOUT_MS`
-  - `VITE_TURNSTILE_SITE_KEY`는 Turnstile 적용 전에는 없어도 됨
+  - `VITE_TURNSTILE_SITE_KEY` (공개 사이트 키)
+
+### Cloudflare Worker/D1
+
+- Worker: `cha-amu-gateway`
+- D1: `cha-amu-security`
+- 배포 절차: `worker/README.md`
+- Worker secrets: `APPS_SCRIPT_URL`, `GATEWAY_SHARED_SECRET`, `IP_HASH_SECRET`, `TURNSTILE_SECRET_KEY`, `STORAGE_SYNC_SECRET`
+- `GATEWAY_SHARED_SECRET`은 Apps Script Properties에도 같은 값으로 등록한다.
+- `STORAGE_SYNC_SECRET`은 `cha-amu/storage` Actions Secret에도 같은 값으로 등록한다.
 
 ### Apps Script 배포
 
@@ -84,12 +94,12 @@ GitHub repo → Settings → Secrets and variables → Actions → Variables 탭
 ### 현재 쓰는 Variables
 
 ```txt
-VITE_APPS_SCRIPT_URL=<Apps Script Web App /exec URL>
+VITE_API_URL=https://cha-amu-gateway.yiyaaang.workers.dev/api
 VITE_STORAGE_BASE_URL=https://cha-amu.github.io/storage
 VITE_ARCHIVE_MANIFEST_URL=https://cha-amu.github.io/storage/manifests/assets.json
 VITE_STORAGE_POSTS_MANIFEST_URL=https://cha-amu.github.io/storage/manifests/posts.json
 VITE_ADMIN_IDLE_TIMEOUT_MS=60000
-VITE_TURNSTILE_SITE_KEY=<Turnstile 적용 전에는 만들지 않아도 됨>
+VITE_TURNSTILE_SITE_KEY=0x4AAAAAADzr-jSxSMZf9xcv
 ```
 
 주의:
@@ -128,9 +138,13 @@ CLASP_JSON=<Apps Script 프로젝트 연결 JSON>
 APPS_SCRIPT_DEPLOYMENT_ID=<기존 Apps Script Web App deployment id>
 SPREADSHEET_ID=<Google Sheet ID>
 ADMIN_PASSWORD=<GitHub에서 관리자 비밀번호를 변경할 때 사용할 새 비밀번호>
+ADMIN_PASSWORD_PEPPER=<현재 Apps Script Property와 같은 값>
+ADMIN_SESSION_SECRET=<현재 Apps Script Property와 같은 값>
+GATEWAY_SHARED_SECRET=<Worker와 동일한 비밀값>
+GUESTBOOK_SERVER_PEPPER=<현재 Apps Script Property와 같은 값>
 ```
 
-`SPREADSHEET_ID`는 공개 repo 파일에 적지 않고 Secret으로 둔다. `ADMIN_PASSWORD`는 사이트 빌드나 Apps Script 일반 배포에는 필요 없다. 로컬 `.env`를 잃어버렸거나 GitHub UI만으로 관리자 비밀번호를 바꿔야 할 때 `Update admin password` workflow가 사용한다.
+`SPREADSHEET_ID`는 공개 repo 파일에 적지 않고 Secret으로 둔다. Apps Script 배포는 위 서버 비밀값을 같은 값으로 다시 동기화한 뒤 코드를 올린다. 특히 `GUESTBOOK_SERVER_PEPPER`를 새 값으로 바꾸면 기존 방명록 삭제 비밀번호를 검증할 수 없으므로 임의로 재생성하지 않는다.
 
 ## 5. 각 Secret 값 만드는 법
 
@@ -355,8 +369,8 @@ Actions → Update admin password → 가장 최근 실행 → success
 
 이 workflow가 하는 일:
 
-- GitHub Secret `ADMIN_PASSWORD`와 `SPREADSHEET_ID`를 읽음
-- hash/pepper/session secret을 생성 또는 갱신
+- GitHub Secret `ADMIN_PASSWORD`, `SPREADSHEET_ID`, 기존 pepper/session secret을 읽음
+- 새 관리자 비밀번호 hash를 계산하되 기존 pepper/session/방명록 pepper는 유지
 - Apps Script Properties에 반영
 - 기존 Apps Script Web App deployment id를 유지한 채 임시 설정 endpoint를 열었다 닫음
 
@@ -366,11 +380,7 @@ Actions → Update admin password → 가장 최근 실행 → success
 https://cha-amu.github.io/admin/
 ```
 
-선택 사항:
-
-- 원문 비밀번호를 GitHub Secret에 계속 두기 싫으면 workflow 성공 후 `Settings → Secrets and variables → Actions → Secrets`에서 `ADMIN_PASSWORD`를 삭제해도 된다.
-- 다음에 또 GitHub UI로 비밀번호를 바꾸려면 `ADMIN_PASSWORD`를 다시 만들어야 한다.
-- `SPREADSHEET_ID`는 workflow 실행에 계속 필요하므로 삭제하지 않는다.
+`ADMIN_PASSWORD`, `ADMIN_PASSWORD_PEPPER`, `ADMIN_SESSION_SECRET`, `GUESTBOOK_SERVER_PEPPER`, `SPREADSHEET_ID`, `GATEWAY_SHARED_SECRET`은 이후 Apps Script 배포에도 필요하므로 삭제하지 않는다.
 
 ## 8. Apps Script Properties를 GitHub UI에서 바꾸는 게 아닌 이유
 
@@ -439,14 +449,17 @@ Apps Script health 확인:
 
 확인할 것:
 
-- GitHub Variables의 `VITE_APPS_SCRIPT_URL`이 현재 `/exec` URL인지 확인
+- `https://cha-amu-gateway.yiyaaang.workers.dev/health`가 200인지 확인
+- GitHub Variables의 `VITE_API_URL`이 Worker `/api` URL인지 확인
 - Variables 수정 후 `Deploy site to GitHub Pages` workflow를 다시 실행했는지 확인
-- Apps Script URL의 health endpoint가 정상인지 확인
+- Worker의 `APPS_SCRIPT_URL` secret과 D1 binding이 설정됐는지 확인
 
 ### 관리자 로그인이 안 됨
 
 확인할 것:
 
 - Apps Script Properties에 `ADMIN_PASSWORD_HASH`, `ADMIN_PASSWORD_PEPPER`, `ADMIN_SESSION_SECRET`이 있는지 확인
+- Apps Script Properties와 Worker의 `GATEWAY_SHARED_SECRET`이 같은지 확인
+- Turnstile 위젯 hostname에 `cha-amu.github.io`가 등록됐는지 확인
 - 로컬에서 `npm run sync:apps-script-env`를 다시 실행했는지 확인
 - Apps Script Web App 배포가 최신 코드인지 확인

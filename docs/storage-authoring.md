@@ -232,7 +232,7 @@ https://cha-amu.github.io/storage/manifests/posts.json
 STORAGE_SYNC_DRY_RUN=1 npm run sync
 ```
 
-실제 Sheets까지 쓰는 로컬 sync는 `APPS_SCRIPT_URL`과 `ADMIN_PASSWORD`가 필요하므로, 보통은 GitHub Actions 수동 실행을 쓴다.
+실제 Sheets까지 쓰는 로컬 sync는 `API_URL`, `ADMIN_PASSWORD`, `STORAGE_SYNC_SECRET`이 필요하므로, 보통은 GitHub Actions 수동 실행을 쓴다. `API_URL`은 Apps Script 원본이 아니라 `https://cha-amu-gateway.yiyaaang.workers.dev/api`를 사용한다.
 
 ## 직접 편집하지 않는 파일
 

@@ -34,7 +34,8 @@ function loadAppsScript() {
   };
 
   const properties = new Map([
-    ['GUESTBOOK_SERVER_PEPPER', 'guestbook-test-pepper-00000000000000000000000000000000']
+    ['GUESTBOOK_SERVER_PEPPER', 'guestbook-test-pepper-00000000000000000000000000000000'],
+    ['GATEWAY_SHARED_SECRET', 'gateway-test-secret-000000000000000000000000000000000']
   ]);
 
   const context = vm.createContext({
@@ -65,7 +66,8 @@ function loadAppsScript() {
   return {
     appended,
     cacheValues,
-    createGuestbook: vm.runInContext('createGuestbook_', context)
+    createGuestbook: vm.runInContext('createGuestbook_', context),
+    route: vm.runInContext('route_', context)
   };
 }
 
@@ -76,6 +78,7 @@ function input(overrides = {}) {
     deletePassword: 'delete-password',
     clientId: 'guestbook-client-0001',
     turnstileToken: '',
+    gatewayEntryId: '00000000-0000-4000-8000-000000000001',
     website: '',
     ...overrides
   };
@@ -91,6 +94,35 @@ test('빈 이름은 ㅇㅁ으로 저장하고 메시지 공백은 정리한다',
   assert.equal(app.appended[0].object.name, 'ㅇㅁ');
   assert.equal('clientId' in app.appended[0].object, false);
   assert.equal('website' in app.appended[0].object, false);
+});
+
+test('보호 액션은 게이트웨이 인증 없이는 라우팅되지 않는다', () => {
+  const app = loadAppsScript();
+
+  assert.throws(
+    () => app.route('guestbook.create', input()),
+    /gateway authentication failed/i
+  );
+  assert.equal(app.appended.length, 0);
+});
+
+test('게이트웨이가 발급한 글 ID를 시트와 응답에서 그대로 사용한다', () => {
+  const app = loadAppsScript();
+  const result = app.route('guestbook.create', input({
+    gatewaySecret: 'gateway-test-secret-000000000000000000000000000000000',
+    gatewayEntryId: '10000000-0000-4000-8000-000000000001'
+  }));
+
+  assert.equal(result.id, '10000000-0000-4000-8000-000000000001');
+  assert.equal(app.appended[0].object.id, result.id);
+});
+
+test('게이트웨이 글 ID가 없거나 UUID v4가 아니면 저장하지 않는다', () => {
+  const app = loadAppsScript();
+
+  assert.throws(() => app.createGuestbook(input({ gatewayEntryId: '' })), /entry id is missing/i);
+  assert.throws(() => app.createGuestbook(input({ gatewayEntryId: 'client-chosen-id' })), /entry id is missing/i);
+  assert.equal(app.appended.length, 0);
 });
 
 test('입력한 이름은 공백만 정리해 유지한다', () => {

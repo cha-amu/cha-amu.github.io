@@ -4,7 +4,7 @@ type IconProps = {
 
 // Icon paths are from Lucide Static v1.23.0 (ISC License):
 // search, book-open-text, sliders-horizontal, x, arrow-up, chevron-down, trash-2,
-// log-out, eye-off, rotate-ccw.
+// log-out, eye-off, rotate-ccw, shield-ban, shield-check.
 const iconProps = {
   viewBox: '0 0 24 24',
   fill: 'none',
@@ -118,6 +118,24 @@ export function RestoreIcon({ className = 'tool-icon-svg' }: IconProps) {
     <svg className={className} {...iconProps}>
       <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
       <path d="M3 3v5h5" />
+    </svg>
+  );
+}
+
+export function ShieldBanIcon({ className = 'tool-icon-svg' }: IconProps) {
+  return (
+    <svg className={className} {...iconProps}>
+      <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" />
+      <path d="m4.243 5.21 14.39 12.472" />
+    </svg>
+  );
+}
+
+export function ShieldCheckIcon({ className = 'tool-icon-svg' }: IconProps) {
+  return (
+    <svg className={className} {...iconProps}>
+      <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" />
+      <path d="m9 12 2 2 4-4" />
     </svg>
   );
 }

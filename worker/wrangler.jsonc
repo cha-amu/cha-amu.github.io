@@ -1,0 +1,37 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "cha-amu-gateway",
+  "main": "src/index.js",
+  "compatibility_date": "2026-07-11",
+  "workers_dev": true,
+  "preview_urls": false,
+  "vars": {
+    "ALLOWED_ORIGIN": "https://cha-amu.github.io",
+    "TURNSTILE_EXPECTED_HOSTNAME": "cha-amu.github.io"
+  },
+  "d1_databases": [
+    {
+      "binding": "SECURITY_DB",
+      "database_name": "cha-amu-security",
+      "database_id": "250bb811-d3fc-4ac8-b502-0d8b4d36ef1c",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "ratelimits": [
+    {
+      "name": "GUESTBOOK_CREATE_RATE_LIMITER",
+      "namespace_id": "1101",
+      "simple": { "limit": 5, "period": 60 }
+    },
+    {
+      "name": "GUESTBOOK_DELETE_RATE_LIMITER",
+      "namespace_id": "1102",
+      "simple": { "limit": 20, "period": 60 }
+    },
+    {
+      "name": "ADMIN_LOGIN_RATE_LIMITER",
+      "namespace_id": "1103",
+      "simple": { "limit": 10, "period": 60 }
+    }
+  ]
+}

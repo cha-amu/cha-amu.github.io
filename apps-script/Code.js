@@ -40,8 +40,7 @@ const PUBLIC_CACHE_KEYS = {
   guestbook: 'public:guestbook:v1'
 };
 const RATE_LIMITS = {
-  adminLoginBurst: { key: 'admin-login-burst', limit: 1, windowSeconds: 2, message: '로그인 시도가 너무 빠릅니다. 잠시 후 다시 시도하세요.' },
-  adminLoginWindow: { key: 'admin-login-window', limit: 8, windowSeconds: 300, message: '로그인 시도가 너무 많습니다. 5분 후 다시 시도하세요.' },
+  adminLoginEmergencyWindow: { key: 'admin-login-emergency-window', limit: 120, windowSeconds: 3600, message: '관리자 로그인 요청이 일시적으로 많습니다. 나중에 다시 시도하세요.' },
   guestbookCreateBurst: { key: 'guestbook-create-burst', limit: 1, windowSeconds: 10, message: '방명록 작성이 너무 빠릅니다. 잠시 후 다시 시도하세요.' },
   guestbookCreateWindow: { key: 'guestbook-create-window', limit: 12, windowSeconds: 3600, message: '방명록 작성이 너무 많습니다. 나중에 다시 시도하세요.' },
   guestbookClientDuplicateWindow: { key: 'guestbook-client-duplicate-window', limit: 1, windowSeconds: 600, message: '같은 메시지가 반복되어 잠시 제한했습니다.' },
@@ -92,6 +91,7 @@ function health_() {
 }
 
 function route_(action, body) {
+  if (!isPublicAction_(action) && action !== 'setup.properties') requireGateway_(body.gatewaySecret);
   switch (action) {
     case 'post.listPublic': return listPublicPosts_();
     case 'guestbook.listPublic': return listPublicGuestbook_();
@@ -99,6 +99,7 @@ function route_(action, body) {
     case 'guestbook.create': return createGuestbook_(body);
     case 'guestbook.hideByPassword': return hideGuestbookByPassword_(body);
     case 'admin.login': return adminLogin_(body);
+    case 'admin.session.verify': requireAdmin_(body.token); return { valid: true };
     case 'admin.session.refresh': requireAdmin_(body.token); return createAdminSession_();
     case 'admin.post.list': requireAdmin_(body.token); return rowsToObjects_(SHEETS.posts);
     case 'admin.post.save': requireAdmin_(body.token); return savePost_(body.post);
@@ -110,6 +111,15 @@ function route_(action, body) {
     case 'admin.assetOverride.save': requireAdmin_(body.token); return saveAssetOverride_(body.override);
     default: throw new Error('Unknown action: ' + action);
   }
+}
+
+function isPublicAction_(action) {
+  return action === 'post.listPublic' || action === 'guestbook.listPublic' || action === 'assetOverride.listPublic';
+}
+
+function requireGateway_(secret) {
+  const expected = getRequiredProperty_('GATEWAY_SHARED_SECRET');
+  assert_(constantTimeEqual_(expected, secret), 'Security gateway authentication failed.');
 }
 
 function listPublicPosts_() {
@@ -131,15 +141,16 @@ function listPublicAssetOverrides_() {
 }
 
 function createGuestbook_(body) {
+  const gatewayEntryId = String(body.gatewayEntryId || '').trim();
   const name = String(body.name || '').trim() || DEFAULT_GUESTBOOK_NAME;
   const message = String(body.message || '').trim().slice(0, 1000);
   const deletePassword = String(body.deletePassword || '');
   assert_(!String(body.website || '').trim(), '요청을 처리할 수 없습니다.');
   assert_(message && deletePassword, '메시지와 비밀번호를 입력해야 합니다.');
+  assert_(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(gatewayEntryId), 'Security gateway entry id is missing.');
   const clientScope = guestbookClientScope_(body);
   enforceRateLimit_(scopedRateLimit_(RATE_LIMITS.guestbookCreateBurst, clientScope));
   enforceRateLimit_(scopedRateLimit_(RATE_LIMITS.guestbookCreateWindow, clientScope));
-  verifyTurnstile_(body.turnstileToken);
   const messageKey = guestbookMessageKey_(message);
   enforceRateLimit_(scopedRateLimit_(RATE_LIMITS.guestbookClientDuplicateWindow, clientScope + ':' + messageKey));
   if (normalizeGuestbookMessage_(message).length >= 20) {
@@ -149,7 +160,7 @@ function createGuestbook_(body) {
   const salt = Utilities.getUuid();
   const passwordHash = hashPassword_(deletePassword, salt);
   const entry = {
-    id: Utilities.getUuid(),
+    id: gatewayEntryId,
     name: name.slice(0, 40),
     message,
     status: 'visible',
@@ -199,8 +210,7 @@ function hideGuestbookByPassword_(body) {
 }
 
 function adminLogin_(body) {
-  enforceRateLimit_(RATE_LIMITS.adminLoginBurst);
-  enforceRateLimit_(RATE_LIMITS.adminLoginWindow);
+  enforceRateLimit_(RATE_LIMITS.adminLoginEmergencyWindow);
   const expected = getRequiredProperty_('ADMIN_PASSWORD_HASH', 32);
   const actual = sha256Hex_(String(body.password || '') + getRequiredProperty_('ADMIN_PASSWORD_PEPPER'));
   assert_(constantTimeEqual_(expected, actual), '관리자 비밀번호가 맞지 않습니다.');
@@ -314,11 +324,6 @@ function adminRestoreGuestbook_(body) {
   throw new Error('Guestbook entry not found.');
 }
 
-function verifyTurnstile_(_) {
-  // Turnstile is intentionally disabled for the current deployment.
-  // Re-enable with UrlFetchApp and script.external_request scope when spam protection is added.
-  return { skipped: true, reason: 'Turnstile disabled.' };
-}
 function rowsToObjects_(sheetName) {
   const values = getSheet_(sheetName).getDataRange().getValues();
   if (values.length < 2) return [];

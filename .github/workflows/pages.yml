@@ -29,11 +29,11 @@ jobs:
         run: npm ci
       - name: Build
         env:
-          VITE_APPS_SCRIPT_URL: ${{ vars.VITE_APPS_SCRIPT_URL }}
+          VITE_API_URL: ${{ vars.VITE_API_URL || 'https://cha-amu-gateway.yiyaaang.workers.dev/api' }}
           VITE_STORAGE_BASE_URL: ${{ vars.VITE_STORAGE_BASE_URL || 'https://cha-amu.github.io/storage' }}
           VITE_ARCHIVE_MANIFEST_URL: ${{ vars.VITE_ARCHIVE_MANIFEST_URL || 'https://cha-amu.github.io/storage/manifests/assets.json' }}
           VITE_STORAGE_POSTS_MANIFEST_URL: ${{ vars.VITE_STORAGE_POSTS_MANIFEST_URL || 'https://cha-amu.github.io/storage/manifests/posts.json' }}
-          VITE_TURNSTILE_SITE_KEY: ${{ vars.VITE_TURNSTILE_SITE_KEY }}
+          VITE_TURNSTILE_SITE_KEY: ${{ vars.VITE_TURNSTILE_SITE_KEY || '0x4AAAAAADzr-jSxSMZf9xcv' }}
           VITE_ADMIN_IDLE_TIMEOUT_MS: ${{ vars.VITE_ADMIN_IDLE_TIMEOUT_MS || '60000' }}
         run: npm run build
       - name: Upload artifact

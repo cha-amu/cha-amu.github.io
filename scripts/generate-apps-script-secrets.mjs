@@ -74,7 +74,7 @@ const values = {
   GUESTBOOK_SERVER_PEPPER: env.GUESTBOOK_SERVER_PEPPER || randomHex(),
   GUESTBOOK_PASSWORD_ITERATIONS: env.GUESTBOOK_PASSWORD_ITERATIONS || '1',
   ADMIN_SESSION_TTL_MS: env.ADMIN_SESSION_TTL_MS || '60000',
-  TURNSTILE_SECRET_KEY: env.TURNSTILE_SECRET_KEY || ''
+  GATEWAY_SHARED_SECRET: env.GATEWAY_SHARED_SECRET || randomHex()
 };
 
 values.ADMIN_PASSWORD_HASH = createHash('sha256')
@@ -96,9 +96,9 @@ for (const key of [
   'GUESTBOOK_SERVER_PEPPER',
   'GUESTBOOK_PASSWORD_ITERATIONS',
   'ADMIN_SESSION_TTL_MS',
-  'TURNSTILE_SECRET_KEY'
+  'GATEWAY_SHARED_SECRET'
 ]) {
   console.log(`${key}=${values[key]}`);
 }
 
-console.log('\n네가 직접 정할 값은 ADMIN_PASSWORD 하나뿐입니다. 나머지는 자동 생성값입니다.');
+console.log('\n네가 직접 정할 값은 ADMIN_PASSWORD 하나뿐입니다. GATEWAY_SHARED_SECRET을 포함한 나머지는 자동 생성값입니다.');

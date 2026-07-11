@@ -1,31 +1,48 @@
-import { config, isAppsScriptConfigured } from '../config';
+import { config, isApiConfigured } from '../config';
 import { mockGuestbook, mockPosts } from '../data/mockData';
-import type { AdminSession, ApiEnvelope, AssetOverride, GuestbookEntry, Post } from '../types';
+import type { AdminSession, ApiEnvelope, AssetOverride, GuestbookAdminEntry, GuestbookEntry, Post } from '../types';
 import { readCache, readCachePayload, writeCache, type CachePayload } from '../utils/localCache';
 
 export class ApiNotConfiguredError extends Error {
   constructor() {
-    super('Apps Script URL is not configured. Set VITE_APPS_SCRIPT_URL.');
+    super('API URL is not configured. Set VITE_API_URL.');
     this.name = 'ApiNotConfiguredError';
   }
 }
 
-async function request<T>(action: string, payload: Record<string, unknown> = {}): Promise<T> {
-  if (!isAppsScriptConfigured) throw new ApiNotConfiguredError();
+export class ApiRequestError extends Error {
+  readonly status: number;
+  readonly code?: string;
 
-  const response = await fetch(config.appsScriptUrl, {
+  constructor(message: string, status: number, code?: string) {
+    super(message);
+    this.name = 'ApiRequestError';
+    this.status = status;
+    this.code = code;
+  }
+}
+
+async function request<T>(action: string, payload: Record<string, unknown> = {}): Promise<T> {
+  if (!isApiConfigured) throw new ApiNotConfiguredError();
+
+  const usesGateway = Boolean(config.gatewayUrl && config.apiUrl === config.gatewayUrl);
+
+  const response = await fetch(config.apiUrl, {
     method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    headers: { 'Content-Type': usesGateway ? 'application/json' : 'text/plain;charset=utf-8' },
     body: JSON.stringify({ action, ...payload })
   });
 
-  if (!response.ok) {
-    throw new Error(`Apps Script request failed: ${response.status}`);
+  let envelope: ApiEnvelope<T> | null = null;
+  try {
+    envelope = (await response.json()) as ApiEnvelope<T>;
+  } catch (_) {
+    if (!response.ok) throw new ApiRequestError(`API 요청에 실패했습니다. (${response.status})`, response.status);
+    throw new ApiRequestError('API 응답 형식이 올바르지 않습니다.', response.status);
   }
 
-  const envelope = (await response.json()) as ApiEnvelope<T>;
-  if (!envelope.ok) {
-    throw new Error(envelope.error || 'Apps Script returned an error.');
+  if (!response.ok || !envelope.ok) {
+    throw new ApiRequestError(envelope.error || `API 요청에 실패했습니다. (${response.status})`, response.status, envelope.code);
   }
   return envelope.data as T;
 }
@@ -182,7 +199,7 @@ export async function hideGuestbookEntry(input: { id: string; deletePassword: st
   return request<{ id: string }>('guestbook.hideByPassword', { ...input, clientId: getGuestbookClientId() });
 }
 
-export async function adminLogin(input: { password: string }): Promise<AdminSession> {
+export async function adminLogin(input: { password: string; turnstileToken: string }): Promise<AdminSession> {
   return request<AdminSession>('admin.login', input);
 }
 
@@ -198,8 +215,8 @@ export async function adminSavePost(token: string, post: Partial<Post>): Promise
   return request<Post>('admin.post.save', { token, post });
 }
 
-export async function adminListGuestbook(token: string): Promise<GuestbookEntry[]> {
-  return request<GuestbookEntry[]>('admin.guestbook.list', { token });
+export async function adminListGuestbook(token: string): Promise<GuestbookAdminEntry[]> {
+  return request<GuestbookAdminEntry[]>('admin.guestbook.list', { token });
 }
 
 export async function adminHideGuestbook(token: string, id: string, hiddenReason: string): Promise<{ id: string }> {
@@ -208,6 +225,18 @@ export async function adminHideGuestbook(token: string, id: string, hiddenReason
 
 export async function adminRestoreGuestbook(token: string, id: string): Promise<{ id: string }> {
   return request<{ id: string }>('admin.guestbook.restore', { token, id });
+}
+
+export async function adminBanGuestbookIp(token: string, entryId: string): Promise<{ entryId: string; relatedEntryCount?: number }> {
+  return request<{ entryId: string; relatedEntryCount?: number }>('admin.guestbook.ip.ban', {
+    token,
+    entryId,
+    reason: '관리자 수동 차단'
+  });
+}
+
+export async function adminUnbanGuestbookIp(token: string, entryId: string): Promise<{ entryId: string; relatedEntryCount?: number }> {
+  return request<{ entryId: string; relatedEntryCount?: number }>('admin.guestbook.ip.unban', { token, entryId });
 }
 
 export async function adminListAssetOverrides(token: string): Promise<AssetOverride[]> {

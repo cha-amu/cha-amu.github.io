@@ -1,0 +1,5 @@
+APPS_SCRIPT_URL=https://script.google.com/macros/s/REPLACE_ME/exec
+GATEWAY_SHARED_SECRET=replace-with-at-least-32-random-characters
+IP_HASH_SECRET=replace-with-a-different-32-character-secret
+TURNSTILE_SECRET_KEY=replace-with-cloudflare-turnstile-secret
+STORAGE_SYNC_SECRET=replace-with-a-third-32-character-secret

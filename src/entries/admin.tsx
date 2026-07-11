@@ -1,16 +1,17 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { loadArchiveManifest } from '../api/archiveManifestClient';
-import { adminHideGuestbook, adminListAssetOverrides, adminListGuestbook, adminListPosts, adminLogin, adminRefreshSession, adminRestoreGuestbook, adminSaveAssetOverride, adminSavePost, listGuestbook } from '../api/appsScriptClient';
+import { adminBanGuestbookIp, adminHideGuestbook, adminListAssetOverrides, adminListGuestbook, adminListPosts, adminLogin, adminRefreshSession, adminRestoreGuestbook, adminSaveAssetOverride, adminSavePost, adminUnbanGuestbookIp, listGuestbook } from '../api/appsScriptClient';
 import { AppLayout } from '../components/AppLayout';
 import { BackToTopButton } from '../components/BackToTopButton';
 import { IncrementalLoadMore } from '../components/IncrementalLoadMore';
 import { MarkdownView } from '../components/MarkdownView';
 import { EmptyState } from '../components/PageState';
 import { TagList } from '../components/TagList';
-import { CloseIcon, EyeOffIcon, LogOutIcon, RestoreIcon } from '../components/ToolIcons';
+import { CloseIcon, EyeOffIcon, LogOutIcon, RestoreIcon, ShieldBanIcon, ShieldCheckIcon } from '../components/ToolIcons';
+import { TurnstileBox } from '../components/TurnstileBox';
 import { useIncrementalItems } from '../hooks/useIncrementalItems';
 import { syncPublicPost } from '../stores/publicDataStore';
-import type { ArchiveAsset, AssetOverride, GuestbookEntry, Post } from '../types';
+import type { ArchiveAsset, AssetOverride, GuestbookAdminEntry, GuestbookEntry, Post } from '../types';
 import { formatDate } from '../utils/date';
 import { clearAdminSession, loadAdminSession, refreshAdminSession, saveAdminSession } from '../utils/session';
 import { splitTags } from '../utils/strings';
@@ -79,20 +80,28 @@ function sortPostsByNewest(posts: Post[]) {
 function LoginPanel({ onLogin, initialMessage = '' }: { onLogin: () => void; initialMessage?: string }) {
   const [message, setMessage] = useState(initialMessage);
   const [saving, setSaving] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState('');
+  const [turnstileResetKey, setTurnstileResetKey] = useState(0);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const password = String(new FormData(event.currentTarget).get('password') || '');
+    if (!turnstileToken) {
+      setMessage('사람인지 확인을 완료해 주세요.');
+      return;
+    }
     setSaving(true);
     setMessage('');
     try {
-      const session = await adminLogin({ password });
+      const session = await adminLogin({ password, turnstileToken });
       saveAdminSession(session);
       onLogin();
     } catch (err) {
       setMessage(err instanceof Error ? err.message : '로그인에 실패했습니다.');
     } finally {
       setSaving(false);
+      setTurnstileToken('');
+      setTurnstileResetKey((key) => key + 1);
     }
   };
 
@@ -109,6 +118,7 @@ function LoginPanel({ onLogin, initialMessage = '' }: { onLogin: () => void; ini
           <label htmlFor="admin-password">관리자 비밀번호</label>
           <input id="admin-password" name="password" type="password" autoComplete="current-password" required />
         </div>
+        <TurnstileBox action="admin_login" onTokenChange={setTurnstileToken} resetKey={turnstileResetKey} />
         {message ? <p className="status-message status-message--danger">{message}</p> : null}
         <button className="button button--primary" type="submit" disabled={saving}>{saving ? '확인 중' : '로그인'}</button>
       </form>
@@ -118,7 +128,11 @@ function LoginPanel({ onLogin, initialMessage = '' }: { onLogin: () => void; ini
 
 function isAdminSessionError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error || '');
-  return message.includes('Admin session expired') || message.includes('Invalid admin session') || message.includes('Admin session is required');
+  return message.includes('Admin session expired')
+    || message.includes('Invalid admin session')
+    || message.includes('Admin session is required')
+    || message.includes('관리자 로그인이 필요합니다')
+    || message.includes('관리자 로그인이 만료되었습니다');
 }
 
 function PostsAdmin({ token, onSessionExpired }: { token: string; onSessionExpired: () => void }) {
@@ -404,7 +418,7 @@ function AssetsAdmin({ token, onSessionExpired }: { token: string; onSessionExpi
 }
 
 function GuestbookAdmin({ token, onSessionExpired }: { token: string; onSessionExpired: () => void }) {
-  const [entries, setEntries] = useState<GuestbookEntry[]>([]);
+  const [entries, setEntries] = useState<GuestbookAdminEntry[]>([]);
   const [filter, setFilter] = useState<GuestbookFilter>('all');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(true);
@@ -493,6 +507,36 @@ function GuestbookAdmin({ token, onSessionExpired }: { token: string; onSessionE
     }
   };
 
+  const updateIpBlock = async (entry: GuestbookAdminEntry, blocked: boolean) => {
+    if (!entry.ipBanAvailable) return;
+    if (blocked && !window.confirm('이 글 작성자의 IP를 방명록 작성 차단 목록에 추가할까요?\n차단 해제 전까지 새 글을 남길 수 없습니다.')) return;
+
+    setChangingId(entry.id);
+    setMessage('');
+    try {
+      const result = blocked
+        ? await adminBanGuestbookIp(token, entry.id)
+        : await adminUnbanGuestbookIp(token, entry.id);
+      const relatedEntryCount = result.relatedEntryCount ?? entry.relatedEntryCount;
+      setEntries((items) => items.map((item) => item.id === entry.id
+        ? { ...item, ipBlocked: blocked, relatedEntryCount }
+        : item));
+      const relatedNote = relatedEntryCount && relatedEntryCount > 1 ? ` 같은 IP로 연결된 글은 ${relatedEntryCount}개입니다.` : '';
+      setMessage(blocked ? `이 작성자의 IP를 차단했습니다.${relatedNote}` : `이 작성자의 IP 차단을 해제했습니다.${relatedNote}`);
+      try {
+        const refreshedEntries = await adminListGuestbook(token);
+        setEntries([...refreshedEntries].sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+      } catch (_) {
+        // The mutation already succeeded; keep the updated target row if refresh is unavailable.
+      }
+    } catch (err) {
+      if (isAdminSessionError(err)) { onSessionExpired(); return; }
+      setMessage(err instanceof Error ? err.message : blocked ? 'IP 차단에 실패했습니다.' : 'IP 차단 해제에 실패했습니다.');
+    } finally {
+      setChangingId('');
+    }
+  };
+
   return (
     <section className="admin-guestbook">
       <header className="panel admin-guestbook-toolbar">
@@ -532,16 +576,39 @@ function GuestbookAdmin({ token, onSessionExpired }: { token: string; onSessionE
               {entry.hiddenReason ? <p className="admin-guestbook-row__reason">숨김 사유: {entry.hiddenReason}</p> : null}
               <div className="admin-guestbook-row__footer">
                 <time className="meta" dateTime={entry.createdAt}>{formatDate(entry.createdAt)}</time>
-                {entry.status === 'visible' ? (
-                  <button className="admin-row-action admin-row-action--danger" type="button" onClick={() => { setHideTarget(entry); setHiddenReason(''); }} disabled={Boolean(changingId)}>
-                    <EyeOffIcon /> 숨기기
-                  </button>
-                ) : null}
-                {entry.status === 'hidden' ? (
-                  <button className="admin-row-action" type="button" onClick={() => restore(entry)} disabled={Boolean(changingId)}>
-                    <RestoreIcon /> {changingId === entry.id ? '복구 중' : '다시 보이기'}
-                  </button>
-                ) : null}
+                <div className="admin-guestbook-row__controls">
+                  <span className={`admin-ip-status ${entry.ipBlocked ? 'admin-ip-status--blocked' : ''}`}>
+                    {entry.ipBlocked
+                      ? 'IP 차단 중'
+                      : entry.ipBanAvailable
+                        ? entry.relatedEntryCount && entry.relatedEntryCount > 1
+                          ? `IP 차단 가능 · 연결 ${entry.relatedEntryCount}개`
+                          : 'IP 차단 가능'
+                        : 'IP 정보 없음'}
+                  </span>
+                  {entry.ipBanAvailable ? (
+                    <button
+                      className={`admin-ip-action ${entry.ipBlocked ? 'admin-ip-action--restore' : 'admin-ip-action--danger'}`}
+                      type="button"
+                      onClick={() => updateIpBlock(entry, !entry.ipBlocked)}
+                      disabled={Boolean(changingId)}
+                      aria-label={entry.ipBlocked ? `${entry.name} 작성자의 IP 차단 해제` : `${entry.name} 작성자의 IP 차단`}
+                      title={entry.ipBlocked ? 'IP 차단 해제' : 'IP 차단'}
+                    >
+                      {entry.ipBlocked ? <ShieldCheckIcon /> : <ShieldBanIcon />}
+                    </button>
+                  ) : null}
+                  {entry.status === 'visible' ? (
+                    <button className="admin-row-action admin-row-action--danger" type="button" onClick={() => { setHideTarget(entry); setHiddenReason(''); }} disabled={Boolean(changingId)}>
+                      <EyeOffIcon /> 숨기기
+                    </button>
+                  ) : null}
+                  {entry.status === 'hidden' ? (
+                    <button className="admin-row-action" type="button" onClick={() => restore(entry)} disabled={Boolean(changingId)}>
+                      <RestoreIcon /> {changingId === entry.id ? '복구 중' : '다시 보이기'}
+                    </button>
+                  ) : null}
+                </div>
               </div>
             </article>
           ))}
