@@ -43,7 +43,7 @@ function normalizeTags(value: unknown): string[] {
 }
 
 function statusFrom(value: unknown): Post['status'] {
-  return value === 'published' || value === 'draft' || value === 'hidden' ? value : 'published';
+  return value === 'published' || value === 'draft' || value === 'hidden' || value === 'deleted' ? value : 'published';
 }
 
 function absoluteStorageUrl(pathOrUrl: string): string {

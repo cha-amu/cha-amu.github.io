@@ -8,6 +8,11 @@ const APP_URL = 'https://apps-script.test/exec';
 const ORIGIN = 'https://cha-amu.github.io';
 const RAW_IP = '203.0.113.42';
 const CREATED_ID = '11111111-1111-4111-8111-111111111111';
+const DELETE_ACTIONS = new Set([
+  'admin.post.bulkDelete',
+  'admin.guestbook.bulkDelete',
+  'admin.assetOverride.delete'
+]);
 
 class FakeD1Statement {
   constructor(database, sql) {
@@ -50,13 +55,11 @@ class FakeD1Statement {
   }
 
   async all() {
-    if (this.sql.includes("WHERE state = 'pending'") && this.sql.startsWith('SELECT entry_id')) {
+    if (this.sql.startsWith('SELECT entry_id, state FROM guestbook_entry_ips')) {
       return {
         success: true,
         results: Array.from(this.database.mappings.entries())
-          .filter(([, mapping]) => mapping.state === 'pending')
-          .slice(0, 100)
-          .map(([entryId]) => ({ entry_id: entryId }))
+          .map(([entryId, mapping]) => ({ entry_id: entryId, state: mapping.state }))
       };
     }
     if (!this.sql.includes('FROM guestbook_entry_ips m')) {
@@ -133,6 +136,12 @@ class FakeD1Statement {
     }
     if (this.sql.startsWith('DELETE FROM guestbook_entry_ips')) {
       const mapping = this.database.mappings.get(this.values[0]);
+      if (!this.sql.includes("state = 'pending'")) {
+        if (this.database.failMappingCleanup) throw new Error('simulated D1 cleanup outage');
+        if (!mapping) return changed(0);
+        this.database.mappings.delete(this.values[0]);
+        return changed(1);
+      }
       if (!mapping || mapping.state !== 'pending') return changed(0);
       this.database.mappings.delete(this.values[0]);
       return changed(1);
@@ -179,6 +188,7 @@ class FakeD1 {
     this.bans = new Map();
     this.events = [];
     this.failActivationOnce = false;
+    this.failMappingCleanup = false;
   }
 
   prepare(sql) {
@@ -406,7 +416,8 @@ test('admin list exposes only ban state and related count, never the IP hash', a
       ok: true,
       data: [
         { id: 'mapped', message: 'mapped entry' },
-        { id: 'legacy', message: 'legacy entry' }
+        { id: 'legacy', message: 'legacy entry' },
+        { id: 'related', message: 'related entry' }
       ]
     })
   });
@@ -663,4 +674,302 @@ test('protected actions fail closed when rate limiting is unavailable', async ()
   assert.equal(response.status, 503);
   assert.equal(appCalls.length, 0);
   assert.equal(turnstileCalls.length, 0);
+});
+
+test('bulk admin actions normalize and forward only their action-specific fields', async () => {
+  const { gateway, appCalls } = fixture({
+    appHandler: (body) => DELETE_ACTIONS.has(body.action)
+      ? { ok: true, data: { deletedIds: body.ids } }
+      : { ok: true, data: {} }
+  });
+  const env = createEnv();
+  const cases = [
+    {
+      action: 'admin.post.bulkStatus',
+      payload: { token: ' admin-token ', ids: [' post-1 ', 'post-1', 'post-2'], status: 'draft' },
+      expected: { token: 'admin-token', ids: ['post-1', 'post-2'], status: 'draft' }
+    },
+    {
+      action: 'admin.post.bulkDelete',
+      payload: { token: 'admin-token', ids: ['post-1'] },
+      expected: { token: 'admin-token', ids: ['post-1'] }
+    },
+    {
+      action: 'admin.postDeletion.list',
+      payload: { token: 'admin-token' },
+      expected: { token: 'admin-token' },
+      trustedService: true
+    },
+    {
+      action: 'admin.postDeletion.finalize',
+      payload: {
+        token: 'admin-token',
+        deletions: [
+          { id: ' post-1 ', nonce: ' nonce-1 ' },
+          { id: 'post-1', nonce: 'nonce-1' },
+          { id: 'post-2', nonce: 'nonce-2' }
+        ]
+      },
+      expected: {
+        token: 'admin-token',
+        deletions: [
+          { id: 'post-1', nonce: 'nonce-1' },
+          { id: 'post-2', nonce: 'nonce-2' }
+        ]
+      },
+      trustedService: true
+    },
+    {
+      action: 'admin.guestbook.bulkStatus',
+      payload: {
+        token: 'admin-token',
+        ids: ['guestbook-1'],
+        status: 'hidden',
+        hiddenReason: ' repeated spam '
+      },
+      expected: {
+        token: 'admin-token',
+        ids: ['guestbook-1'],
+        status: 'hidden',
+        hiddenReason: 'repeated spam'
+      }
+    },
+    {
+      action: 'admin.guestbook.bulkDelete',
+      payload: { token: 'admin-token', ids: ['guestbook-1'] },
+      expected: { token: 'admin-token', ids: ['guestbook-1'] }
+    },
+    {
+      action: 'admin.assetOverride.bulkStatus',
+      payload: { token: 'admin-token', ids: ['asset-1'], status: 'deleted' },
+      expected: { token: 'admin-token', ids: ['asset-1'], status: 'deleted' }
+    },
+    {
+      action: 'admin.assetOverride.delete',
+      payload: { token: 'admin-token', ids: ['asset-1'] },
+      expected: { token: 'admin-token', ids: ['asset-1'] }
+    }
+  ];
+
+  for (const testCase of cases) {
+    const headers = testCase.trustedService
+      ? { Origin: '', Authorization: `Bearer ${env.STORAGE_SYNC_SECRET}` }
+      : {};
+    const response = await gateway.fetch(apiRequest(testCase.action, testCase.payload, headers), env);
+    assert.equal(response.status, 200, testCase.action);
+  }
+
+  assert.equal(appCalls.length, cases.length);
+  for (let index = 0; index < cases.length; index += 1) {
+    assert.deepEqual(appCalls[index].body, {
+      action: cases[index].action,
+      ...cases[index].expected,
+      gatewaySecret: env.GATEWAY_SHARED_SECRET
+    });
+  }
+});
+
+test('post deletion queue actions require the trusted storage sync bearer', async () => {
+  const env = createEnv();
+  const cases = [
+    ['admin.postDeletion.list', { token: 'admin-token' }],
+    ['admin.postDeletion.finalize', {
+      token: 'admin-token',
+      deletions: [{ id: 'post-1', nonce: 'nonce-1' }]
+    }]
+  ];
+
+  for (const [action, payload] of cases) {
+    const { gateway, appCalls } = fixture();
+    const adminOnly = await gateway.fetch(apiRequest(action, payload), env);
+    assert.equal(adminOnly.status, 403, action);
+    assert.equal(appCalls.length, 0, action);
+
+    const wrongBearer = await gateway.fetch(apiRequest(action, payload, {
+      Origin: '',
+      Authorization: 'Bearer wrong-storage-sync-secret-000000000000000'
+    }), env);
+    assert.equal(wrongBearer.status, 403, action);
+    assert.equal(appCalls.length, 0, action);
+
+    const trusted = await gateway.fetch(apiRequest(action, payload, {
+      Origin: '',
+      Authorization: `Bearer ${env.STORAGE_SYNC_SECRET}`
+    }), env);
+    assert.equal(trusted.status, 200, action);
+    assert.equal(appCalls.length, 1, action);
+    assert.equal(JSON.stringify(appCalls[0]).includes(env.STORAGE_SYNC_SECRET), false, action);
+  }
+});
+
+test('bulk admin actions reject unknown fields, invalid statuses, and malformed finalize pairs', async () => {
+  const invalidCases = [
+    ['admin.post.bulkStatus', { token: 'token', ids: ['post'], status: 'deleted' }],
+    ['admin.post.bulkStatus', { token: 'token', ids: ['post'], status: 'draft', hiddenReason: 'no' }],
+    ['admin.post.bulkDelete', { token: 'token', ids: ['post'], status: 'hidden' }],
+    ['admin.postDeletion.list', { token: 'token', ids: ['post'] }],
+    ['admin.postDeletion.finalize', {
+      token: 'token', deletions: [{ id: 'post', nonce: 'nonce', extra: true }]
+    }],
+    ['admin.postDeletion.finalize', {
+      token: 'token', deletions: [{ id: 'post', nonce: 'one' }, { id: 'post', nonce: 'two' }]
+    }],
+    ['admin.guestbook.bulkStatus', { token: 'token', ids: ['entry'], status: 'draft' }],
+    ['admin.guestbook.bulkStatus', { token: 'token', ids: ['entry'], status: 'hidden' }],
+    ['admin.guestbook.bulkStatus', {
+      token: 'token', ids: ['entry'], status: 'visible', hiddenReason: 'not allowed'
+    }],
+    ['admin.assetOverride.bulkStatus', { token: 'token', ids: ['asset'], status: 'draft' }],
+    ['admin.assetOverride.delete', { token: 'token', ids: ['asset'], status: 'deleted' }]
+  ];
+
+  for (const [action, payload] of invalidCases) {
+    const { gateway, appCalls } = fixture();
+    const env = createEnv();
+    const headers = action.startsWith('admin.postDeletion.')
+      ? { Origin: '', Authorization: `Bearer ${env.STORAGE_SYNC_SECRET}` }
+      : {};
+    const response = await gateway.fetch(apiRequest(action, payload, headers), env);
+    assert.equal(response.status, 400, action);
+    assert.equal(appCalls.length, 0, action);
+  }
+});
+
+test('bulk requests allow at most 100 unique ids after deduplication', async () => {
+  const ids = Array.from({ length: 100 }, (_, index) => `id-${index}`);
+  const { gateway, appCalls } = fixture({
+    appHandler: (body) => ({ ok: true, data: { deletedIds: body.ids } })
+  });
+  const env = createEnv();
+
+  const accepted = await gateway.fetch(apiRequest('admin.post.bulkDelete', {
+    token: 'token', ids: [...ids, ...ids]
+  }), env);
+  assert.equal(accepted.status, 200);
+  assert.deepEqual(appCalls[0].body.ids, ids);
+
+  const rejected = await gateway.fetch(apiRequest('admin.post.bulkDelete', {
+    token: 'token', ids: [...ids, 'id-100']
+  }), env);
+  assert.equal(rejected.status, 400);
+  assert.equal(appCalls.length, 1);
+
+  const rejectedFinalize = await gateway.fetch(apiRequest('admin.postDeletion.finalize', {
+    token: 'token',
+    deletions: [...ids, 'id-100'].map((id) => ({ id, nonce: `nonce-${id}` }))
+  }, {
+    Origin: '',
+    Authorization: `Bearer ${env.STORAGE_SYNC_SECRET}`
+  }), env);
+  assert.equal(rejectedFinalize.status, 400);
+  assert.equal(appCalls.length, 1);
+});
+
+test('guestbook bulk delete cleans only upstream-confirmed mappings after commit', async () => {
+  const database = new FakeD1();
+  database.mappings.set('deleted-entry', {
+    ipHash: 'a'.repeat(64), state: 'active', createdAt: '2026-07-10T00:00:00.000Z'
+  });
+  database.mappings.set('already-missing-entry', {
+    ipHash: 'b'.repeat(64), state: 'pending', createdAt: '2026-07-10T00:00:00.000Z'
+  });
+  database.mappings.set('unconfirmed-entry', {
+    ipHash: 'c'.repeat(64), state: 'active', createdAt: '2026-07-10T00:00:00.000Z'
+  });
+  database.bans.set(`guestbook.create:${'a'.repeat(64)}`, {
+    scope: 'guestbook.create', ipHash: 'a'.repeat(64), sourceEntryId: 'deleted-entry', revokedAt: null
+  });
+  database.events.push({ action: 'ban', sourceEntryId: 'deleted-entry' });
+  const bansBefore = structuredClone(Array.from(database.bans.entries()));
+  const eventsBefore = structuredClone(database.events);
+  const { gateway } = fixture({
+    appHandler: (body) => {
+      assert.equal(body.action, 'admin.guestbook.bulkDelete');
+      assert.equal(database.mappings.has('deleted-entry'), true);
+      assert.equal(database.mappings.has('already-missing-entry'), true);
+      return {
+        ok: true,
+        data: {
+          deletedIds: ['deleted-entry'],
+          alreadyMissingIds: ['already-missing-entry']
+        }
+      };
+    }
+  });
+
+  const response = await gateway.fetch(apiRequest('admin.guestbook.bulkDelete', {
+    token: 'admin-token',
+    ids: ['deleted-entry', 'already-missing-entry', 'unconfirmed-entry']
+  }), createEnv(database));
+
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).data, {
+    deletedIds: ['deleted-entry'],
+    alreadyMissingIds: ['already-missing-entry']
+  });
+  assert.equal(database.mappings.has('deleted-entry'), false);
+  assert.equal(database.mappings.has('already-missing-entry'), false);
+  assert.equal(database.mappings.has('unconfirmed-entry'), true);
+  assert.deepEqual(Array.from(database.bans.entries()), bansBefore);
+  assert.deepEqual(database.events, eventsBefore);
+});
+
+test('guestbook mapping cleanup retries through admin reconciliation after a transient D1 failure', async () => {
+  const database = new FakeD1();
+  database.mappings.set('committed-entry', { ipHash: 'd'.repeat(64), state: 'active' });
+  database.bans.set(`guestbook.create:${'d'.repeat(64)}`, {
+    scope: 'guestbook.create', ipHash: 'd'.repeat(64), sourceEntryId: 'committed-entry', revokedAt: null
+  });
+  database.failMappingCleanup = true;
+  const { gateway } = fixture({
+    appHandler: (body) => body.action === 'admin.guestbook.bulkDelete'
+      ? { ok: true, data: { deletedIds: ['committed-entry'] } }
+      : { ok: true, data: [] }
+  });
+  const env = createEnv(database);
+
+  const response = await gateway.fetch(apiRequest('admin.guestbook.bulkDelete', {
+    token: 'admin-token', ids: ['committed-entry']
+  }), env);
+
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).data, { deletedIds: ['committed-entry'] });
+  assert.equal(database.mappings.has('committed-entry'), true);
+
+  database.failMappingCleanup = false;
+  const listed = await gateway.fetch(apiRequest('admin.guestbook.list', { token: 'admin-token' }), env);
+  assert.equal(listed.status, 200);
+  assert.equal(database.mappings.has('committed-entry'), false);
+  assert.equal(database.bans.has(`guestbook.create:${'d'.repeat(64)}`), true);
+});
+
+test('delete responses cannot confirm ids outside the requested set', async () => {
+  for (const action of DELETE_ACTIONS) {
+    const database = new FakeD1();
+    database.mappings.set('requested', { ipHash: 'e'.repeat(64), state: 'active' });
+    const { gateway } = fixture({
+      appHandler: () => ({ ok: true, data: { deletedIds: ['not-requested'] } })
+    });
+
+    const response = await gateway.fetch(apiRequest(action, {
+      token: 'admin-token', ids: ['requested']
+    }), createEnv(database));
+
+    assert.equal(response.status, 502, action);
+    assert.equal(database.mappings.has('requested'), true, action);
+  }
+});
+
+test('guestbook mapping cleanup does not run when upstream rejects the delete', async () => {
+  const database = new FakeD1();
+  database.mappings.set('rejected-entry', { ipHash: 'f'.repeat(64), state: 'active' });
+  const { gateway } = fixture({ appHandler: () => ({ ok: false, error: 'rejected' }) });
+
+  const response = await gateway.fetch(apiRequest('admin.guestbook.bulkDelete', {
+    token: 'admin-token', ids: ['rejected-entry']
+  }), createEnv(database));
+
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).ok, false);
+  assert.equal(database.mappings.has('rejected-entry'), true);
 });

@@ -48,7 +48,14 @@ async function request<T>(action: string, payload: Record<string, unknown> = {})
   return envelope.data as T;
 }
 
+function requireArrayResponse<T>(value: unknown): T[] {
+  if (!Array.isArray(value)) throw new ApiRequestError(translate('errors.invalidApiResponse'), 502);
+  return value as T[];
+}
+
 const POSTS_CACHE_KEY = 'posts:v1';
+const POST_CONTROLS_CACHE_KEY = 'posts-control:v1';
+const ASSET_OVERRIDES_CACHE_KEY = 'asset-overrides:v1';
 const GUESTBOOK_CACHE_KEY = 'guestbook:v1';
 const GUESTBOOK_CLIENT_ID_CACHE_KEY = 'guestbook-client-id:v1';
 let sessionGuestbookClientId = '';
@@ -89,7 +96,7 @@ function normalizeTags(value: unknown): string[] {
 }
 
 function normalizePostStatus(value: unknown): Post['status'] {
-  return value === 'published' || value === 'hidden' || value === 'draft' ? value : 'draft';
+  return value === 'published' || value === 'hidden' || value === 'draft' || value === 'deleted' ? value : 'draft';
 }
 
 export function normalizePost(value: unknown): Post | null {
@@ -119,6 +126,34 @@ export function normalizePosts(values: unknown): Post[] {
   return values.map(normalizePost).filter((post): post is Post => Boolean(post));
 }
 
+function normalizeAssetOverride(value: unknown): AssetOverride | null {
+  const record = asRecord(value);
+  if (!record) return null;
+  const assetId = asString(record.assetId).trim();
+  if (!assetId) return null;
+  const status = record.status === 'visible' || record.status === 'hidden' || record.status === 'deleted'
+    ? record.status
+    : undefined;
+  const sortOrder = typeof record.sortOrder === 'number' && Number.isFinite(record.sortOrder)
+    ? record.sortOrder
+    : undefined;
+  return {
+    assetId,
+    displayName: typeof record.displayName === 'string' ? record.displayName : undefined,
+    description: typeof record.description === 'string' ? record.description : undefined,
+    tags: Array.isArray(record.tags) ? normalizeTags(record.tags) : undefined,
+    sourceUrl: typeof record.sourceUrl === 'string' ? record.sourceUrl : undefined,
+    status,
+    sortOrder,
+    updatedAt: typeof record.updatedAt === 'string' ? record.updatedAt : undefined
+  };
+}
+
+function normalizeAssetOverrides(values: unknown): AssetOverride[] {
+  if (!Array.isArray(values)) return [];
+  return values.map(normalizeAssetOverride).filter((override): override is AssetOverride => Boolean(override));
+}
+
 export function readCachedPosts(): Post[] {
   return normalizePosts(readCache<unknown>(POSTS_CACHE_KEY));
 }
@@ -134,6 +169,47 @@ export function readCachedPostsPayload(): CachePayload<Post[]> | null {
 
 export function writeCachedPosts(posts: Post[]) {
   writeCache(POSTS_CACHE_KEY, normalizePosts(posts));
+}
+
+export function readCachedPostControls(): Post[] {
+  return readCachedPostControlsPayload()?.data || [];
+}
+
+export function readCachedPostControlsPayload(): CachePayload<Post[]> | null {
+  const payload = readCachePayload<unknown>(POST_CONTROLS_CACHE_KEY);
+  if (!payload) return null;
+  return {
+    savedAt: payload.savedAt,
+    data: normalizePosts(payload.data)
+  };
+}
+
+export function writeCachedPostControls(posts: Post[]) {
+  const controls = normalizePosts(posts)
+    .filter((post) => post.status !== 'published')
+    .map((post) => ({
+      id: post.id,
+      title: '',
+      body: '',
+      tags: [],
+      status: post.status,
+      createdAt: post.updatedAt || post.createdAt,
+      updatedAt: post.updatedAt || post.createdAt
+    } satisfies Post));
+  writeCache(POST_CONTROLS_CACHE_KEY, controls);
+}
+
+export function readCachedAssetOverridesPayload(): CachePayload<AssetOverride[]> | null {
+  const payload = readCachePayload<unknown>(ASSET_OVERRIDES_CACHE_KEY);
+  if (!payload) return null;
+  return {
+    savedAt: payload.savedAt,
+    data: normalizeAssetOverrides(payload.data)
+  };
+}
+
+export function writeCachedAssetOverrides(overrides: AssetOverride[]) {
+  writeCache(ASSET_OVERRIDES_CACHE_KEY, normalizeAssetOverrides(overrides));
 }
 
 export function readCachedGuestbook(): GuestbookEntry[] {
@@ -155,10 +231,10 @@ export function writeCachedGuestbook(entries: GuestbookEntry[]) {
 
 export async function listPosts(): Promise<Post[]> {
   try {
-    const posts = await request<Post[]>('post.listPublic');
-    const publicPosts = normalizePosts(posts).filter((post) => post.status === 'published');
-    writeCachedPosts(publicPosts);
-    return publicPosts;
+    const posts = requireArrayResponse<Post>(await request<unknown>('post.listPublic'));
+    const normalizedPosts = normalizePosts(posts);
+    writeCachedPostControls(normalizedPosts);
+    return normalizedPosts;
   } catch (error) {
     if (error instanceof ApiNotConfiguredError) return getMockPosts();
     throw error;
@@ -167,7 +243,7 @@ export async function listPosts(): Promise<Post[]> {
 
 export async function listGuestbook(): Promise<GuestbookEntry[]> {
   try {
-    const entries = await request<GuestbookEntry[]>('guestbook.listPublic');
+    const entries = requireArrayResponse<GuestbookEntry>(await request<unknown>('guestbook.listPublic'));
     const visibleEntries = entries.filter((entry) => entry.status === 'visible');
     writeCachedGuestbook(visibleEntries);
     return visibleEntries;
@@ -179,7 +255,9 @@ export async function listGuestbook(): Promise<GuestbookEntry[]> {
 
 export async function listAssetOverrides(): Promise<AssetOverride[]> {
   try {
-    return await request<AssetOverride[]>('assetOverride.listPublic');
+    const overrides = normalizeAssetOverrides(requireArrayResponse<AssetOverride>(await request<unknown>('assetOverride.listPublic')));
+    writeCachedAssetOverrides(overrides);
+    return overrides;
   } catch (error) {
     if (error instanceof ApiNotConfiguredError) return [];
     throw error;
@@ -209,15 +287,23 @@ export async function adminRefreshSession(token: string): Promise<AdminSession> 
 }
 
 export async function adminListPosts(token: string): Promise<Post[]> {
-  return request<Post[]>('admin.post.list', { token });
+  return requireArrayResponse<Post>(await request<unknown>('admin.post.list', { token }));
 }
 
 export async function adminSavePost(token: string, post: Partial<Post>): Promise<Post> {
   return request<Post>('admin.post.save', { token, post });
 }
 
+export async function adminBulkUpdatePosts(token: string, ids: string[], status: Exclude<Post['status'], 'deleted'>): Promise<{ updatedIds: string[]; missingIds?: string[] }> {
+  return request<{ updatedIds: string[]; missingIds?: string[] }>('admin.post.bulkStatus', { token, ids, status });
+}
+
+export async function adminBulkDeletePosts(token: string, ids: string[]): Promise<{ deletedIds: string[]; alreadyMissingIds?: string[] }> {
+  return request<{ deletedIds: string[]; alreadyMissingIds?: string[] }>('admin.post.bulkDelete', { token, ids });
+}
+
 export async function adminListGuestbook(token: string): Promise<GuestbookAdminEntry[]> {
-  return request<GuestbookAdminEntry[]>('admin.guestbook.list', { token });
+  return requireArrayResponse<GuestbookAdminEntry>(await request<unknown>('admin.guestbook.list', { token }));
 }
 
 export async function adminListGuestbookIpBans(token: string): Promise<GuestbookIpBan[]> {
@@ -233,6 +319,19 @@ export async function adminRestoreGuestbook(token: string, id: string): Promise<
   return request<{ id: string }>('admin.guestbook.restore', { token, id });
 }
 
+export async function adminBulkUpdateGuestbook(
+  token: string,
+  ids: string[],
+  status: 'visible' | 'hidden',
+  hiddenReason = ''
+): Promise<{ updatedIds: string[]; missingIds?: string[] }> {
+  return request<{ updatedIds: string[]; missingIds?: string[] }>('admin.guestbook.bulkStatus', { token, ids, status, hiddenReason });
+}
+
+export async function adminBulkDeleteGuestbook(token: string, ids: string[]): Promise<{ deletedIds: string[]; alreadyMissingIds?: string[] }> {
+  return request<{ deletedIds: string[]; alreadyMissingIds?: string[] }>('admin.guestbook.bulkDelete', { token, ids });
+}
+
 export async function adminBanGuestbookIp(token: string, entryId: string): Promise<{ entryId: string; relatedEntryCount?: number }> {
   return request<{ entryId: string; relatedEntryCount?: number }>('admin.guestbook.ip.ban', {
     token,
@@ -246,9 +345,32 @@ export async function adminUnbanGuestbookIp(token: string, entryId: string): Pro
 }
 
 export async function adminListAssetOverrides(token: string): Promise<AssetOverride[]> {
-  return request<AssetOverride[]>('admin.assetOverride.list', { token });
+  const overrides = normalizeAssetOverrides(requireArrayResponse<AssetOverride>(await request<unknown>('admin.assetOverride.list', { token })));
+  writeCachedAssetOverrides(overrides);
+  return overrides;
 }
 
 export async function adminSaveAssetOverride(token: string, override: AssetOverride): Promise<AssetOverride> {
-  return request<AssetOverride>('admin.assetOverride.save', { token, override });
+  const saved = await request<AssetOverride>('admin.assetOverride.save', { token, override });
+  const normalized = normalizeAssetOverride(saved);
+  if (!normalized) throw new ApiRequestError(translate('errors.invalidApiResponse'), 502);
+  const cached = readCachedAssetOverridesPayload()?.data || [];
+  writeCachedAssetOverrides([normalized, ...cached.filter((item) => item.assetId !== normalized.assetId)]);
+  return normalized;
+}
+
+export async function adminBulkUpdateAssetOverrides(
+  token: string,
+  ids: string[],
+  status: NonNullable<AssetOverride['status']>
+): Promise<{ updatedIds: string[]; missingIds?: string[] }> {
+  const result = await request<{ updatedIds: string[]; missingIds?: string[] }>('admin.assetOverride.bulkStatus', { token, ids, status });
+  const updatedIds = new Set(result.updatedIds || []);
+  if (updatedIds.size) {
+    const now = new Date().toISOString();
+    const cached = new Map((readCachedAssetOverridesPayload()?.data || []).map((override) => [override.assetId, override]));
+    updatedIds.forEach((assetId) => cached.set(assetId, { ...(cached.get(assetId) || { assetId }), status, updatedAt: now }));
+    writeCachedAssetOverrides(Array.from(cached.values()));
+  }
+  return result;
 }

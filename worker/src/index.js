@@ -17,6 +17,28 @@ const PROXIED_ACTIONS = new Set([
   'admin.assetOverride.save'
 ]);
 
+const VALIDATED_ADMIN_ACTIONS = new Set([
+  'admin.post.bulkStatus',
+  'admin.post.bulkDelete',
+  'admin.postDeletion.list',
+  'admin.postDeletion.finalize',
+  'admin.guestbook.bulkStatus',
+  'admin.guestbook.bulkDelete',
+  'admin.assetOverride.bulkStatus',
+  'admin.assetOverride.delete'
+]);
+
+const TRUSTED_SERVICE_ADMIN_ACTIONS = new Set([
+  'admin.postDeletion.list',
+  'admin.postDeletion.finalize'
+]);
+
+const DELETE_RESULT_ACTIONS = new Set([
+  'admin.post.bulkDelete',
+  'admin.guestbook.bulkDelete',
+  'admin.assetOverride.delete'
+]);
+
 const UPSTREAM_FIELDS = new Map([
   ['post.listPublic', []],
   ['guestbook.listPublic', []],
@@ -29,16 +51,31 @@ const UPSTREAM_FIELDS = new Map([
   ['admin.post.list', ['token']],
   ['admin.post.save', ['token', 'post']],
   ['admin.post.syncFromStorage', ['token', 'post']],
+  ['admin.post.bulkStatus', ['token', 'ids', 'status']],
+  ['admin.post.bulkDelete', ['token', 'ids']],
+  ['admin.postDeletion.list', ['token']],
+  ['admin.postDeletion.finalize', ['token', 'deletions']],
   ['admin.guestbook.list', ['token']],
   ['admin.guestbook.hide', ['token', 'id', 'hiddenReason']],
   ['admin.guestbook.restore', ['token', 'id']],
+  ['admin.guestbook.bulkStatus', ['token', 'ids', 'status', 'hiddenReason']],
+  ['admin.guestbook.bulkDelete', ['token', 'ids']],
   ['admin.assetOverride.list', ['token']],
-  ['admin.assetOverride.save', ['token', 'override']]
+  ['admin.assetOverride.save', ['token', 'override']],
+  ['admin.assetOverride.bulkStatus', ['token', 'ids', 'status']],
+  ['admin.assetOverride.delete', ['token', 'ids']]
 ]);
 
 const IP_BAN_SCOPE = 'guestbook.create';
 const TURNSTILE_VERIFY_URL = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
 const MAX_BODY_BYTES = 64 * 1024;
+const MAX_BULK_IDS = 100;
+const MAX_POST_OR_ASSET_ID_LENGTH = 512;
+const MAX_GUESTBOOK_ID_LENGTH = 128;
+const MAX_DELETION_NONCE_LENGTH = 128;
+const MAX_TOKEN_LENGTH = 2048;
+const MAX_HIDDEN_REASON_LENGTH = 500;
+const D1_MUTATION_BATCH_SIZE = 100;
 const encoder = new TextEncoder();
 
 class GatewayError extends Error {
@@ -93,6 +130,117 @@ function requireString(value, name, minLength = 1) {
     throw new GatewayError(503, `${name} 설정이 없습니다.`);
   }
   return value;
+}
+
+function requireRequestString(value, name, maxLength) {
+  if (typeof value !== 'string') {
+    throw new GatewayError(400, `${name} 값이 올바르지 않습니다.`);
+  }
+  const normalized = value.trim();
+  if (!normalized || normalized.length > maxLength) {
+    throw new GatewayError(400, `${name} 값이 올바르지 않습니다.`);
+  }
+  return normalized;
+}
+
+function assertOnlyFields(body, allowedFields) {
+  const allowed = new Set(allowedFields);
+  for (const field of Object.keys(body)) {
+    if (!allowed.has(field)) {
+      throw new GatewayError(400, `지원하지 않는 요청 필드입니다: ${field}`);
+    }
+  }
+}
+
+function normalizeBulkIds(value, maxIdLength) {
+  if (!Array.isArray(value)) {
+    throw new GatewayError(400, 'ids는 배열이어야 합니다.');
+  }
+  const ids = [];
+  const seen = new Set();
+  for (const valueItem of value) {
+    const id = requireRequestString(valueItem, 'id', maxIdLength);
+    if (seen.has(id)) continue;
+    seen.add(id);
+    ids.push(id);
+    if (ids.length > MAX_BULK_IDS) {
+      throw new GatewayError(400, `한 번에 최대 ${MAX_BULK_IDS}개까지 처리할 수 있습니다.`);
+    }
+  }
+  if (!ids.length) throw new GatewayError(400, '처리할 id가 필요합니다.');
+  return ids;
+}
+
+function normalizePostDeletions(value) {
+  if (!Array.isArray(value)) {
+    throw new GatewayError(400, 'deletions는 배열이어야 합니다.');
+  }
+  const deletions = [];
+  const seen = new Map();
+  for (const valueItem of value) {
+    if (!valueItem || typeof valueItem !== 'object' || Array.isArray(valueItem)) {
+      throw new GatewayError(400, '삭제 확정 항목이 올바르지 않습니다.');
+    }
+    assertOnlyFields(valueItem, ['id', 'nonce']);
+    const id = requireRequestString(valueItem.id, 'id', MAX_POST_OR_ASSET_ID_LENGTH);
+    const nonce = requireRequestString(valueItem.nonce, 'nonce', MAX_DELETION_NONCE_LENGTH);
+    if (seen.has(id)) {
+      if (seen.get(id) !== nonce) {
+        throw new GatewayError(400, '같은 id에 서로 다른 nonce를 사용할 수 없습니다.');
+      }
+      continue;
+    }
+    seen.set(id, nonce);
+    deletions.push({ id, nonce });
+    if (deletions.length > MAX_BULK_IDS) {
+      throw new GatewayError(400, `한 번에 최대 ${MAX_BULK_IDS}개까지 처리할 수 있습니다.`);
+    }
+  }
+  if (!deletions.length) throw new GatewayError(400, '확정할 삭제 항목이 필요합니다.');
+  return deletions;
+}
+
+function normalizeAdminAction(action, body) {
+  const token = requireRequestString(body.token, 'token', MAX_TOKEN_LENGTH);
+  if (action === 'admin.postDeletion.list') {
+    assertOnlyFields(body, ['action', 'token']);
+    return { token };
+  }
+  if (action === 'admin.postDeletion.finalize') {
+    assertOnlyFields(body, ['action', 'token', 'deletions']);
+    return { token, deletions: normalizePostDeletions(body.deletions) };
+  }
+
+  const isBulkStatus = action.endsWith('.bulkStatus');
+  const allowedFields = ['action', 'token', 'ids'];
+  if (isBulkStatus) allowedFields.push('status');
+  if (action === 'admin.guestbook.bulkStatus') allowedFields.push('hiddenReason');
+  assertOnlyFields(body, allowedFields);
+
+  const maxIdLength = action.startsWith('admin.guestbook.')
+    ? MAX_GUESTBOOK_ID_LENGTH
+    : MAX_POST_OR_ASSET_ID_LENGTH;
+  const normalized = { token, ids: normalizeBulkIds(body.ids, maxIdLength) };
+  if (!isBulkStatus) return normalized;
+
+  const statuses = action === 'admin.post.bulkStatus'
+    ? new Set(['published', 'draft', 'hidden'])
+    : action === 'admin.guestbook.bulkStatus'
+      ? new Set(['visible', 'hidden'])
+      : new Set(['visible', 'hidden', 'deleted']);
+  const status = requireRequestString(body.status, 'status', 32);
+  if (!statuses.has(status)) throw new GatewayError(400, '지원하지 않는 상태입니다.');
+  normalized.status = status;
+
+  if (action === 'admin.guestbook.bulkStatus') {
+    const rawReason = body.hiddenReason;
+    if (status === 'hidden') {
+      normalized.hiddenReason = requireRequestString(rawReason, 'hiddenReason', MAX_HIDDEN_REASON_LENGTH);
+    } else if (rawReason !== undefined && (typeof rawReason !== 'string' || rawReason.trim())) {
+      throw new GatewayError(400, '공개 처리에는 숨김 사유를 사용할 수 없습니다.');
+    }
+  }
+  return normalized;
 }
 
 function requireDatabase(env) {
@@ -277,6 +425,100 @@ async function callUpstream(action, body, env, fetchImpl, overrides) {
   return envelope;
 }
 
+function validateUpstreamResultIds(value, field, requestedIds, maxIdLength, optional = false) {
+  if (value === undefined && optional) return [];
+  if (!Array.isArray(value)) {
+    throw new GatewayError(502, `원본 API의 ${field} 응답이 올바르지 않습니다.`);
+  }
+  const ids = [];
+  const seen = new Set();
+  for (const item of value) {
+    if (
+      typeof item !== 'string' ||
+      !item ||
+      item !== item.trim() ||
+      item.length > maxIdLength ||
+      !requestedIds.has(item) ||
+      seen.has(item)
+    ) {
+      throw new GatewayError(502, `원본 API의 ${field} 응답이 올바르지 않습니다.`);
+    }
+    seen.add(item);
+    ids.push(item);
+  }
+  return ids;
+}
+
+function confirmedBulkDeleteIds(action, envelope, requestedIds) {
+  if (!envelope.ok) return [];
+  if (!envelope.data || typeof envelope.data !== 'object' || Array.isArray(envelope.data)) {
+    throw new GatewayError(502, '원본 API의 삭제 응답이 올바르지 않습니다.');
+  }
+  const requested = new Set(requestedIds);
+  const maxIdLength = action === 'admin.guestbook.bulkDelete'
+    ? MAX_GUESTBOOK_ID_LENGTH
+    : MAX_POST_OR_ASSET_ID_LENGTH;
+  const deletedIds = validateUpstreamResultIds(
+    envelope.data.deletedIds,
+    'deletedIds',
+    requested,
+    maxIdLength
+  );
+  const alreadyMissingIds = validateUpstreamResultIds(
+    envelope.data.alreadyMissingIds,
+    'alreadyMissingIds',
+    requested,
+    maxIdLength,
+    true
+  );
+  const confirmed = new Set(deletedIds);
+  for (const id of alreadyMissingIds) {
+    if (confirmed.has(id)) {
+      throw new GatewayError(502, '원본 API의 삭제 응답에 중복된 id가 있습니다.');
+    }
+    confirmed.add(id);
+  }
+  return Array.from(confirmed);
+}
+
+async function cleanupGuestbookMappings(env, entryIds) {
+  if (!entryIds.length) return;
+  const db = env.SECURITY_DB;
+  if (!db || typeof db.prepare !== 'function') return;
+
+  const statement = (entryId) => db.prepare(
+    'DELETE FROM guestbook_entry_ips WHERE entry_id = ?'
+  ).bind(entryId);
+  if (typeof db.batch === 'function') {
+    try {
+      const results = await db.batch(entryIds.map(statement));
+      if (Array.isArray(results) && results.every((result) => result?.success !== false)) return;
+    } catch (_) {
+      // The upstream deletion is already committed. Retry each mapping independently below.
+    }
+  }
+
+  for (const entryId of entryIds) {
+    try {
+      await statement(entryId).run();
+    } catch (_) {
+      // Mapping cleanup is intentionally best-effort after the authoritative deletion commits.
+    }
+  }
+}
+
+async function handleValidatedAdminAction(action, body, env, dependencies) {
+  const normalized = normalizeAdminAction(action, body);
+  const envelope = await callUpstream(action, normalized, env, dependencies.fetch);
+  if (!DELETE_RESULT_ACTIONS.has(action)) return envelope;
+
+  const confirmedIds = confirmedBulkDeleteIds(action, envelope, normalized.ids);
+  if (action === 'admin.guestbook.bulkDelete' && envelope.ok) {
+    await cleanupGuestbookMappings(env, confirmedIds);
+  }
+  return envelope;
+}
+
 async function isIpBanned(db, ipHash) {
   const row = await db.prepare(
     `SELECT 1 AS banned
@@ -391,24 +633,37 @@ async function listIpSecurity(db) {
   return new Map((result?.results || []).map((row) => [String(row.entry_id), row]));
 }
 
-async function reconcilePendingMappings(db, entries, now) {
-  const pending = await db.prepare(
-    `SELECT entry_id
+async function reconcileGuestbookMappings(db, entries, now) {
+  const mappings = await db.prepare(
+    `SELECT entry_id, state
        FROM guestbook_entry_ips
-      WHERE state = 'pending'
-      ORDER BY created_at
-      LIMIT 100`
+      ORDER BY created_at`
   ).all();
   const upstreamIds = new Set(entries.map((entry) => String(entry.id)));
-  const statements = (pending?.results || [])
-    .map((row) => String(row.entry_id))
-    .filter((entryId) => upstreamIds.has(entryId))
-    .map((entryId) => db.prepare(
-      `UPDATE guestbook_entry_ips
-          SET state = 'active', updated_at = ?
-        WHERE entry_id = ? AND state = 'pending'`
-    ).bind(now, entryId));
-  if (statements.length) await db.batch(statements);
+  const statements = [];
+  for (const row of mappings?.results || []) {
+    const entryId = String(row.entry_id || '');
+    if (!entryId) continue;
+    if (!upstreamIds.has(entryId)) {
+      statements.push(db.prepare(
+        'DELETE FROM guestbook_entry_ips WHERE entry_id = ?'
+      ).bind(entryId));
+    } else if (row.state === 'pending') {
+      statements.push(db.prepare(
+        `UPDATE guestbook_entry_ips
+            SET state = 'active', updated_at = ?
+          WHERE entry_id = ? AND state = 'pending'`
+      ).bind(now, entryId));
+    }
+  }
+  if (!statements.length) return;
+  for (let index = 0; index < statements.length; index += D1_MUTATION_BATCH_SIZE) {
+    try {
+      await db.batch(statements.slice(index, index + D1_MUTATION_BATCH_SIZE));
+    } catch (_) {
+      // The next successful admin list retries both pending activation and orphan cleanup.
+    }
+  }
 }
 
 async function handleAdminGuestbookList(body, env, dependencies) {
@@ -416,7 +671,7 @@ async function handleAdminGuestbookList(body, env, dependencies) {
   if (!envelope.ok || !Array.isArray(envelope.data)) return envelope;
 
   const db = requireDatabase(env);
-  await reconcilePendingMappings(db, envelope.data, dependencies.nowIso());
+  await reconcileGuestbookMappings(db, envelope.data, dependencies.nowIso());
   const security = await listIpSecurity(db);
   return {
     ...envelope,
@@ -578,6 +833,12 @@ async function routeApi(body, request, env, dependencies) {
   }
   if (action === 'admin.guestbook.ip.unban') {
     return handleIpBan(body, env, dependencies, false);
+  }
+  if (VALIDATED_ADMIN_ACTIONS.has(action)) {
+    if (TRUSTED_SERVICE_ADMIN_ACTIONS.has(action) && !isTrustedService(request, env)) {
+      throw new GatewayError(403, '저장소 동기화 서비스만 삭제 큐를 처리할 수 있습니다.');
+    }
+    return handleValidatedAdminAction(action, body, env, dependencies);
   }
   if (PROXIED_ACTIONS.has(action)) {
     return callUpstream(action, body, env, dependencies.fetch);

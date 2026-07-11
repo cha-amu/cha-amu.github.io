@@ -7,7 +7,7 @@ export interface Post {
   excerpt?: string;
   body: string;
   tags: string[];
-  status: 'draft' | 'published' | 'hidden';
+  status: 'draft' | 'published' | 'hidden' | 'deleted';
   createdAt: string;
   updatedAt?: string;
   publishedAt?: string;

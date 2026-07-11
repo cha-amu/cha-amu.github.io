@@ -4,6 +4,7 @@
  */
 const SHEETS = {
   posts: 'posts',
+  postDeletions: 'postDeletions',
   guestbook: 'guestbook',
   assetOverrides: 'assetOverrides',
   settings: 'settings',
@@ -17,6 +18,7 @@ const SHEET_COLUMNS = {
     'createdAt', 'updatedAt', 'publishedAt', 'source', 'storagePath',
     'bodyUrl', 'syncStatus'
   ],
+  postDeletions: ['id', 'storagePath', 'nonce', 'deletedAt', 'finalizedAt'],
   guestbook: [
     'id', 'name', 'message', 'status', 'createdAt', 'passwordSalt',
     'passwordHash', 'passwordHashAlgorithm', 'passwordHashIterations', 'hiddenReason'
@@ -34,9 +36,10 @@ const PASSWORD_ITERATIONS = Number(getProperty_('GUESTBOOK_PASSWORD_ITERATIONS',
 const GUESTBOOK_PASSWORD_HASH_ALGORITHM = 'SHA-256+salt+pepper';
 const DEFAULT_GUESTBOOK_NAME = 'ㅇㅁ';
 const MIN_SECRET_LENGTH = 32;
+const MAX_BULK_ITEMS = 100;
 const PUBLIC_CACHE_TTL_SECONDS = Math.max(1, Number(getProperty_('PUBLIC_CACHE_TTL_SECONDS', '300')) || 300);
 const PUBLIC_CACHE_KEYS = {
-  posts: 'public:posts:v1',
+  posts: 'public:posts:v2',
   guestbook: 'public:guestbook:v1'
 };
 const RATE_LIMITS = {
@@ -104,11 +107,19 @@ function route_(action, body) {
     case 'admin.post.list': requireAdmin_(body.token); return rowsToObjects_(SHEETS.posts);
     case 'admin.post.save': requireAdmin_(body.token); return savePost_(body.post);
     case 'admin.post.syncFromStorage': requireAdmin_(body.token); return syncPostFromStorage_(body.post);
+    case 'admin.post.bulkStatus': requireAdmin_(body.token); return bulkPostStatus_(body);
+    case 'admin.post.bulkDelete': requireAdmin_(body.token); return bulkDeletePosts_(body);
+    case 'admin.postDeletion.list': requireAdmin_(body.token); return listPostDeletions_();
+    case 'admin.postDeletion.finalize': requireAdmin_(body.token); return finalizePostDeletions_(body);
     case 'admin.guestbook.list': requireAdmin_(body.token); return listAdminGuestbook_();
     case 'admin.guestbook.hide': requireAdmin_(body.token); return adminHideGuestbook_(body);
     case 'admin.guestbook.restore': requireAdmin_(body.token); return adminRestoreGuestbook_(body);
+    case 'admin.guestbook.bulkStatus': requireAdmin_(body.token); return bulkGuestbookStatus_(body);
+    case 'admin.guestbook.bulkDelete': requireAdmin_(body.token); return bulkDeleteGuestbook_(body);
     case 'admin.assetOverride.list': requireAdmin_(body.token); return rowsToObjects_(SHEETS.assetOverrides);
     case 'admin.assetOverride.save': requireAdmin_(body.token); return saveAssetOverride_(body.override);
+    case 'admin.assetOverride.bulkStatus': requireAdmin_(body.token); return bulkAssetOverrideStatus_(body);
+    case 'admin.assetOverride.delete': requireAdmin_(body.token); return bulkDeleteAssetOverrides_(body);
     default: throw new Error('Unknown action: ' + action);
   }
 }
@@ -124,7 +135,23 @@ function requireGateway_(secret) {
 
 function listPublicPosts_() {
   return readPublicCache_(PUBLIC_CACHE_KEYS.posts, function () {
-    return rowsToObjects_(SHEETS.posts).filter((post) => post.status === 'published');
+    const deletions = rowsToObjects_(SHEETS.postDeletions);
+    const deletedIds = new Set(deletions.map(function (entry) { return String(entry.id || ''); }).filter(Boolean));
+    const records = rowsToObjects_(SHEETS.posts)
+      .filter(function (post) { return post.id && !deletedIds.has(String(post.id)); })
+      .map(function (post) {
+        if (post.status === 'published') return post;
+        return {
+          id: String(post.id),
+          status: String(post.status || 'hidden'),
+          updatedAt: post.updatedAt || post.createdAt || ''
+        };
+      });
+    deletions.forEach(function (entry) {
+      if (!entry.id) return;
+      records.push({ id: String(entry.id), status: 'deleted', updatedAt: entry.deletedAt || '' });
+    });
+    return records;
   });
 }
 
@@ -181,32 +208,35 @@ function hideGuestbookByPassword_(body) {
   assert_(body.deletePassword, '비밀번호를 입력해야 합니다.');
   enforceRateLimit_(scopedRateLimit_(RATE_LIMITS.guestbookDeleteWindow, guestbookClientScope_(body)));
   enforceRateLimit_(Object.assign({}, RATE_LIMITS.guestbookDeleteEntryWindow, { key: RATE_LIMITS.guestbookDeleteEntryWindow.key + ':' + rateKeyPart_(body.id) }));
-  const sheet = getSheet_(SHEETS.guestbook);
-  const values = sheet.getDataRange().getValues();
-  const headers = values[0];
-  const idIndex = headers.indexOf('id');
-  const saltIndex = headers.indexOf('passwordSalt');
-  const hashIndex = headers.indexOf('passwordHash');
-  const algorithmIndex = headers.indexOf('passwordHashAlgorithm');
-  const iterationsIndex = headers.indexOf('passwordHashIterations');
-  const statusIndex = headers.indexOf('status');
-  assert_(idIndex >= 0 && saltIndex >= 0 && hashIndex >= 0 && statusIndex >= 0, 'guestbook columns are not initialized.');
-  for (let row = 1; row < values.length; row++) {
-    if (values[row][idIndex] === body.id) {
-      const expected = values[row][hashIndex];
-      const actual = hashPasswordForEntry_(
-        body.deletePassword,
-        values[row][saltIndex],
-        algorithmIndex >= 0 ? values[row][algorithmIndex] : '',
-        iterationsIndex >= 0 ? values[row][iterationsIndex] : ''
-      );
-      assert_(constantTimeEqual_(expected, actual), '삭제용 비밀번호가 맞지 않습니다.');
-      sheet.getRange(row + 1, statusIndex + 1).setValue('hidden');
-      invalidatePublicCache_(PUBLIC_CACHE_KEYS.guestbook);
-      return { id: body.id };
+  const result = withScriptLock_(function () {
+    const sheet = getSheet_(SHEETS.guestbook);
+    const values = sheet.getDataRange().getValues();
+    const headers = values[0];
+    const idIndex = headers.indexOf('id');
+    const saltIndex = headers.indexOf('passwordSalt');
+    const hashIndex = headers.indexOf('passwordHash');
+    const algorithmIndex = headers.indexOf('passwordHashAlgorithm');
+    const iterationsIndex = headers.indexOf('passwordHashIterations');
+    const statusIndex = headers.indexOf('status');
+    assert_(idIndex >= 0 && saltIndex >= 0 && hashIndex >= 0 && statusIndex >= 0, 'guestbook columns are not initialized.');
+    for (let row = 1; row < values.length; row++) {
+      if (values[row][idIndex] === body.id) {
+        const expected = values[row][hashIndex];
+        const actual = hashPasswordForEntry_(
+          body.deletePassword,
+          values[row][saltIndex],
+          algorithmIndex >= 0 ? values[row][algorithmIndex] : '',
+          iterationsIndex >= 0 ? values[row][iterationsIndex] : ''
+        );
+        assert_(constantTimeEqual_(expected, actual), '삭제용 비밀번호가 맞지 않습니다.');
+        sheet.getRange(row + 1, statusIndex + 1).setValue('hidden');
+        return { id: body.id };
+      }
     }
-  }
-  throw new Error('Guestbook entry not found.');
+    throw new Error('Guestbook entry not found.');
+  });
+  invalidatePublicCache_(PUBLIC_CACHE_KEYS.guestbook);
+  return result;
 }
 
 function adminLogin_(body) {
@@ -243,7 +273,10 @@ function savePost_(post) {
     createdAt: post.createdAt || new Date().toISOString(),
     publishedAt: post.status === 'published' ? (post.publishedAt || new Date().toISOString()) : post.publishedAt || ''
   });
-  upsertObject_(SHEETS.posts, 'id', next);
+  withScriptLock_(function () {
+    assertPostIdNotDeleted_(next.id);
+    upsertObject_(SHEETS.posts, 'id', next);
+  });
   invalidatePublicCache_(PUBLIC_CACHE_KEYS.posts);
   audit_('post.save', 'post', next.id);
   return next;
@@ -259,7 +292,10 @@ function syncPostFromStorage_(post) {
     source: 'storage',
     syncStatus: 'synced'
   });
-  upsertObject_(SHEETS.posts, 'id', next);
+  withScriptLock_(function () {
+    assertPostIdNotDeleted_(next.id);
+    upsertObject_(SHEETS.posts, 'id', next);
+  });
   invalidatePublicCache_(PUBLIC_CACHE_KEYS.posts);
   audit_('post.syncFromStorage', 'post', next.id);
   return next;
@@ -268,9 +304,227 @@ function syncPostFromStorage_(post) {
 function saveAssetOverride_(override) {
   assert_(override && override.assetId, 'assetId is required.');
   const next = Object.assign({}, override, { updatedAt: new Date().toISOString() });
-  upsertObject_(SHEETS.assetOverrides, 'assetId', next);
+  withScriptLock_(function () {
+    upsertObject_(SHEETS.assetOverrides, 'assetId', next);
+  });
   audit_('assetOverride.update', 'asset', next.assetId);
   return next;
+}
+
+function bulkPostStatus_(body) {
+  const ids = normalizeBulkIds_(body.ids, 'Post ids', 512);
+  const status = String(body.status || '');
+  assert_(['published', 'draft', 'hidden'].indexOf(status) >= 0, 'Invalid post status.');
+  const now = new Date().toISOString();
+  const result = withScriptLock_(function () {
+    const table = indexedSheet_(SHEETS.posts, 'id');
+    const updatedIds = [];
+    const missingIds = [];
+    ids.forEach(function (id) {
+      const row = table.byId.get(id);
+      if (!row) {
+        missingIds.push(id);
+        return;
+      }
+      patchTableCell_(table, row, 'status', status);
+      patchTableCell_(table, row, 'updatedAt', now);
+      if (status === 'published' && !row.values[table.headers.indexOf('publishedAt')]) {
+        patchTableCell_(table, row, 'publishedAt', now);
+      }
+      updatedIds.push(id);
+    });
+    return { updatedIds, missingIds };
+  });
+  if (result.updatedIds.length) {
+    invalidatePublicCache_(PUBLIC_CACHE_KEYS.posts);
+    result.updatedIds.forEach(function (id) { audit_('post.bulkStatus', 'post', id); });
+  }
+  return result;
+}
+
+function bulkDeletePosts_(body) {
+  const ids = normalizeBulkIds_(body.ids, 'Post ids', 512);
+  const now = new Date().toISOString();
+  let tombstonesChanged = false;
+  const result = withScriptLock_(function () {
+    const posts = indexedSheet_(SHEETS.posts, 'id');
+    const deletions = indexedSheet_(SHEETS.postDeletions, 'id');
+    const deletedIds = [];
+    const alreadyMissingIds = [];
+    const rowNumbers = [];
+    const storagePathIndex = posts.headers.indexOf('storagePath');
+
+    ids.forEach(function (id) {
+      const postRow = posts.byId.get(id);
+      const storagePath = postRow && storagePathIndex >= 0 ? String(postRow.values[storagePathIndex] || '') : '';
+      const deletionRow = deletions.byId.get(id);
+      if (deletionRow) {
+        const deletionStoragePathIndex = deletions.headers.indexOf('storagePath');
+        const deletionNonceIndex = deletions.headers.indexOf('nonce');
+        const deletedAtIndex = deletions.headers.indexOf('deletedAt');
+        if (storagePath && !deletionRow.values[deletionStoragePathIndex]) {
+          patchTableCell_(deletions, deletionRow, 'storagePath', storagePath);
+          tombstonesChanged = true;
+        }
+        if (!deletionRow.values[deletionNonceIndex]) {
+          patchTableCell_(deletions, deletionRow, 'nonce', Utilities.getUuid());
+          tombstonesChanged = true;
+        }
+        if (!deletionRow.values[deletedAtIndex]) {
+          patchTableCell_(deletions, deletionRow, 'deletedAt', now);
+          tombstonesChanged = true;
+        }
+      } else {
+        appendObject_(SHEETS.postDeletions, {
+          id,
+          storagePath,
+          nonce: Utilities.getUuid(),
+          deletedAt: now
+        });
+        tombstonesChanged = true;
+      }
+
+      if (!postRow) {
+        alreadyMissingIds.push(id);
+        return;
+      }
+      rowNumbers.push(postRow.rowNumber);
+      deletedIds.push(id);
+    });
+
+    deleteRowsDescending_(posts.sheet, rowNumbers);
+    return { deletedIds, alreadyMissingIds };
+  });
+  if (result.deletedIds.length || tombstonesChanged) {
+    invalidatePublicCache_(PUBLIC_CACHE_KEYS.posts);
+  }
+  if (result.deletedIds.length) {
+    result.deletedIds.forEach(function (id) { audit_('post.bulkDelete', 'post', id); });
+  }
+  return result;
+}
+
+function listPostDeletions_() {
+  const sheet = getSheet_(SHEETS.postDeletions);
+  ensureHeaders_(sheet, SHEET_COLUMNS.postDeletions);
+  return rowsToObjects_(SHEETS.postDeletions).filter(function (entry) {
+    return !String(entry.finalizedAt || '').trim();
+  }).map(function (entry) {
+    return {
+      id: String(entry.id || ''),
+      storagePath: String(entry.storagePath || ''),
+      nonce: String(entry.nonce || ''),
+      deletedAt: String(entry.deletedAt || '')
+    };
+  }).filter(function (entry) { return entry.id && entry.nonce; });
+}
+
+function finalizePostDeletions_(body) {
+  const requested = normalizeDeletionRequests_(body.deletions);
+  const result = withScriptLock_(function () {
+    const table = indexedSheet_(SHEETS.postDeletions, 'id');
+    const finalizedAtIndex = table.headers.indexOf('finalizedAt');
+    const finalizedIds = [];
+    const alreadyMissingIds = [];
+    const rowsToFinalize = [];
+
+    requested.forEach(function (request) {
+      const row = table.byId.get(request.id);
+      if (!row || row.values[finalizedAtIndex]) {
+        alreadyMissingIds.push(request.id);
+        return;
+      }
+      const nonce = String(row.values[table.headers.indexOf('nonce')] || '');
+      assert_(constantTimeEqual_(nonce, request.nonce), 'Post deletion nonce is invalid.');
+      finalizedIds.push(request.id);
+      rowsToFinalize.push(row);
+    });
+
+    const finalizedAt = new Date().toISOString();
+    rowsToFinalize.forEach(function (row) {
+      patchTableCell_(table, row, 'finalizedAt', finalizedAt);
+    });
+    return { finalizedIds, alreadyMissingIds };
+  });
+  if (result.finalizedIds.length) {
+    invalidatePublicCache_(PUBLIC_CACHE_KEYS.posts);
+    result.finalizedIds.forEach(function (id) { audit_('postDeletion.finalize', 'post', id); });
+  }
+  return result;
+}
+
+function bulkGuestbookStatus_(body) {
+  const ids = normalizeBulkIds_(body.ids, 'Guestbook ids', 128);
+  const status = String(body.status || '');
+  assert_(['visible', 'hidden'].indexOf(status) >= 0, 'Invalid guestbook status.');
+  const hasReason = Object.prototype.hasOwnProperty.call(body, 'hiddenReason');
+  if (hasReason) assert_(typeof body.hiddenReason === 'string' && body.hiddenReason.length <= 500, 'Invalid hidden reason.');
+  const hiddenReason = hasReason ? body.hiddenReason.trim() : '';
+  const result = withScriptLock_(function () {
+    const table = indexedSheet_(SHEETS.guestbook, 'id');
+    const updatedIds = [];
+    const missingIds = [];
+    ids.forEach(function (id) {
+      const row = table.byId.get(id);
+      if (!row) {
+        missingIds.push(id);
+        return;
+      }
+      patchTableCell_(table, row, 'status', status);
+      if (status === 'visible') patchTableCell_(table, row, 'hiddenReason', '');
+      else if (hasReason) patchTableCell_(table, row, 'hiddenReason', hiddenReason);
+      updatedIds.push(id);
+    });
+    return { updatedIds, missingIds };
+  });
+  if (result.updatedIds.length) {
+    invalidatePublicCache_(PUBLIC_CACHE_KEYS.guestbook);
+    result.updatedIds.forEach(function (id) { audit_('guestbook.bulkStatus', 'guestbook', id); });
+  }
+  return result;
+}
+
+function bulkDeleteGuestbook_(body) {
+  const ids = normalizeBulkIds_(body.ids, 'Guestbook ids', 128);
+  const result = withScriptLock_(function () {
+    return deleteSheetRowsByIds_(SHEETS.guestbook, 'id', ids);
+  });
+  if (result.deletedIds.length) {
+    invalidatePublicCache_(PUBLIC_CACHE_KEYS.guestbook);
+    result.deletedIds.forEach(function (id) { audit_('guestbook.bulkDelete', 'guestbook', id); });
+  }
+  return result;
+}
+
+function bulkAssetOverrideStatus_(body) {
+  const ids = normalizeBulkIds_(body.ids, 'Asset ids', 512);
+  const status = String(body.status || '');
+  assert_(['visible', 'hidden', 'deleted'].indexOf(status) >= 0, 'Invalid asset override status.');
+  const now = new Date().toISOString();
+  const result = withScriptLock_(function () {
+    const table = indexedSheet_(SHEETS.assetOverrides, 'assetId');
+    ids.forEach(function (id) {
+      const row = table.byId.get(id);
+      if (row) {
+        patchTableCell_(table, row, 'status', status);
+        patchTableCell_(table, row, 'updatedAt', now);
+      } else {
+        appendObject_(SHEETS.assetOverrides, { assetId: id, status, updatedAt: now });
+      }
+    });
+    return { updatedIds: ids.slice(), missingIds: [] };
+  });
+  result.updatedIds.forEach(function (id) { audit_('assetOverride.bulkStatus', 'asset', id); });
+  return result;
+}
+
+function bulkDeleteAssetOverrides_(body) {
+  const ids = normalizeBulkIds_(body.ids, 'Asset ids', 512);
+  const result = withScriptLock_(function () {
+    return deleteSheetRowsByIds_(SHEETS.assetOverrides, 'assetId', ids);
+  });
+  result.deletedIds.forEach(function (id) { audit_('assetOverride.delete', 'asset', id); });
+  return result;
 }
 
 function listAdminGuestbook_() {
@@ -287,41 +541,142 @@ function listAdminGuestbook_() {
 }
 
 function adminHideGuestbook_(body) {
-  const sheet = getSheet_(SHEETS.guestbook);
-  const values = sheet.getDataRange().getValues();
-  const headers = values[0];
-  const idIndex = headers.indexOf('id');
-  const statusIndex = headers.indexOf('status');
-  const reasonIndex = headers.indexOf('hiddenReason');
-  for (let row = 1; row < values.length; row++) {
-    if (values[row][idIndex] === body.id) {
-      sheet.getRange(row + 1, statusIndex + 1).setValue('hidden');
-      if (reasonIndex >= 0) sheet.getRange(row + 1, reasonIndex + 1).setValue(body.hiddenReason || '');
-      invalidatePublicCache_(PUBLIC_CACHE_KEYS.guestbook);
-      audit_('guestbook.hide', 'guestbook', body.id);
-      return { id: body.id };
+  const result = withScriptLock_(function () {
+    const sheet = getSheet_(SHEETS.guestbook);
+    const values = sheet.getDataRange().getValues();
+    const headers = values[0];
+    const idIndex = headers.indexOf('id');
+    const statusIndex = headers.indexOf('status');
+    const reasonIndex = headers.indexOf('hiddenReason');
+    for (let row = 1; row < values.length; row++) {
+      if (values[row][idIndex] === body.id) {
+        sheet.getRange(row + 1, statusIndex + 1).setValue('hidden');
+        if (reasonIndex >= 0) sheet.getRange(row + 1, reasonIndex + 1).setValue(body.hiddenReason || '');
+        return { id: body.id };
+      }
     }
-  }
-  throw new Error('Guestbook entry not found.');
+    throw new Error('Guestbook entry not found.');
+  });
+  invalidatePublicCache_(PUBLIC_CACHE_KEYS.guestbook);
+  audit_('guestbook.hide', 'guestbook', body.id);
+  return result;
 }
 
 function adminRestoreGuestbook_(body) {
-  const sheet = getSheet_(SHEETS.guestbook);
-  const values = sheet.getDataRange().getValues();
-  const headers = values[0];
-  const idIndex = headers.indexOf('id');
-  const statusIndex = headers.indexOf('status');
-  const reasonIndex = headers.indexOf('hiddenReason');
-  for (let row = 1; row < values.length; row++) {
-    if (values[row][idIndex] === body.id) {
-      sheet.getRange(row + 1, statusIndex + 1).setValue('visible');
-      if (reasonIndex >= 0) sheet.getRange(row + 1, reasonIndex + 1).setValue('');
-      invalidatePublicCache_(PUBLIC_CACHE_KEYS.guestbook);
-      audit_('guestbook.restore', 'guestbook', body.id);
-      return { id: body.id };
+  const result = withScriptLock_(function () {
+    const sheet = getSheet_(SHEETS.guestbook);
+    const values = sheet.getDataRange().getValues();
+    const headers = values[0];
+    const idIndex = headers.indexOf('id');
+    const statusIndex = headers.indexOf('status');
+    const reasonIndex = headers.indexOf('hiddenReason');
+    for (let row = 1; row < values.length; row++) {
+      if (values[row][idIndex] === body.id) {
+        sheet.getRange(row + 1, statusIndex + 1).setValue('visible');
+        if (reasonIndex >= 0) sheet.getRange(row + 1, reasonIndex + 1).setValue('');
+        return { id: body.id };
+      }
     }
+    throw new Error('Guestbook entry not found.');
+  });
+  invalidatePublicCache_(PUBLIC_CACHE_KEYS.guestbook);
+  audit_('guestbook.restore', 'guestbook', body.id);
+  return result;
+}
+
+function normalizeBulkIds_(value, label, maxLength) {
+  assert_(Array.isArray(value), label + ' must be an array.');
+  assert_(value.length > 0 && value.length <= MAX_BULK_ITEMS, label + ' must contain 1 to ' + MAX_BULK_ITEMS + ' items.');
+  const seen = new Set();
+  return value.map(function (raw) {
+    assert_(typeof raw === 'string', label + ' must contain only strings.');
+    const id = raw.trim();
+    assert_(id && id.length <= maxLength && !/[\u0000-\u001f\u007f]/.test(id), 'Invalid id.');
+    assert_(!seen.has(id), label + ' must contain unique ids.');
+    seen.add(id);
+    return id;
+  });
+}
+
+function assertPostIdNotDeleted_(id) {
+  const deletions = indexedSheet_(SHEETS.postDeletions, 'id');
+  assert_(!deletions.byId.has(String(id || '').trim()), 'Post id is permanently deleted and cannot be saved.');
+}
+
+function normalizeDeletionRequests_(value) {
+  assert_(Array.isArray(value), 'Post deletions must be an array.');
+  assert_(value.length > 0 && value.length <= MAX_BULK_ITEMS, 'Post deletions must contain 1 to ' + MAX_BULK_ITEMS + ' items.');
+  const seen = new Set();
+  return value.map(function (raw) {
+    assert_(raw && typeof raw === 'object' && !Array.isArray(raw), 'Invalid post deletion request.');
+    const id = typeof raw.id === 'string' ? raw.id.trim() : '';
+    const nonce = typeof raw.nonce === 'string' ? raw.nonce.trim() : '';
+    assert_(id && id.length <= 512 && !/[\u0000-\u001f\u007f]/.test(id), 'Invalid post deletion id.');
+    assert_(nonce && nonce.length <= 128 && !/[\u0000-\u001f\u007f]/.test(nonce), 'Invalid post deletion nonce.');
+    assert_(!seen.has(id), 'Post deletions must contain unique ids.');
+    seen.add(id);
+    return { id, nonce };
+  });
+}
+
+function withScriptLock_(callback) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(5000);
+  try {
+    return callback();
+  } finally {
+    lock.releaseLock();
   }
-  throw new Error('Guestbook entry not found.');
+}
+
+function indexedSheet_(sheetName, key) {
+  const sheet = getSheet_(sheetName);
+  const columns = SHEET_COLUMNS[sheetName];
+  if (columns) ensureHeaders_(sheet, columns);
+  const values = sheet.getDataRange().getValues();
+  const headers = values[0] || [];
+  const keyIndex = headers.indexOf(key);
+  assert_(keyIndex >= 0, sheetName + ' key column is not initialized.');
+  const byId = new Map();
+  for (let rowIndex = 1; rowIndex < values.length; rowIndex++) {
+    const id = String(values[rowIndex][keyIndex] || '').trim();
+    if (!id) continue;
+    assert_(!byId.has(id), sheetName + ' contains duplicate ids.');
+    byId.set(id, { rowNumber: rowIndex + 1, values: values[rowIndex] });
+  }
+  return { sheet, headers, byId };
+}
+
+function patchTableCell_(table, row, key, value) {
+  const columnIndex = table.headers.indexOf(key);
+  assert_(columnIndex >= 0, key + ' column is not initialized.');
+  const formatted = formatCell_(value);
+  table.sheet.getRange(row.rowNumber, columnIndex + 1).setValue(formatted);
+  row.values[columnIndex] = formatted;
+}
+
+function deleteRowsDescending_(sheet, rowNumbers) {
+  rowNumbers.slice().sort(function (left, right) { return right - left; }).forEach(function (rowNumber) {
+    sheet.deleteRow(rowNumber);
+  });
+}
+
+function deleteSheetRowsByIds_(sheetName, key, ids) {
+  const table = indexedSheet_(sheetName, key);
+  const deletedIds = [];
+  const alreadyMissingIds = [];
+  const rowNumbers = [];
+  ids.forEach(function (id) {
+    const row = table.byId.get(id);
+    if (!row) {
+      alreadyMissingIds.push(id);
+      return;
+    }
+    deletedIds.push(id);
+    rowNumbers.push(row.rowNumber);
+  });
+  deleteRowsDescending_(table.sheet, rowNumbers);
+  return { deletedIds, alreadyMissingIds };
 }
 
 function rowsToObjects_(sheetName) {

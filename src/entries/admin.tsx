@@ -1,17 +1,17 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { FormEvent, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { loadArchiveManifest } from '../api/archiveManifestClient';
-import { adminBanGuestbookIp, adminHideGuestbook, adminListAssetOverrides, adminListGuestbook, adminListGuestbookIpBans, adminListPosts, adminLogin, adminRefreshSession, adminRestoreGuestbook, adminSaveAssetOverride, adminSavePost, adminUnbanGuestbookIp, listGuestbook } from '../api/appsScriptClient';
+import { adminBanGuestbookIp, adminBulkDeleteGuestbook, adminBulkDeletePosts, adminBulkUpdateAssetOverrides, adminBulkUpdateGuestbook, adminBulkUpdatePosts, adminHideGuestbook, adminListAssetOverrides, adminListGuestbook, adminListGuestbookIpBans, adminListPosts, adminLogin, adminRefreshSession, adminRestoreGuestbook, adminSaveAssetOverride, adminSavePost, adminUnbanGuestbookIp, listGuestbook } from '../api/appsScriptClient';
 import { AppLayout } from '../components/AppLayout';
 import { BackToTopButton } from '../components/BackToTopButton';
 import { IncrementalLoadMore } from '../components/IncrementalLoadMore';
 import { MarkdownView } from '../components/MarkdownView';
 import { EmptyState } from '../components/PageState';
 import { TagList } from '../components/TagList';
-import { CloseIcon, EyeOffIcon, LogOutIcon, RestoreIcon, ShieldBanIcon, ShieldCheckIcon } from '../components/ToolIcons';
+import { CloseIcon, EyeOffIcon, LogOutIcon, RestoreIcon, ShieldBanIcon, ShieldCheckIcon, TrashIcon } from '../components/ToolIcons';
 import { TurnstileBox } from '../components/TurnstileBox';
 import { useIncrementalItems } from '../hooks/useIncrementalItems';
 import { useI18n, type Translate, type TranslationKey, type TranslationParams } from '../i18n';
-import { syncPublicPost } from '../stores/publicDataStore';
+import { setPublicGuestbook, syncPublicArchiveOverrides, syncPublicPost } from '../stores/publicDataStore';
 import type { ArchiveAsset, AssetOverride, GuestbookAdminEntry, GuestbookEntry, GuestbookIpBan, Post } from '../types';
 import { formatDate } from '../utils/date';
 import { clearAdminSession, loadAdminSession, refreshAdminSession, saveAdminSession } from '../utils/session';
@@ -21,6 +21,7 @@ type Tab = 'posts' | 'assets' | 'guestbook';
 type GuestbookFilter = 'all' | GuestbookEntry['status'];
 type GuestbookAdminView = 'entries' | 'bans';
 type EditorView = 'edit' | 'preview';
+type EditablePostStatus = Exclude<Post['status'], 'deleted'>;
 
 const TAB_LABEL_KEYS: Record<Tab, TranslationKey> = {
   posts: 'admin.tab.posts',
@@ -31,7 +32,8 @@ const TAB_LABEL_KEYS: Record<Tab, TranslationKey> = {
 const POST_STATUS_LABEL_KEYS: Record<Post['status'], TranslationKey> = {
   published: 'admin.status.published',
   draft: 'admin.status.draft',
-  hidden: 'admin.status.hidden'
+  hidden: 'admin.status.hidden',
+  deleted: 'admin.status.deleted'
 };
 
 const GUESTBOOK_STATUS_LABEL_KEYS: Record<GuestbookEntry['status'], TranslationKey> = {
@@ -41,6 +43,129 @@ const GUESTBOOK_STATUS_LABEL_KEYS: Record<GuestbookEntry['status'], TranslationK
 };
 
 const GUESTBOOK_BATCH_SIZE = 10;
+const ADMIN_MUTATION_BATCH_SIZE = 100;
+
+function mutationBatches<T>(items: T[]) {
+  const batches: T[][] = [];
+  for (let index = 0; index < items.length; index += ADMIN_MUTATION_BATCH_SIZE) {
+    batches.push(items.slice(index, index + ADMIN_MUTATION_BATCH_SIZE));
+  }
+  return batches;
+}
+
+type AdminSelection = ReturnType<typeof useAdminSelection>;
+
+function useAdminSelection(scopeIds: string[]) {
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const scopeKey = scopeIds.join('\u0000');
+
+  useEffect(() => {
+    const validIds = new Set(scopeIds);
+    setSelectedIds((current) => {
+      const next = current.filter((id) => validIds.has(id));
+      return next.length === current.length ? current : next;
+    });
+  }, [scopeKey]);
+
+  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+  const allSelected = scopeIds.length > 0 && scopeIds.every((id) => selectedSet.has(id));
+  const partiallySelected = selectedIds.length > 0 && !allSelected;
+
+  const toggle = (id: string, checked: boolean) => {
+    setSelectedIds((current) => checked
+      ? current.includes(id) ? current : [...current, id]
+      : current.filter((selectedId) => selectedId !== id));
+  };
+
+  const toggleAll = (checked: boolean) => {
+    setSelectedIds(checked ? [...scopeIds] : []);
+  };
+
+  return {
+    selectedIds,
+    selectedSet,
+    allSelected,
+    partiallySelected,
+    toggle,
+    toggleAll,
+    clear: () => setSelectedIds([])
+  };
+}
+
+function AdminBulkBar({
+  scopeIds,
+  selection,
+  status,
+  statusOptions,
+  busy = false,
+  disabled = false,
+  onStatusChange,
+  onApply,
+  onDelete
+}: {
+  scopeIds: string[];
+  selection: AdminSelection;
+  status: string;
+  statusOptions: Array<{ value: string; label: string }>;
+  busy?: boolean;
+  disabled?: boolean;
+  onStatusChange: (status: string) => void;
+  onApply: () => void;
+  onDelete?: () => void;
+}) {
+  const { t } = useI18n();
+  const selectAllRef = useRef<HTMLInputElement>(null);
+  const statusControlId = useId();
+
+  useEffect(() => {
+    if (selectAllRef.current) selectAllRef.current.indeterminate = selection.partiallySelected;
+  }, [selection.partiallySelected]);
+
+  const controlsDisabled = disabled || busy || !selection.selectedIds.length;
+
+  return (
+    <div className="admin-bulk-bar">
+      <label className="admin-selection-toggle">
+        <input
+          ref={selectAllRef}
+          type="checkbox"
+          checked={selection.allSelected}
+          onChange={(event) => selection.toggleAll(event.target.checked)}
+          disabled={disabled || busy || !scopeIds.length}
+        />
+        <span>{selection.selectedIds.length
+          ? t('admin.bulk.selected', { count: selection.selectedIds.length })
+          : t('admin.bulk.selectAll')}</span>
+      </label>
+      <div className="admin-bulk-bar__actions">
+        <label className="sr-only" htmlFor={statusControlId}>{t('admin.bulk.status')}</label>
+        <select
+          id={statusControlId}
+          value={status}
+          onChange={(event) => onStatusChange(event.target.value)}
+          disabled={controlsDisabled}
+        >
+          {statusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+        </select>
+        <button className="button admin-bulk-bar__apply" type="button" onClick={onApply} disabled={controlsDisabled}>
+          {busy ? t('admin.bulk.processing') : t('admin.bulk.apply')}
+        </button>
+        {onDelete ? (
+          <button
+            className="admin-bulk-bar__delete"
+            type="button"
+            onClick={onDelete}
+            disabled={controlsDisabled}
+            aria-label={t('admin.bulk.deleteSelected')}
+            title={t('admin.bulk.deleteSelected')}
+          >
+            <TrashIcon />
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
 
 type AdminMessage =
   | {
@@ -179,7 +304,11 @@ function PostsAdmin({ token, onSessionExpired }: { token: string; onSessionExpir
   const [message, setMessage] = useState<AdminMessage>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [bulkStatus, setBulkStatus] = useState<EditablePostStatus>('published');
+  const [bulkSaving, setBulkSaving] = useState(false);
   const editorRef = useRef<HTMLFormElement>(null);
+  const postIds = useMemo(() => posts.map((post) => post.id), [posts]);
+  const selection = useAdminSelection(postIds);
 
   const moveToEditorOnMobile = () => {
     if (!window.matchMedia('(max-width: 760px)').matches) return;
@@ -222,6 +351,7 @@ function PostsAdmin({ token, onSessionExpired }: { token: string; onSessionExpir
 
   const save = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (bulkSaving) return;
     const post: Partial<Post> = {
       ...current,
       title: String(current.title || '').trim(),
@@ -257,6 +387,70 @@ function PostsAdmin({ token, onSessionExpired }: { token: string; onSessionExpir
     }
   };
 
+  const applyBulkStatus = async () => {
+    if (saving || !selection.selectedIds.length) return;
+    const requestedIds = [...selection.selectedIds];
+    const updated = new Set<string>();
+    const updatedAt = new Date().toISOString();
+    const reflectUpdatedPosts = () => {
+      if (!updated.size) return;
+      setPosts((items) => sortPostsByNewest(items.map((post) => updated.has(post.id) ? { ...post, status: bulkStatus, updatedAt } : post)));
+      posts.filter((post) => updated.has(post.id)).forEach((post) => syncPublicPost({ ...post, status: bulkStatus, updatedAt }));
+      setCurrent((post) => post.id && updated.has(post.id) ? { ...post, status: bulkStatus, updatedAt } : post);
+    };
+    setBulkSaving(true);
+    setMessage(null);
+    try {
+      for (const ids of mutationBatches(requestedIds)) {
+        const result = await adminBulkUpdatePosts(token, ids, bulkStatus);
+        (result.updatedIds || []).forEach((id) => updated.add(id));
+      }
+      reflectUpdatedPosts();
+      setMessage(translatedMessage('admin.posts.bulkUpdated', { count: updated.size }, { status: { key: POST_STATUS_LABEL_KEYS[bulkStatus] } }));
+      selection.clear();
+    } catch (err) {
+      reflectUpdatedPosts();
+      void load();
+      if (isAdminSessionError(err)) { onSessionExpired(); return; }
+      setMessage(backendErrorMessage(err, 'admin.posts.bulkUpdateFailed'));
+    } finally {
+      setBulkSaving(false);
+    }
+  };
+
+  const deletePosts = async (ids: string[]) => {
+    if (!ids.length || !window.confirm(t('admin.posts.deleteConfirm', { count: ids.length }))) return;
+    const deleted = new Set<string>();
+    const reflectDeletedPosts = () => {
+      if (!deleted.size) return;
+      posts.filter((post) => deleted.has(post.id)).forEach((post) => syncPublicPost({ ...post, status: 'deleted', updatedAt: new Date().toISOString() }));
+      setPosts((items) => items.filter((post) => !deleted.has(post.id)));
+      if (current.id && deleted.has(current.id)) {
+        setCurrent(blankPost());
+        setTagsText('');
+        setEditorView('edit');
+      }
+    };
+    setBulkSaving(true);
+    setMessage(null);
+    try {
+      for (const batch of mutationBatches(ids)) {
+        const result = await adminBulkDeletePosts(token, batch);
+        [...(result.deletedIds || []), ...(result.alreadyMissingIds || [])].forEach((id) => deleted.add(id));
+      }
+      reflectDeletedPosts();
+      setMessage(translatedMessage('admin.posts.deleted', { count: deleted.size }));
+      selection.clear();
+    } catch (err) {
+      reflectDeletedPosts();
+      void load();
+      if (isAdminSessionError(err)) { onSessionExpired(); return; }
+      setMessage(backendErrorMessage(err, 'admin.posts.deleteFailed'));
+    } finally {
+      setBulkSaving(false);
+    }
+  };
+
   const previewTags = splitTags(tagsText);
   const previewTitle = String(current.title || '').trim() || t('admin.posts.previewTitle');
   const previewExcerpt = String(current.excerpt || '').trim();
@@ -284,15 +478,41 @@ function PostsAdmin({ token, onSessionExpired }: { token: string; onSessionExpir
               <strong>{t('admin.posts.list')}</strong>
               <span>{loading && !posts.length ? t('admin.posts.loading') : t('common.count', { count: posts.length })}</span>
             </div>
+            <AdminBulkBar
+              scopeIds={postIds}
+              selection={selection}
+              status={bulkStatus}
+              statusOptions={([
+                ['published', POST_STATUS_LABEL_KEYS.published],
+                ['draft', POST_STATUS_LABEL_KEYS.draft],
+                ['hidden', POST_STATUS_LABEL_KEYS.hidden]
+              ] as Array<[EditablePostStatus, TranslationKey]>).map(([value, key]) => ({ value, label: t(key) }))}
+              busy={bulkSaving}
+              disabled={saving}
+              onStatusChange={(status) => setBulkStatus(status as EditablePostStatus)}
+              onApply={() => { void applyBulkStatus(); }}
+              onDelete={() => { void deletePosts(selection.selectedIds); }}
+            />
             {loading && !posts.length ? <p className="status-message">{t('admin.posts.loadingList')}</p> : null}
             {!loading && !posts.length ? <p className="admin-empty-note">{t('admin.posts.empty')}</p> : null}
             <div className="admin-list">
               {posts.map((post) => (
-                <button className={`admin-list-card ${current.id === post.id ? 'admin-list-card--active' : ''}`} type="button" key={post.id} onClick={() => selectPost(post)} aria-pressed={current.id === post.id}>
-                  <span className={`status-chip status-chip--${post.status}`}>{t(POST_STATUS_LABEL_KEYS[post.status])}</span>
-                  <strong>{post.title || t('common.untitled')}</strong>
-                  <small>{formatDate(post.updatedAt || post.createdAt) || t('common.noDate')}</small>
-                </button>
+                <div className={`admin-list-card ${current.id === post.id ? 'admin-list-card--active' : ''}`} key={post.id}>
+                  <label className="admin-row-selection">
+                    <input
+                      type="checkbox"
+                      checked={selection.selectedSet.has(post.id)}
+                      onChange={(event) => selection.toggle(post.id, event.target.checked)}
+                      disabled={saving || bulkSaving}
+                      aria-label={t('admin.bulk.selectItem', { name: post.title || t('common.untitled') })}
+                    />
+                  </label>
+                  <button className="admin-list-card__content" type="button" onClick={() => selectPost(post)} disabled={saving || bulkSaving} aria-pressed={current.id === post.id}>
+                    <span className={`status-chip status-chip--${post.status}`}>{t(POST_STATUS_LABEL_KEYS[post.status])}</span>
+                    <strong>{post.title || t('common.untitled')}</strong>
+                    <small>{formatDate(post.updatedAt || post.createdAt) || t('common.noDate')}</small>
+                  </button>
+                </div>
               ))}
             </div>
           </aside>
@@ -300,7 +520,14 @@ function PostsAdmin({ token, onSessionExpired }: { token: string; onSessionExpir
           <form className="panel admin-editor" onSubmit={save} ref={editorRef}>
             <div className="admin-editor__bar">
               <h3>{current.id ? t('admin.posts.editTitle') : t('admin.posts.new')}</h3>
-              <button className="button button--primary" type="submit" disabled={saving}>{saving ? t('common.saving') : t('common.save')}</button>
+              <div className="admin-editor__actions">
+                {current.id ? (
+                  <button className="admin-editor__delete" type="button" onClick={() => { void deletePosts([current.id as string]); }} disabled={saving || bulkSaving} aria-label={t('admin.posts.deleteOne')} title={t('admin.posts.deleteOne')}>
+                    <TrashIcon />
+                  </button>
+                ) : null}
+                <button className="button button--primary" type="submit" disabled={saving || bulkSaving}>{saving ? t('common.saving') : t('common.save')}</button>
+              </div>
             </div>
 
             <div className="admin-form-grid">
@@ -315,7 +542,7 @@ function PostsAdmin({ token, onSessionExpired }: { token: string; onSessionExpir
                     ['published', POST_STATUS_LABEL_KEYS.published],
                     ['draft', POST_STATUS_LABEL_KEYS.draft],
                     ['hidden', POST_STATUS_LABEL_KEYS.hidden]
-                  ] as Array<[Post['status'], TranslationKey]>).map(([value, labelKey]) => (
+                  ] as Array<[EditablePostStatus, TranslationKey]>).map(([value, labelKey]) => (
                     <label key={value}>
                       <input type="radio" name="status" value={value} checked={(current.status || 'published') === value} onChange={() => updateCurrent('status', value)} />
                       <span>{t(labelKey)}</span>
@@ -368,11 +595,19 @@ function AssetsAdmin({ token, onSessionExpired }: { token: string; onSessionExpi
   const [query, setQuery] = useState('');
   const [message, setMessage] = useState<AdminMessage>(null);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [bulkStatus, setBulkStatus] = useState<NonNullable<AssetOverride['status']>>('visible');
+  const [bulkSaving, setBulkSaving] = useState(false);
+  const [assetFormStatus, setAssetFormStatus] = useState<NonNullable<AssetOverride['status']>>('visible');
 
   useEffect(() => {
     setLoading(true);
     Promise.all([loadArchiveManifest(), adminListAssetOverrides(token)])
-      .then(([manifest, nextOverrides]) => { setAssets(manifest.assets); setOverrides(nextOverrides); })
+      .then(([manifest, nextOverrides]) => {
+        setAssets(manifest.assets);
+        setOverrides(nextOverrides);
+        syncPublicArchiveOverrides(manifest.assets, nextOverrides);
+      })
       .catch((err) => {
         if (isAdminSessionError(err)) { onSessionExpired(); return; }
         setMessage(backendErrorMessage(err, 'admin.assets.loadFailed'));
@@ -382,15 +617,20 @@ function AssetsAdmin({ token, onSessionExpired }: { token: string; onSessionExpi
 
   const selected = useMemo(() => assets.find((asset) => asset.id === selectedId) || assets[0], [assets, selectedId]);
   const selectedOverride = overrides.find((override) => override.assetId === selected?.id);
+  useEffect(() => {
+    setAssetFormStatus(selectedOverride?.status || selected?.status || 'visible');
+  }, [selected?.id, selected?.status, selectedOverride?.status]);
   const filteredAssets = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase(locale);
     if (!normalizedQuery) return assets;
     return assets.filter((asset) => [asset.title, asset.path, ...(asset.tags || [])].join(' ').toLocaleLowerCase(locale).includes(normalizedQuery));
   }, [assets, locale, query]);
+  const filteredAssetIds = useMemo(() => filteredAssets.map((asset) => asset.id), [filteredAssets]);
+  const selection = useAdminSelection(filteredAssetIds);
 
   const save = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!selected) return;
+    if (!selected || saving || bulkSaving) return;
     const form = new FormData(event.currentTarget);
     const override: AssetOverride = {
       assetId: selected.id,
@@ -401,13 +641,55 @@ function AssetsAdmin({ token, onSessionExpired }: { token: string; onSessionExpi
       status: String(form.get('status') || 'visible') as AssetOverride['status'],
       sortOrder: Number(form.get('sortOrder') || 9999)
     };
+    setSaving(true);
+    setMessage(null);
     try {
       const saved = await adminSaveAssetOverride(token, override);
-      setOverrides((items) => [saved, ...items.filter((item) => item.assetId !== saved.assetId)]);
+      const nextOverrides = [saved, ...overrides.filter((item) => item.assetId !== saved.assetId)];
+      setOverrides(nextOverrides);
+      syncPublicArchiveOverrides(assets, nextOverrides);
       setMessage(translatedMessage('admin.assets.saved'));
     } catch (err) {
       if (isAdminSessionError(err)) { onSessionExpired(); return; }
       setMessage(backendErrorMessage(err, 'admin.assets.saveFailed'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const applyBulkStatus = async () => {
+    if (saving || !selection.selectedIds.length) return;
+    const selectedIds = [...selection.selectedIds];
+    const updated = new Set<string>();
+    const updatedAt = new Date().toISOString();
+    const reflectUpdatedOverrides = () => {
+      if (!updated.size) return;
+      const next = new Map(overrides.map((override) => [override.assetId, override]));
+      updated.forEach((assetId) => next.set(assetId, { ...(next.get(assetId) || { assetId }), status: bulkStatus, updatedAt }));
+      const nextOverrides = Array.from(next.values());
+      setOverrides(nextOverrides);
+      syncPublicArchiveOverrides(assets, nextOverrides);
+    };
+    setBulkSaving(true);
+    setMessage(null);
+    try {
+      for (const ids of mutationBatches(selectedIds)) {
+        const result = await adminBulkUpdateAssetOverrides(token, ids, bulkStatus);
+        (result.updatedIds || []).forEach((id) => updated.add(id));
+      }
+      reflectUpdatedOverrides();
+      setMessage(translatedMessage('admin.assets.bulkUpdated', { count: updated.size }, { status: { key: GUESTBOOK_STATUS_LABEL_KEYS[bulkStatus] } }));
+      selection.clear();
+    } catch (err) {
+      reflectUpdatedOverrides();
+      void adminListAssetOverrides(token).then((nextOverrides) => {
+        setOverrides(nextOverrides);
+        syncPublicArchiveOverrides(assets, nextOverrides);
+      }).catch(() => undefined);
+      if (isAdminSessionError(err)) { onSessionExpired(); return; }
+      setMessage(backendErrorMessage(err, 'admin.assets.bulkUpdateFailed'));
+    } finally {
+      setBulkSaving(false);
     }
   };
 
@@ -420,19 +702,48 @@ function AssetsAdmin({ token, onSessionExpired }: { token: string; onSessionExpi
         <p className="status-message">{t('admin.assets.note')}</p>
         <label className="sr-only" htmlFor="admin-asset-search">{t('admin.assets.search')}</label>
         <input id="admin-asset-search" className="admin-search-input" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('admin.assets.search')} />
+        <AdminBulkBar
+          scopeIds={filteredAssetIds}
+          selection={selection}
+          status={bulkStatus}
+          statusOptions={([
+            ['visible', GUESTBOOK_STATUS_LABEL_KEYS.visible],
+            ['hidden', GUESTBOOK_STATUS_LABEL_KEYS.hidden],
+            ['deleted', GUESTBOOK_STATUS_LABEL_KEYS.deleted]
+          ] as Array<[NonNullable<AssetOverride['status']>, TranslationKey]>).map(([value, key]) => ({ value, label: t(key) }))}
+          busy={bulkSaving}
+          disabled={saving}
+          onStatusChange={(status) => setBulkStatus(status as NonNullable<AssetOverride['status']>)}
+          onApply={() => { void applyBulkStatus(); }}
+        />
         <div className="admin-asset-list" aria-label={t('admin.assets.list')}>
-          {filteredAssets.map((asset) => (
-            <button className={`admin-asset-row ${selected?.id === asset.id ? 'admin-asset-row--active' : ''}`} type="button" key={asset.id} onClick={() => setSelectedId(asset.id)} aria-pressed={selected?.id === asset.id}>
-              <strong>{asset.title}</strong>
-              <span className="meta">{asset.path}</span>
-              <TagList tags={asset.tags} />
-            </button>
-          ))}
+          {filteredAssets.map((asset) => {
+            const status = overrides.find((override) => override.assetId === asset.id)?.status || asset.status;
+            return (
+              <div className={`admin-asset-row ${selected?.id === asset.id ? 'admin-asset-row--active' : ''}`} key={asset.id}>
+                <label className="admin-row-selection">
+                  <input
+                    type="checkbox"
+                    checked={selection.selectedSet.has(asset.id)}
+                    onChange={(event) => selection.toggle(asset.id, event.target.checked)}
+                    disabled={saving || bulkSaving}
+                    aria-label={t('admin.bulk.selectItem', { name: asset.title })}
+                  />
+                </label>
+                <button className="admin-asset-row__content" type="button" onClick={() => setSelectedId(asset.id)} disabled={saving || bulkSaving} aria-pressed={selected?.id === asset.id}>
+                  <span className={`status-chip status-chip--${status}`}>{t(GUESTBOOK_STATUS_LABEL_KEYS[status])}</span>
+                  <strong>{asset.title}</strong>
+                  <span className="meta">{asset.path}</span>
+                  <TagList tags={asset.tags} />
+                </button>
+              </div>
+            );
+          })}
           {!filteredAssets.length ? <p className="admin-empty-note">{t('admin.assets.noResults')}</p> : null}
         </div>
       </div>
       {selected ? (
-        <form className="panel admin-asset-editor" key={selected.id} onSubmit={save}>
+        <form className="panel admin-asset-editor" key={selected.id} onSubmit={save} aria-busy={saving || bulkSaving}>
           <h2>{t('admin.assets.displayInfo')}</h2>
           {selected.kind === 'file' ? (
             <a className="asset-file-tile" href={selected.fileUrl || selected.sourceUrl || selected.imageUrl} target="_blank" rel="noreferrer">
@@ -445,10 +756,10 @@ function AssetsAdmin({ token, onSessionExpired }: { token: string; onSessionExpi
           <div className="field"><label>{t('admin.assets.description')}<textarea name="description" defaultValue={selectedOverride?.description || selected.description || ''} /></label></div>
           <div className="field"><label>{t('admin.assets.tags')}<input name="tags" defaultValue={(selectedOverride?.tags || selected.tags).join(', ')} /></label></div>
           <div className="field"><label>{t('admin.assets.sourceUrl')}<input name="sourceUrl" defaultValue={selectedOverride?.sourceUrl || selected.sourceUrl || ''} /></label></div>
-          <div className="field"><label>{t('admin.assets.status')}<select name="status" defaultValue={selectedOverride?.status || selected.status}><option value="visible">{t('admin.status.visible')}</option><option value="hidden">{t('admin.status.hidden')}</option><option value="deleted">{t('admin.status.deleted')}</option></select></label></div>
+          <div className="field"><label>{t('admin.assets.status')}<select name="status" value={assetFormStatus} onChange={(event) => setAssetFormStatus(event.target.value as NonNullable<AssetOverride['status']>)}><option value="visible">{t('admin.status.visible')}</option><option value="hidden">{t('admin.status.hidden')}</option><option value="deleted">{t('admin.status.deleted')}</option></select></label></div>
           <div className="field"><label>{t('admin.assets.sortOrder')}<input name="sortOrder" type="number" defaultValue={selectedOverride?.sortOrder ?? selected.sortOrder ?? 9999} /></label></div>
-          {message ? <p className="status-message">{renderAdminMessage(message, t)}</p> : null}
-          <button className="button button--primary" type="submit">{t('common.save')}</button>
+          {message ? <p className="status-message" role="status">{renderAdminMessage(message, t)}</p> : null}
+          <button className="button button--primary" type="submit" disabled={saving || bulkSaving}>{saving ? t('common.saving') : t('common.save')}</button>
         </form>
       ) : null}
     </section>
@@ -467,8 +778,14 @@ function GuestbookAdmin({ token, onSessionExpired }: { token: string; onSessionE
   const [banListError, setBanListError] = useState<AdminMessage>(null);
   const [limitedMode, setLimitedMode] = useState(false);
   const [hideTarget, setHideTarget] = useState<GuestbookEntry | null>(null);
+  const [bulkHideIds, setBulkHideIds] = useState<string[]>([]);
   const [hiddenReason, setHiddenReason] = useState('');
   const [changingId, setChangingId] = useState('');
+  const [bulkStatus, setBulkStatus] = useState<'visible' | 'hidden'>('visible');
+  const hideDialogRef = useRef<HTMLElement>(null);
+  const changingIdRef = useRef(changingId);
+  const hideDialogOpen = Boolean(hideTarget || bulkHideIds.length);
+  changingIdRef.current = changingId;
 
   useEffect(() => {
     let active = true;
@@ -518,30 +835,85 @@ function GuestbookAdmin({ token, onSessionExpired }: { token: string; onSessionE
   }, [token]);
 
   useEffect(() => {
-    if (!hideTarget) return undefined;
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !changingId) setHideTarget(null);
+    if (!hideDialogOpen) return undefined;
+    const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const handleDialogKeys = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !changingIdRef.current) {
+        setHideTarget(null);
+        setBulkHideIds([]);
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const focusable = Array.from(hideDialogRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [href]') || []);
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     };
-    window.addEventListener('keydown', closeOnEscape);
-    return () => window.removeEventListener('keydown', closeOnEscape);
-  }, [hideTarget, changingId]);
+    window.addEventListener('keydown', handleDialogKeys);
+    window.requestAnimationFrame(() => hideDialogRef.current?.querySelector<HTMLElement>('input, button')?.focus());
+    return () => {
+      window.removeEventListener('keydown', handleDialogKeys);
+      if (trigger?.isConnected) trigger.focus();
+    };
+  }, [hideDialogOpen]);
 
   const filteredEntries = useMemo(() => filter === 'all' ? entries : entries.filter((entry) => entry.status === filter), [entries, filter]);
+  const filteredEntryIds = useMemo(() => filteredEntries.map((entry) => entry.id), [filteredEntries]);
+  const selection = useAdminSelection(filteredEntryIds);
   const { visibleItems, shownCount, totalCount, hasMore, loadMore } = useIncrementalItems(filteredEntries, GUESTBOOK_BATCH_SIZE);
 
   const statusCount = (status: GuestbookEntry['status']) => entries.filter((entry) => entry.status === status).length;
+  const syncPublicGuestbookStatus = (ids: Set<string>, status: 'visible' | 'hidden') => {
+    if (!ids.size) return;
+    if (status === 'hidden') {
+      setPublicGuestbook((current) => current.filter((entry) => !ids.has(entry.id)));
+      return;
+    }
+    const restored = entries
+      .filter((entry) => ids.has(entry.id))
+      .map((entry) => ({ ...entry, status: 'visible' as const, hiddenReason: '' }));
+    setPublicGuestbook((current) => [...restored, ...current.filter((entry) => !ids.has(entry.id))]);
+  };
 
   const hide = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!hideTarget || !hiddenReason.trim()) return;
-    setChangingId(hideTarget.id);
+    const ids = bulkHideIds.length ? bulkHideIds : hideTarget ? [hideTarget.id] : [];
+    if (!ids.length || !hiddenReason.trim()) return;
+    const bulk = bulkHideIds.length > 0;
+    const updated = new Set<string>();
+    setChangingId(bulk ? 'bulk' : ids[0]);
     try {
-      await adminHideGuestbook(token, hideTarget.id, hiddenReason.trim());
-      setEntries((items) => items.map((item) => item.id === hideTarget.id ? { ...item, status: 'hidden', hiddenReason: hiddenReason.trim() } : item));
-      setMessage(translatedMessage('admin.guestbook.hidden'));
+      if (bulk) {
+        for (const batch of mutationBatches(ids)) {
+          const result = await adminBulkUpdateGuestbook(token, batch, 'hidden', hiddenReason.trim());
+          (result.updatedIds || []).forEach((id) => updated.add(id));
+        }
+      } else {
+        await adminHideGuestbook(token, ids[0], hiddenReason.trim());
+        updated.add(ids[0]);
+      }
+      setEntries((items) => items.map((item) => updated.has(item.id) ? { ...item, status: 'hidden', hiddenReason: hiddenReason.trim() } : item));
+      syncPublicGuestbookStatus(updated, 'hidden');
+      setMessage(bulk
+        ? translatedMessage('admin.guestbook.bulkUpdated', { count: updated.size }, { status: { key: GUESTBOOK_STATUS_LABEL_KEYS.hidden } })
+        : translatedMessage('admin.guestbook.hidden'));
       setHideTarget(null);
+      setBulkHideIds([]);
       setHiddenReason('');
+      if (bulk) selection.clear();
     } catch (err) {
+      if (updated.size) {
+        setEntries((items) => items.map((item) => updated.has(item.id) ? { ...item, status: 'hidden', hiddenReason: hiddenReason.trim() } : item));
+        syncPublicGuestbookStatus(updated, 'hidden');
+      }
+      void adminListGuestbook(token).then((items) => setEntries([...items].sort((a, b) => b.createdAt.localeCompare(a.createdAt)))).catch(() => undefined);
       if (isAdminSessionError(err)) { onSessionExpired(); return; }
       setMessage(backendErrorMessage(err, 'admin.guestbook.hideFailed'));
     } finally {
@@ -555,10 +927,75 @@ function GuestbookAdmin({ token, onSessionExpired }: { token: string; onSessionE
     try {
       await adminRestoreGuestbook(token, entry.id);
       setEntries((items) => items.map((item) => item.id === entry.id ? { ...item, status: 'visible', hiddenReason: '' } : item));
+      syncPublicGuestbookStatus(new Set([entry.id]), 'visible');
       setMessage(translatedMessage('admin.guestbook.restored'));
     } catch (err) {
       if (isAdminSessionError(err)) { onSessionExpired(); return; }
       setMessage(backendErrorMessage(err, 'admin.guestbook.restoreFailed'));
+    } finally {
+      setChangingId('');
+    }
+  };
+
+  const applyBulkStatus = async () => {
+    if (!selection.selectedIds.length) return;
+    if (bulkStatus === 'hidden') {
+      setBulkHideIds([...selection.selectedIds]);
+      setHideTarget(null);
+      setHiddenReason('');
+      return;
+    }
+
+    const ids = [...selection.selectedIds];
+    const updated = new Set<string>();
+    setChangingId('bulk');
+    setMessage(null);
+    try {
+      for (const batch of mutationBatches(ids)) {
+        const result = await adminBulkUpdateGuestbook(token, batch, 'visible');
+        (result.updatedIds || []).forEach((id) => updated.add(id));
+      }
+      setEntries((items) => items.map((item) => updated.has(item.id) ? { ...item, status: 'visible', hiddenReason: '' } : item));
+      syncPublicGuestbookStatus(updated, 'visible');
+      setMessage(translatedMessage('admin.guestbook.bulkUpdated', { count: updated.size }, { status: { key: GUESTBOOK_STATUS_LABEL_KEYS.visible } }));
+      selection.clear();
+    } catch (err) {
+      if (updated.size) {
+        setEntries((items) => items.map((item) => updated.has(item.id) ? { ...item, status: 'visible', hiddenReason: '' } : item));
+        syncPublicGuestbookStatus(updated, 'visible');
+      }
+      void adminListGuestbook(token).then((items) => setEntries([...items].sort((a, b) => b.createdAt.localeCompare(a.createdAt)))).catch(() => undefined);
+      if (isAdminSessionError(err)) { onSessionExpired(); return; }
+      setMessage(backendErrorMessage(err, 'admin.guestbook.bulkUpdateFailed'));
+    } finally {
+      setChangingId('');
+    }
+  };
+
+  const deleteGuestbook = async (ids: string[]) => {
+    if (!ids.length || !window.confirm(t('admin.guestbook.deleteConfirm', { count: ids.length }))) return;
+    const deleted = new Set<string>();
+    const reflectDeletedEntries = () => {
+      if (!deleted.size) return;
+      setEntries((items) => items.filter((item) => !deleted.has(item.id)));
+      setPublicGuestbook((current) => current.filter((item) => !deleted.has(item.id)));
+    };
+    setChangingId('bulk');
+    setMessage(null);
+    try {
+      for (const batch of mutationBatches(ids)) {
+        const result = await adminBulkDeleteGuestbook(token, batch);
+        [...(result.deletedIds || []), ...(result.alreadyMissingIds || [])].forEach((id) => deleted.add(id));
+      }
+      reflectDeletedEntries();
+      setMessage(translatedMessage('admin.guestbook.deleted', { count: deleted.size }));
+      selection.clear();
+      void adminListGuestbookIpBans(token).then(setIpBans).catch(() => undefined);
+    } catch (err) {
+      reflectDeletedEntries();
+      void adminListGuestbook(token).then((items) => setEntries([...items].sort((a, b) => b.createdAt.localeCompare(a.createdAt)))).catch(() => undefined);
+      if (isAdminSessionError(err)) { onSessionExpired(); return; }
+      setMessage(backendErrorMessage(err, 'admin.guestbook.deleteFailed'));
     } finally {
       setChangingId('');
     }
@@ -694,11 +1131,36 @@ function GuestbookAdmin({ token, onSessionExpired }: { token: string; onSessionE
 
           {visibleItems.length ? (
             <div className="admin-guestbook-list">
+              <AdminBulkBar
+                scopeIds={filteredEntryIds}
+                selection={selection}
+                status={bulkStatus}
+                statusOptions={([
+                  ['visible', GUESTBOOK_STATUS_LABEL_KEYS.visible],
+                  ['hidden', GUESTBOOK_STATUS_LABEL_KEYS.hidden]
+                ] as Array<['visible' | 'hidden', TranslationKey]>).map(([value, key]) => ({ value, label: t(key) }))}
+                busy={Boolean(changingId)}
+                disabled={limitedMode}
+                onStatusChange={(status) => setBulkStatus(status as 'visible' | 'hidden')}
+                onApply={() => { void applyBulkStatus(); }}
+                onDelete={() => { void deleteGuestbook(selection.selectedIds); }}
+              />
               <p className="result-count">{t('common.showingOf', { total: totalCount, shown: shownCount })}</p>
               {visibleItems.map((entry) => (
                 <article className="admin-guestbook-row" key={entry.id}>
                   <div className="admin-guestbook-row__head">
-                    <strong>{entry.name}</strong>
+                    <div className="admin-guestbook-row__identity">
+                      <label className="admin-row-selection">
+                        <input
+                          type="checkbox"
+                          checked={selection.selectedSet.has(entry.id)}
+                          onChange={(event) => selection.toggle(entry.id, event.target.checked)}
+                          disabled={limitedMode || Boolean(changingId)}
+                          aria-label={t('admin.bulk.selectItem', { name: `${entry.name} · ${formatDate(entry.createdAt)} · ${entry.message.slice(0, 24)}` })}
+                        />
+                      </label>
+                      <strong>{entry.name}</strong>
+                    </div>
                     <span className={`status-chip status-chip--${entry.status}`}>{t(GUESTBOOK_STATUS_LABEL_KEYS[entry.status])}</span>
                   </div>
                   <p className="admin-guestbook-row__message">{entry.message}</p>
@@ -737,6 +1199,9 @@ function GuestbookAdmin({ token, onSessionExpired }: { token: string; onSessionE
                           <RestoreIcon /> {changingId === entry.id ? t('admin.guestbook.restoring') : t('admin.guestbook.restore')}
                         </button>
                       ) : null}
+                      <button className="admin-ip-action admin-ip-action--danger" type="button" onClick={() => { void deleteGuestbook([entry.id]); }} disabled={limitedMode || Boolean(changingId)} aria-label={t('admin.guestbook.deleteOne')} title={t('admin.guestbook.deleteOne')}>
+                        <TrashIcon />
+                      </button>
                     </div>
                   </div>
                 </article>
@@ -810,21 +1275,23 @@ function GuestbookAdmin({ token, onSessionExpired }: { token: string; onSessionE
         </div>
       )}
 
-      {hideTarget ? (
-        <div className="modal-backdrop admin-dialog-backdrop" role="presentation" onMouseDown={() => { if (!changingId) setHideTarget(null); }}>
-          <section className="modal admin-dialog" role="dialog" aria-modal="true" aria-labelledby="admin-hide-title" onMouseDown={(event) => event.stopPropagation()}>
+      {hideTarget || bulkHideIds.length ? (
+        <div className="modal-backdrop admin-dialog-backdrop" role="presentation" onMouseDown={() => { if (!changingId) { setHideTarget(null); setBulkHideIds([]); } }}>
+          <section ref={hideDialogRef} className="modal admin-dialog" role="dialog" aria-modal="true" aria-labelledby="admin-hide-title" onMouseDown={(event) => event.stopPropagation()}>
             <div className="admin-dialog__head">
-              <h2 id="admin-hide-title">{t('admin.hide.title')}</h2>
-              <button className="admin-dialog__close" type="button" onClick={() => setHideTarget(null)} aria-label={t('common.close')} disabled={Boolean(changingId)}><CloseIcon /></button>
+              <h2 id="admin-hide-title">{bulkHideIds.length ? t('admin.hide.bulkTitle') : t('admin.hide.title')}</h2>
+              <button className="admin-dialog__close" type="button" onClick={() => { setHideTarget(null); setBulkHideIds([]); }} aria-label={t('common.close')} disabled={Boolean(changingId)}><CloseIcon /></button>
             </div>
-            <p>{t('admin.hide.description', { name: hideTarget.name })}</p>
+            <p>{bulkHideIds.length
+              ? t('admin.hide.bulkDescription', { count: bulkHideIds.length })
+              : t('admin.hide.description', { name: hideTarget?.name || '' })}</p>
             <form onSubmit={hide}>
               <div className="field">
                 <label htmlFor="guestbook-hidden-reason">{t('admin.hide.reason')}</label>
-                <input id="guestbook-hidden-reason" value={hiddenReason} onChange={(event) => setHiddenReason(event.target.value)} autoFocus required />
+                <input id="guestbook-hidden-reason" value={hiddenReason} onChange={(event) => setHiddenReason(event.target.value)} maxLength={500} required />
               </div>
               <div className="admin-dialog__actions">
-                <button className="button" type="button" onClick={() => setHideTarget(null)} disabled={Boolean(changingId)}>{t('common.cancel')}</button>
+                <button className="button" type="button" onClick={() => { setHideTarget(null); setBulkHideIds([]); }} disabled={Boolean(changingId)}>{t('common.cancel')}</button>
                 <button className="button button--danger" type="submit" disabled={Boolean(changingId)}>{changingId ? t('admin.hide.processing') : t('admin.guestbook.hide')}</button>
               </div>
             </form>
