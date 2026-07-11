@@ -5,6 +5,7 @@ import { ArchivePage } from './entries/archive';
 import { GuestbookPage } from './entries/guestbook';
 import { HomePage } from './entries/home';
 import { PostsErrorBoundary, PostsPage } from './entries/posts';
+import { PrivacyPage } from './entries/privacy';
 import { SearchPage } from './entries/search';
 import { AppLayout } from './components/AppLayout';
 import { EmptyState } from './components/PageState';
@@ -18,6 +19,7 @@ const PAGE_TITLE_KEYS: Record<string, TranslationKey> = {
   '/archive/': 'nav.archive',
   '/guestbook/': 'nav.guestbook',
   '/search/': 'nav.search',
+  '/privacy/': 'nav.privacy',
   '/admin/': 'nav.admin'
 };
 
@@ -39,6 +41,7 @@ function RouteView({ pathname, routeKey }: { pathname: string; routeKey: string 
   if (pathname === '/archive/') return <ArchivePage key={routeKey} />;
   if (pathname === '/guestbook/') return <GuestbookPage key={routeKey} />;
   if (pathname === '/search/') return <SearchPage key={routeKey} />;
+  if (pathname === '/privacy/') return <PrivacyPage key={routeKey} />;
   if (pathname === '/admin/') return <AdminApp key={routeKey} />;
   return <NotFoundPage key={routeKey} />;
 }

@@ -152,6 +152,10 @@ export function SiteTools({ showSearch = true }: { showSearch?: boolean }) {
                 ))}
               </fieldset>
             </section>
+
+            <footer className="settings-panel__footer">
+              <a href="/privacy/" onClick={() => setSettingsOpen(false)}>{t('nav.privacy')}</a>
+            </footer>
           </aside>
         </div>,
         document.body

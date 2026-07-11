@@ -2,7 +2,7 @@ import { SearchForm } from '../components/SearchForm';
 import { SiteTools } from '../components/SiteTools';
 import { type TranslationKey, useI18n } from '../i18n';
 
-const canonicalRoutes = ['/posts', '/guestbook', '/archive', '/search', '/admin'];
+const canonicalRoutes = ['/posts', '/guestbook', '/archive', '/search', '/privacy', '/admin'];
 if (canonicalRoutes.includes(window.location.pathname)) {
   window.location.replace(`${window.location.pathname}/${window.location.search}${window.location.hash}`);
 }

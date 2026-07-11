@@ -1068,6 +1068,8 @@ img {
   right: 0;
   width: min(360px, 92vw);
   height: 100%;
+  display: flex;
+  flex-direction: column;
   overflow: auto;
   border-left: 3px solid var(--color-ink);
   background: var(--color-background);
@@ -1125,6 +1127,115 @@ img {
   background: var(--color-surface);
   padding: 1rem;
   margin-bottom: 1rem;
+}
+
+.settings-panel__footer {
+  margin-top: auto;
+  padding-top: 1rem;
+  border-top: 1.5px solid var(--color-line);
+}
+
+.settings-panel__footer a {
+  display: inline-block;
+  font-weight: 700;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 0.2em;
+}
+
+.settings-panel__footer a:hover,
+.settings-panel__footer a:focus-visible {
+  color: #276f42;
+}
+
+.settings-panel__footer a:focus-visible {
+  outline: 3px solid var(--color-primary);
+  outline-offset: 3px;
+}
+
+.privacy-document {
+  width: 100%;
+}
+
+.privacy-document__header {
+  padding: 0.5rem 0 1.6rem;
+  border-bottom: 2px solid var(--color-ink);
+}
+
+.privacy-document__header .page-title {
+  font-size: 2.4rem;
+  letter-spacing: 0;
+}
+
+.privacy-document__date {
+  margin: 0 0 0.45rem;
+  color: var(--color-muted);
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.privacy-document__lead {
+  max-width: 72ch;
+  margin: 0.8rem 0 0;
+  color: var(--color-muted);
+  font-size: 1.05rem;
+  font-weight: 600;
+  line-height: 1.65;
+}
+
+.privacy-section {
+  display: grid;
+  grid-template-columns: minmax(160px, 220px) minmax(0, 1fr);
+  gap: 1.75rem;
+  padding: 1.6rem 0;
+  border-bottom: 1.5px solid var(--color-line);
+}
+
+.privacy-section h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  line-height: 1.35;
+}
+
+.privacy-section__body {
+  min-width: 0;
+  line-height: 1.7;
+}
+
+.privacy-section__body p {
+  margin: 0;
+}
+
+.privacy-section__body p + p {
+  margin-top: 0.75rem;
+}
+
+.privacy-section__body ul {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.privacy-section__body a {
+  overflow-wrap: anywhere;
+  font-weight: 700;
+  text-underline-offset: 0.2em;
+}
+
+.privacy-section--contact {
+  border-bottom-color: var(--color-ink);
+}
+
+@media (max-width: 760px) {
+  .privacy-document__header .page-title {
+    font-size: 2rem;
+  }
+
+  .privacy-section {
+    grid-template-columns: 1fr;
+    gap: 0.65rem;
+    padding: 1.35rem 0;
+  }
 }
 
 .language-options {
