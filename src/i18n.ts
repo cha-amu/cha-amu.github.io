@@ -6,7 +6,7 @@ export type AppLanguage = Exclude<LanguagePreference, 'auto'>;
 const STORAGE_KEY = 'cha-amu:language-preference:v1';
 
 const ko = {
-  'brand.name': 'Channel amu',
+  'brand.name': '그냥 아무거나 올리는 채널',
   'brand.tagline': '그냥 아무거나 올리는 채널',
   'nav.posts': '아무 글',
   'nav.archive': '자료',
@@ -59,7 +59,7 @@ const ko = {
   'tags.filter': '{label} 태그 필터',
   'tags.collapse': '태그 접기',
   'tags.more': '태그 {count}개 더보기',
-  'home.logoAlt': 'Channel amu 아이콘',
+  'home.logoAlt': '그냥 아무거나 올리는 채널 아이콘',
   'home.menu': '주요 메뉴',
   'page.notFound': '없는 페이지입니다.',
   'page.goHome': '홈으로 이동',
@@ -123,9 +123,9 @@ const ko = {
   'errors.postsLoad': '아무 글을 불러오지 못했습니다.',
   'errors.guestbookLoad': '방명록을 불러오지 못했습니다.',
   'errors.archiveLoad': '자료 목록을 불러오지 못했습니다.',
-  'mock.post.title': 'Channel amu 시작 기록',
+  'mock.post.title': '그냥 아무거나 올리는 채널 시작 기록',
   'mock.post.excerpt': '사이트가 연결되기 전까지 보이는 예시 글입니다.',
-  'mock.post.body': '# Channel amu\n\n아무 글은 관리자가 Markdown으로 작성해서 올리는 공간입니다.\n\n- 외부 이미지 URL 사용 가능\n- 태그 검색 가능\n- 관리자 페이지에서 작성 및 수정',
+  'mock.post.body': '# 그냥 아무거나 올리는 채널\n\n아무 글은 관리자가 Markdown으로 작성해서 올리는 공간입니다.\n\n- 외부 이미지 URL 사용 가능\n- 태그 검색 가능\n- 관리자 페이지에서 작성 및 수정',
   'mock.guestbook.name': '방문자',
   'mock.guestbook.message': 'Apps Script 연결 전까지 보이는 예시 방명록입니다.',
   'mock.archive.title': '자료 예시',

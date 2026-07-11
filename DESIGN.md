@@ -7,7 +7,7 @@
 - Evidence reviewed: `docs/ui-spec.md`, `docs/github-pages-archive-brief.md`, `src/styles/global.css`, `src/components/AppLayout.tsx`, `src/components/SiteTools.tsx`, `src/components/SearchForm.tsx`, `src/entries/home.tsx`, `docs/assets/ui/*`
 
 ## Brand
-- Name: 모든 언어에서 `Channel amu`를 사용한다.
+- Name: 한국어는 `그냥 아무거나 올리는 채널`, 영어는 `Channel amu`를 사용한다.
 - Personality: 밝고 느슨한 개인 채널, 손그림/두들 감성.
 - Trust signals: 단순한 구조, 명확한 상태 메시지, 삭제/관리 동작의 구분.
 - Avoid: 픽셀아트처럼 딱딱한 장식, 카드만 반복하는 단조로운 레이아웃, 페이지별 폭 흔들림.
