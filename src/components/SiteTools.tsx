@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { type LanguagePreference, useI18n } from '../i18n';
 import { navigateTo } from '../utils/router';
 import { CloseIcon, GuestbookIcon, SearchIcon, SettingsIcon } from './ToolIcons';
 
@@ -8,6 +9,7 @@ function currentPath(): string {
 }
 
 export function SiteTools({ showSearch = true }: { showSearch?: boolean }) {
+  const { language, preference, setLanguagePreference, t } = useI18n();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -17,6 +19,12 @@ export function SiteTools({ showSearch = true }: { showSearch?: boolean }) {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const path = currentPath();
   const isGuestbook = path === '/guestbook/';
+  const displayedLanguage = language === 'ko' ? t('settings.languageKorean') : t('settings.languageEnglish');
+  const languageOptions: Array<{ value: LanguagePreference; label: string }> = [
+    { value: 'auto', label: t('settings.auto') },
+    { value: 'ko', label: t('settings.korean') },
+    { value: 'en', label: t('settings.english') }
+  ];
 
   useEffect(() => {
     if (!settingsOpen && !searchOpen) return;
@@ -57,12 +65,12 @@ export function SiteTools({ showSearch = true }: { showSearch?: boolean }) {
 
   return (
     <>
-      <div className="site-tools" aria-label="공통 도구">
+      <div className="site-tools" aria-label={t('aria.tools')}>
         {showSearch ? (
           <button
             className="tool-icon-link"
             type="button"
-            aria-label="검색 열기"
+            aria-label={t('search.open')}
             aria-expanded={searchOpen}
             aria-controls={searchOpen ? searchDialogId : undefined}
             onClick={openSearch}
@@ -73,7 +81,7 @@ export function SiteTools({ showSearch = true }: { showSearch?: boolean }) {
         <a
           className={`tool-icon-link ${isGuestbook ? 'tool-icon-link--active' : ''}`}
           href="/guestbook/"
-          aria-label="방명록"
+          aria-label={t('nav.guestbook')}
           aria-current={isGuestbook ? 'page' : undefined}
         >
           <GuestbookIcon />
@@ -81,7 +89,7 @@ export function SiteTools({ showSearch = true }: { showSearch?: boolean }) {
         <button
           className="tool-icon-link"
           type="button"
-          aria-label="설정 열기"
+          aria-label={t('settings.open')}
           aria-expanded={settingsOpen}
           onClick={openSettings}
         >
@@ -91,23 +99,23 @@ export function SiteTools({ showSearch = true }: { showSearch?: boolean }) {
 
       {searchOpen ? createPortal(
         <div className="search-layer" role="presentation">
-          <button className="search-backdrop" type="button" aria-label="검색 닫기" onClick={() => setSearchOpen(false)} />
+          <button className="search-backdrop" type="button" aria-label={t('search.close')} onClick={() => setSearchOpen(false)} />
           <section id={searchDialogId} className="global-search-panel" role="dialog" aria-modal="true" aria-labelledby={searchTitleId}>
             <div className="global-search-panel__head">
-              <h2 id={searchTitleId}>검색</h2>
-              <button className="global-search-panel__close" type="button" onClick={() => setSearchOpen(false)} aria-label="검색 닫기">
+              <h2 id={searchTitleId}>{t('search.title')}</h2>
+              <button className="global-search-panel__close" type="button" onClick={() => setSearchOpen(false)} aria-label={t('search.close')}>
                 <CloseIcon />
               </button>
             </div>
             <form className="global-search-panel__form" role="search" onSubmit={submitSearch}>
               <input
                 ref={searchInputRef}
-                aria-label="통합 검색어"
+                aria-label={t('search.query')}
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="검색어"
+                placeholder={t('search.placeholder')}
               />
-              <button className="global-search-panel__submit" type="submit" aria-label="검색">
+              <button className="global-search-panel__submit" type="submit" aria-label={t('search.title')}>
                 <SearchIcon />
               </button>
             </form>
@@ -118,32 +126,47 @@ export function SiteTools({ showSearch = true }: { showSearch?: boolean }) {
 
       {settingsOpen ? createPortal(
         <div className="settings-layer" role="presentation">
-          <button className="settings-backdrop" type="button" aria-label="설정 닫기" onClick={() => setSettingsOpen(false)} />
+          <button className="settings-backdrop" type="button" aria-label={t('settings.close')} onClick={() => setSettingsOpen(false)} />
           <aside className="settings-panel" role="dialog" aria-modal="true" aria-labelledby={settingsTitleId}>
             <div className="settings-panel__head">
-              <h2 id={settingsTitleId}>설정</h2>
-              <button className="settings-panel__close" type="button" onClick={() => setSettingsOpen(false)} aria-label="설정 닫기">
+              <h2 id={settingsTitleId}>{t('settings.title')}</h2>
+              <button className="settings-panel__close" type="button" onClick={() => setSettingsOpen(false)} aria-label={t('settings.close')}>
                 <CloseIcon />
               </button>
             </div>
 
             <section className="settings-section" aria-labelledby={`${settingsTitleId}-language`}>
-              <h3 id={`${settingsTitleId}-language`}>언어</h3>
-              <p className="help-text">현재는 한국어만 제공합니다.</p>
-              <button className="button button--primary" type="button" disabled>
-                한국어
-              </button>
+              <h3 id={`${settingsTitleId}-language`}>{t('settings.language')}</h3>
+              <p className="help-text">{t('settings.languageHelp')}</p>
+              <fieldset className="language-options">
+                <legend className="sr-only">{t('settings.language')}</legend>
+                {languageOptions.map((option) => (
+                  <label key={option.value}>
+                    <input
+                      type="radio"
+                      name={`${settingsTitleId}-language-preference`}
+                      value={option.value}
+                      checked={preference === option.value}
+                      onChange={() => setLanguagePreference(option.value)}
+                    />
+                    <span>{option.label}</span>
+                  </label>
+                ))}
+              </fieldset>
+              <p className="help-text language-status" aria-live="polite">
+                {t(preference === 'auto' ? 'settings.autoStatus' : 'settings.fixedStatus', { language: displayedLanguage })}
+              </p>
             </section>
 
             <section className="settings-section" aria-labelledby={`${settingsTitleId}-theme`}>
-              <h3 id={`${settingsTitleId}-theme`}>테마</h3>
-              <p className="help-text">지금은 밝은 테마 고정입니다. 어두운 테마는 나중에 추가합니다.</p>
+              <h3 id={`${settingsTitleId}-theme`}>{t('settings.theme')}</h3>
+              <p className="help-text">{t('settings.themeHelp')}</p>
               <button className="button button--primary" type="button" disabled>
-                밝은 테마
+                {t('settings.lightTheme')}
               </button>
             </section>
 
-            <p className="help-text">이 설정은 방문자용 표시 설정입니다. 관리자 페이지 설정과는 분리합니다.</p>
+            <p className="help-text">{t('settings.storageHelp')}</p>
           </aside>
         </div>,
         document.body

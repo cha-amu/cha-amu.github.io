@@ -10,6 +10,7 @@ import { TagList } from '../components/TagList';
 import { CloseIcon, EyeOffIcon, LogOutIcon, RestoreIcon, ShieldBanIcon, ShieldCheckIcon } from '../components/ToolIcons';
 import { TurnstileBox } from '../components/TurnstileBox';
 import { useIncrementalItems } from '../hooks/useIncrementalItems';
+import { useI18n, type Translate, type TranslationKey, type TranslationParams } from '../i18n';
 import { syncPublicPost } from '../stores/publicDataStore';
 import type { ArchiveAsset, AssetOverride, GuestbookAdminEntry, GuestbookEntry, GuestbookIpBan, Post } from '../types';
 import { formatDate } from '../utils/date';
@@ -21,25 +22,56 @@ type GuestbookFilter = 'all' | GuestbookEntry['status'];
 type GuestbookAdminView = 'entries' | 'bans';
 type EditorView = 'edit' | 'preview';
 
-const TAB_LABELS: Record<Tab, string> = {
-  posts: '아무 글',
-  assets: '자료',
-  guestbook: '방명록'
+const TAB_LABEL_KEYS: Record<Tab, TranslationKey> = {
+  posts: 'admin.tab.posts',
+  assets: 'admin.tab.assets',
+  guestbook: 'admin.tab.guestbook'
 };
 
-const POST_STATUS_LABELS: Record<Post['status'], string> = {
-  published: '공개',
-  draft: '임시저장',
-  hidden: '숨김'
+const POST_STATUS_LABEL_KEYS: Record<Post['status'], TranslationKey> = {
+  published: 'admin.status.published',
+  draft: 'admin.status.draft',
+  hidden: 'admin.status.hidden'
 };
 
-const GUESTBOOK_STATUS_LABELS: Record<GuestbookEntry['status'], string> = {
-  visible: '공개',
-  hidden: '숨김',
-  deleted: '삭제됨'
+const GUESTBOOK_STATUS_LABEL_KEYS: Record<GuestbookEntry['status'], TranslationKey> = {
+  visible: 'admin.status.visible',
+  hidden: 'admin.status.hidden',
+  deleted: 'admin.status.deleted'
 };
 
 const GUESTBOOK_BATCH_SIZE = 10;
+
+type AdminMessage =
+  | {
+    key: TranslationKey;
+    params?: TranslationParams;
+    translatedParams?: Record<string, { key: TranslationKey; params?: TranslationParams }>;
+  }
+  | { text: string }
+  | null;
+
+function translatedMessage(
+  key: TranslationKey,
+  params?: TranslationParams,
+  translatedParams?: Record<string, { key: TranslationKey; params?: TranslationParams }>
+): AdminMessage {
+  return { key, params, translatedParams };
+}
+
+function backendErrorMessage(error: unknown, fallbackKey: TranslationKey): AdminMessage {
+  const text = error instanceof Error ? error.message : String(error || '');
+  return text ? { text } : translatedMessage(fallbackKey);
+}
+
+function renderAdminMessage(message: AdminMessage, t: Translate) {
+  if (!message) return '';
+  if ('text' in message) return message.text;
+  const translatedParams = Object.fromEntries(
+    Object.entries(message.translatedParams || {}).map(([name, value]) => [name, t(value.key, value.params)])
+  );
+  return t(message.key, { ...message.params, ...translatedParams });
+}
 
 
 const ADMIN_POST_DRAFT_KEY = 'cha-amu:admin-post-draft:v1';
@@ -78,7 +110,8 @@ function sortPostsByNewest(posts: Post[]) {
   });
 }
 
-function LoginPanel({ onLogin, initialMessage = '' }: { onLogin: () => void; initialMessage?: string }) {
+function LoginPanel({ onLogin, initialMessage = null }: { onLogin: () => void; initialMessage?: AdminMessage }) {
+  const { t } = useI18n();
   const [message, setMessage] = useState(initialMessage);
   const [saving, setSaving] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState('');
@@ -88,17 +121,17 @@ function LoginPanel({ onLogin, initialMessage = '' }: { onLogin: () => void; ini
     event.preventDefault();
     const password = String(new FormData(event.currentTarget).get('password') || '');
     if (!turnstileToken) {
-      setMessage('사람인지 확인을 완료해 주세요.');
+      setMessage(translatedMessage('admin.login.humanRequired'));
       return;
     }
     setSaving(true);
-    setMessage('');
+    setMessage(null);
     try {
       const session = await adminLogin({ password, turnstileToken });
       saveAdminSession(session);
       onLogin();
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : '로그인에 실패했습니다.');
+      setMessage(backendErrorMessage(err, 'admin.login.failed'));
     } finally {
       setSaving(false);
       setTurnstileToken('');
@@ -110,18 +143,18 @@ function LoginPanel({ onLogin, initialMessage = '' }: { onLogin: () => void; ini
     <AppLayout>
       <section className="admin-page-head" aria-labelledby="admin-login-title">
         <div>
-          <h1 id="admin-login-title" className="page-title">관리자 로그인</h1>
-          <p className="lead">글 작성, 방명록 관리, 자료 표시 정보 수정을 여기서 합니다.</p>
+          <h1 id="admin-login-title" className="page-title">{t('admin.login.title')}</h1>
+          <p className="lead">{t('admin.login.lead')}</p>
         </div>
       </section>
       <form className="panel admin-login-panel" onSubmit={submit}>
         <div className="field">
-          <label htmlFor="admin-password">관리자 비밀번호</label>
+          <label htmlFor="admin-password">{t('admin.login.password')}</label>
           <input id="admin-password" name="password" type="password" autoComplete="current-password" required />
         </div>
         <TurnstileBox action="admin_login" onTokenChange={setTurnstileToken} resetKey={turnstileResetKey} />
-        {message ? <p className="status-message status-message--danger">{message}</p> : null}
-        <button className="button button--primary" type="submit" disabled={saving}>{saving ? '확인 중' : '로그인'}</button>
+        {message ? <p className="status-message status-message--danger">{renderAdminMessage(message, t)}</p> : null}
+        <button className="button button--primary" type="submit" disabled={saving}>{saving ? t('admin.login.checking') : t('admin.login.submit')}</button>
       </form>
     </AppLayout>
   );
@@ -137,12 +170,13 @@ function isAdminSessionError(error: unknown) {
 }
 
 function PostsAdmin({ token, onSessionExpired }: { token: string; onSessionExpired: () => void }) {
+  const { t } = useI18n();
   const restoredDraft = useMemo(() => readAdminPostDraft(), []);
   const [posts, setPosts] = useState<Post[]>([]);
   const [current, setCurrent] = useState<Partial<Post>>(() => restoredDraft?.current || blankPost());
   const [tagsText, setTagsText] = useState(restoredDraft?.tagsText || '');
   const [editorView, setEditorView] = useState<EditorView>('edit');
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useState<AdminMessage>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const editorRef = useRef<HTMLFormElement>(null);
@@ -156,7 +190,7 @@ function PostsAdmin({ token, onSessionExpired }: { token: string; onSessionExpir
     setCurrent(post);
     setTagsText((post.tags || []).join(', '));
     setEditorView('edit');
-    setMessage('');
+    setMessage(null);
     moveToEditorOnMobile();
   };
 
@@ -164,7 +198,7 @@ function PostsAdmin({ token, onSessionExpired }: { token: string; onSessionExpir
     setCurrent(blankPost());
     setTagsText('');
     setEditorView('edit');
-    setMessage('새 글을 작성합니다. 상태가 공개면 저장 후 /posts/에 표시됩니다.');
+    setMessage(translatedMessage('admin.posts.newMessage'));
     moveToEditorOnMobile();
   };
 
@@ -174,7 +208,7 @@ function PostsAdmin({ token, onSessionExpired }: { token: string; onSessionExpir
       .then((items) => setPosts(sortPostsByNewest(items)))
       .catch((err) => {
         if (isAdminSessionError(err)) { onSessionExpired(); return; }
-        setMessage(err instanceof Error ? err.message : '글 목록을 불러오지 못했습니다.');
+        setMessage(backendErrorMessage(err, 'admin.posts.loadFailed'));
       })
       .finally(() => setLoading(false));
   };
@@ -199,63 +233,65 @@ function PostsAdmin({ token, onSessionExpired }: { token: string; onSessionExpir
 
     if (!post.body?.trim()) {
       setEditorView('edit');
-      setMessage('본문을 입력하세요.');
+      setMessage(translatedMessage('admin.posts.bodyRequired'));
       window.requestAnimationFrame(() => document.getElementById('post-body')?.focus());
       return;
     }
 
     setSaving(true);
-    setMessage('저장 중입니다.');
+    setMessage(translatedMessage('admin.posts.savingMessage'));
     try {
       const saved = await adminSavePost(token, post);
       setPosts((items) => sortPostsByNewest([saved, ...items.filter((item) => item.id !== saved.id)]));
       setCurrent(saved);
       setTagsText((saved.tags || []).join(', '));
       syncPublicPost(saved);
-      setMessage(saved.status === 'published' ? '저장했습니다. 공개 글 목록에도 바로 반영했습니다.' : `저장했습니다. 현재 상태는 ${POST_STATUS_LABELS[saved.status]}입니다.`);
+      setMessage(saved.status === 'published'
+        ? translatedMessage('admin.posts.savedPublished')
+        : translatedMessage('admin.posts.savedStatus', undefined, { status: { key: POST_STATUS_LABEL_KEYS[saved.status] } }));
     } catch (err) {
       if (isAdminSessionError(err)) { onSessionExpired(); return; }
-      setMessage(err instanceof Error ? err.message : '저장에 실패했습니다.');
+      setMessage(backendErrorMessage(err, 'admin.posts.saveFailed'));
     } finally {
       setSaving(false);
     }
   };
 
   const previewTags = splitTags(tagsText);
-  const previewTitle = String(current.title || '').trim() || '제목 미리보기';
+  const previewTitle = String(current.title || '').trim() || t('admin.posts.previewTitle');
   const previewExcerpt = String(current.excerpt || '').trim();
 
   return (
-    <section className="admin-posts" aria-label="아무 글 관리">
+    <section className="admin-posts" aria-label={t('admin.posts.manage')}>
       <header className="panel admin-section-head">
         <div>
-          <h2>아무 글 관리</h2>
-          <p className="help-text">상태가 공개인 글만 방문자 `/posts/` 화면에 표시됩니다.</p>
+          <h2>{t('admin.posts.manage')}</h2>
+          <p className="help-text">{t('admin.posts.help')}</p>
         </div>
         <div className="admin-section-head__actions">
-          <div className="admin-view-switch" role="tablist" aria-label="글 작성 화면">
-            <button id="admin-edit-tab" className={editorView === 'edit' ? 'admin-view-switch__active' : ''} type="button" role="tab" aria-selected={editorView === 'edit'} aria-controls="admin-edit-panel" onClick={() => setEditorView('edit')}>편집</button>
-            <button id="admin-preview-tab" className={editorView === 'preview' ? 'admin-view-switch__active' : ''} type="button" role="tab" aria-selected={editorView === 'preview'} aria-controls="admin-preview-panel" onClick={() => setEditorView('preview')}>미리보기</button>
+          <div className="admin-view-switch" role="tablist" aria-label={t('admin.posts.editorTabs')}>
+            <button id="admin-edit-tab" className={editorView === 'edit' ? 'admin-view-switch__active' : ''} type="button" role="tab" aria-selected={editorView === 'edit'} aria-controls="admin-edit-panel" onClick={() => setEditorView('edit')}>{t('admin.posts.edit')}</button>
+            <button id="admin-preview-tab" className={editorView === 'preview' ? 'admin-view-switch__active' : ''} type="button" role="tab" aria-selected={editorView === 'preview'} aria-controls="admin-preview-panel" onClick={() => setEditorView('preview')}>{t('admin.posts.preview')}</button>
           </div>
-          <button className="button button--primary" type="button" onClick={startNewPost}>새 글 작성</button>
+          <button className="button button--primary" type="button" onClick={startNewPost}>{t('admin.posts.new')}</button>
         </div>
       </header>
 
       {editorView === 'edit' ? (
         <div id="admin-edit-panel" className="admin-post-layout" role="tabpanel" aria-labelledby="admin-edit-tab">
-          <aside className="panel admin-list-panel" aria-label="글 목록">
+          <aside className="panel admin-list-panel" aria-label={t('admin.posts.list')}>
             <div className="admin-list-panel__top">
-              <strong>글 목록</strong>
-              <span>{loading && !posts.length ? '불러오는 중' : `${posts.length}개`}</span>
+              <strong>{t('admin.posts.list')}</strong>
+              <span>{loading && !posts.length ? t('admin.posts.loading') : t('common.count', { count: posts.length })}</span>
             </div>
-            {loading && !posts.length ? <p className="status-message">글 목록을 불러오는 중입니다.</p> : null}
-            {!loading && !posts.length ? <p className="admin-empty-note">아직 저장된 글이 없습니다.</p> : null}
+            {loading && !posts.length ? <p className="status-message">{t('admin.posts.loadingList')}</p> : null}
+            {!loading && !posts.length ? <p className="admin-empty-note">{t('admin.posts.empty')}</p> : null}
             <div className="admin-list">
               {posts.map((post) => (
                 <button className={`admin-list-card ${current.id === post.id ? 'admin-list-card--active' : ''}`} type="button" key={post.id} onClick={() => selectPost(post)} aria-pressed={current.id === post.id}>
-                  <span className={`status-chip status-chip--${post.status}`}>{POST_STATUS_LABELS[post.status]}</span>
-                  <strong>{post.title || '(제목 없음)'}</strong>
-                  <small>{formatDate(post.updatedAt || post.createdAt) || '날짜 없음'}</small>
+                  <span className={`status-chip status-chip--${post.status}`}>{t(POST_STATUS_LABEL_KEYS[post.status])}</span>
+                  <strong>{post.title || t('common.untitled')}</strong>
+                  <small>{formatDate(post.updatedAt || post.createdAt) || t('common.noDate')}</small>
                 </button>
               ))}
             </div>
@@ -263,44 +299,44 @@ function PostsAdmin({ token, onSessionExpired }: { token: string; onSessionExpir
 
           <form className="panel admin-editor" onSubmit={save} ref={editorRef}>
             <div className="admin-editor__bar">
-              <h3>{current.id ? '글 수정' : '새 글 작성'}</h3>
-              <button className="button button--primary" type="submit" disabled={saving}>{saving ? '저장 중' : '저장'}</button>
+              <h3>{current.id ? t('admin.posts.editTitle') : t('admin.posts.new')}</h3>
+              <button className="button button--primary" type="submit" disabled={saving}>{saving ? t('common.saving') : t('common.save')}</button>
             </div>
 
             <div className="admin-form-grid">
               <div className="field admin-field--wide">
-                <label htmlFor="post-title">제목</label>
+                <label htmlFor="post-title">{t('admin.posts.titleField')}</label>
                 <input id="post-title" name="title" value={current.title || ''} onChange={(event) => updateCurrent('title', event.target.value)} required />
               </div>
               <div className="field admin-post-status" role="radiogroup" aria-labelledby="post-status-label">
-                <span id="post-status-label" className="admin-post-status__label">상태</span>
+                <span id="post-status-label" className="admin-post-status__label">{t('admin.posts.statusField')}</span>
                 <div className="admin-post-status__options">
                   {([
-                    ['published', '공개'],
-                    ['draft', '임시저장'],
-                    ['hidden', '숨김']
-                  ] as Array<[Post['status'], string]>).map(([value, label]) => (
+                    ['published', POST_STATUS_LABEL_KEYS.published],
+                    ['draft', POST_STATUS_LABEL_KEYS.draft],
+                    ['hidden', POST_STATUS_LABEL_KEYS.hidden]
+                  ] as Array<[Post['status'], TranslationKey]>).map(([value, labelKey]) => (
                     <label key={value}>
                       <input type="radio" name="status" value={value} checked={(current.status || 'published') === value} onChange={() => updateCurrent('status', value)} />
-                      <span>{label}</span>
+                      <span>{t(labelKey)}</span>
                     </label>
                   ))}
                 </div>
               </div>
               <div className="field">
-                <label htmlFor="post-tags">태그</label>
-                <input id="post-tags" name="tags" value={tagsText} onChange={(event) => setTagsText(event.target.value)} placeholder="쉼표로 구분" />
+                <label htmlFor="post-tags">{t('admin.posts.tagsField')}</label>
+                <input id="post-tags" name="tags" value={tagsText} onChange={(event) => setTagsText(event.target.value)} placeholder={t('admin.posts.tagsPlaceholder')} />
               </div>
               <div className="field admin-field--wide">
-                <label htmlFor="post-excerpt">요약</label>
+                <label htmlFor="post-excerpt">{t('admin.posts.excerptField')}</label>
                 <input id="post-excerpt" name="excerpt" value={current.excerpt || ''} onChange={(event) => updateCurrent('excerpt', event.target.value)} />
               </div>
             </div>
 
             <div className="field admin-writing-rail">
-              <label htmlFor="post-body">본문 Markdown</label>
+              <label htmlFor="post-body">{t('admin.posts.bodyField')}</label>
               <textarea className="admin-markdown-input" id="post-body" name="body" value={current.body || ''} onChange={(event) => updateCurrent('body', event.target.value)} required />
-              <span className="help-text">작성 중인 내용은 이 브라우저에 임시 보관됩니다.</span>
+              <span className="help-text">{t('admin.posts.draftHelp')}</span>
             </div>
           </form>
         </div>
@@ -311,25 +347,26 @@ function PostsAdmin({ token, onSessionExpired }: { token: string; onSessionExpir
               <h2>{previewTitle}</h2>
               {previewExcerpt ? <p>{previewExcerpt}</p> : null}
               {previewTags.length ? <TagList tags={previewTags} /> : null}
-              <p className="meta">공개 페이지와 같은 너비로 표시됩니다.</p>
+              <p className="meta">{t('admin.posts.previewWidth')}</p>
             </div>
             <div className="post-entry__body">
-              {current.body ? <MarkdownView markdown={current.body} /> : <p className="help-text">본문을 입력하면 미리보기가 표시됩니다.</p>}
+              {current.body ? <MarkdownView markdown={current.body} /> : <p className="help-text">{t('admin.posts.previewEmpty')}</p>}
             </div>
           </article>
         </section>
       )}
-      {message ? <p className="status-message" role="status">{message}</p> : null}
+      {message ? <p className="status-message" role="status">{renderAdminMessage(message, t)}</p> : null}
     </section>
   );
 }
 
 function AssetsAdmin({ token, onSessionExpired }: { token: string; onSessionExpired: () => void }) {
+  const { locale, t } = useI18n();
   const [assets, setAssets] = useState<ArchiveAsset[]>([]);
   const [overrides, setOverrides] = useState<AssetOverride[]>([]);
   const [selectedId, setSelectedId] = useState('');
   const [query, setQuery] = useState('');
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useState<AdminMessage>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -338,7 +375,7 @@ function AssetsAdmin({ token, onSessionExpired }: { token: string; onSessionExpi
       .then(([manifest, nextOverrides]) => { setAssets(manifest.assets); setOverrides(nextOverrides); })
       .catch((err) => {
         if (isAdminSessionError(err)) { onSessionExpired(); return; }
-        setMessage(err instanceof Error ? err.message : '자료 정보를 불러오지 못했습니다.');
+        setMessage(backendErrorMessage(err, 'admin.assets.loadFailed'));
       })
       .finally(() => setLoading(false));
   }, [token]);
@@ -346,10 +383,10 @@ function AssetsAdmin({ token, onSessionExpired }: { token: string; onSessionExpi
   const selected = useMemo(() => assets.find((asset) => asset.id === selectedId) || assets[0], [assets, selectedId]);
   const selectedOverride = overrides.find((override) => override.assetId === selected?.id);
   const filteredAssets = useMemo(() => {
-    const normalizedQuery = query.trim().toLocaleLowerCase('ko-KR');
+    const normalizedQuery = query.trim().toLocaleLowerCase(locale);
     if (!normalizedQuery) return assets;
-    return assets.filter((asset) => [asset.title, asset.path, ...(asset.tags || [])].join(' ').toLocaleLowerCase('ko-KR').includes(normalizedQuery));
-  }, [assets, query]);
+    return assets.filter((asset) => [asset.title, asset.path, ...(asset.tags || [])].join(' ').toLocaleLowerCase(locale).includes(normalizedQuery));
+  }, [assets, locale, query]);
 
   const save = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -367,23 +404,23 @@ function AssetsAdmin({ token, onSessionExpired }: { token: string; onSessionExpi
     try {
       const saved = await adminSaveAssetOverride(token, override);
       setOverrides((items) => [saved, ...items.filter((item) => item.assetId !== saved.assetId)]);
-      setMessage('자료 override를 저장했습니다.');
+      setMessage(translatedMessage('admin.assets.saved'));
     } catch (err) {
       if (isAdminSessionError(err)) { onSessionExpired(); return; }
-      setMessage(err instanceof Error ? err.message : '저장에 실패했습니다.');
+      setMessage(backendErrorMessage(err, 'admin.assets.saveFailed'));
     }
   };
 
-  if (loading && !assets.length) return <EmptyState label="자료 정보를 불러오는 중입니다." />;
-  if (!assets.length) return <EmptyState label={message || '등록된 자료가 없습니다.'} />;
+  if (loading && !assets.length) return <EmptyState label={t('admin.assets.loading')} />;
+  if (!assets.length) return <EmptyState label={message ? renderAdminMessage(message, t) : t('admin.assets.empty')} />;
 
   return (
     <section className="two-column admin-asset-layout">
       <div className="panel admin-asset-list-panel">
-        <p className="status-message">이미지 파일은 저장소에서 관리합니다. 여기서는 표시 정보만 수정합니다.</p>
-        <label className="sr-only" htmlFor="admin-asset-search">자료 검색</label>
-        <input id="admin-asset-search" className="admin-search-input" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="자료 검색" />
-        <div className="admin-asset-list" aria-label="자료 목록">
+        <p className="status-message">{t('admin.assets.note')}</p>
+        <label className="sr-only" htmlFor="admin-asset-search">{t('admin.assets.search')}</label>
+        <input id="admin-asset-search" className="admin-search-input" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('admin.assets.search')} />
+        <div className="admin-asset-list" aria-label={t('admin.assets.list')}>
           {filteredAssets.map((asset) => (
             <button className={`admin-asset-row ${selected?.id === asset.id ? 'admin-asset-row--active' : ''}`} type="button" key={asset.id} onClick={() => setSelectedId(asset.id)} aria-pressed={selected?.id === asset.id}>
               <strong>{asset.title}</strong>
@@ -391,12 +428,12 @@ function AssetsAdmin({ token, onSessionExpired }: { token: string; onSessionExpi
               <TagList tags={asset.tags} />
             </button>
           ))}
-          {!filteredAssets.length ? <p className="admin-empty-note">검색 결과가 없습니다.</p> : null}
+          {!filteredAssets.length ? <p className="admin-empty-note">{t('admin.assets.noResults')}</p> : null}
         </div>
       </div>
       {selected ? (
         <form className="panel admin-asset-editor" key={selected.id} onSubmit={save}>
-          <h2>자료 표시 정보</h2>
+          <h2>{t('admin.assets.displayInfo')}</h2>
           {selected.kind === 'file' ? (
             <a className="asset-file-tile" href={selected.fileUrl || selected.sourceUrl || selected.imageUrl} target="_blank" rel="noreferrer">
               {selected.fileName}
@@ -404,14 +441,14 @@ function AssetsAdmin({ token, onSessionExpired }: { token: string; onSessionExpi
           ) : (
             <img className="admin-asset-preview" src={selected.imageUrl} alt={selected.title} />
           )}
-          <div className="field"><label>표시명<input name="displayName" defaultValue={selectedOverride?.displayName || selected.title} /></label></div>
-          <div className="field"><label>설명<textarea name="description" defaultValue={selectedOverride?.description || selected.description || ''} /></label></div>
-          <div className="field"><label>태그<input name="tags" defaultValue={(selectedOverride?.tags || selected.tags).join(', ')} /></label></div>
-          <div className="field"><label>출처 URL<input name="sourceUrl" defaultValue={selectedOverride?.sourceUrl || selected.sourceUrl || ''} /></label></div>
-          <div className="field"><label>상태<select name="status" defaultValue={selectedOverride?.status || selected.status}><option value="visible">공개</option><option value="hidden">숨김</option><option value="deleted">삭제됨</option></select></label></div>
-          <div className="field"><label>정렬값<input name="sortOrder" type="number" defaultValue={selectedOverride?.sortOrder ?? selected.sortOrder ?? 9999} /></label></div>
-          {message ? <p className="status-message">{message}</p> : null}
-          <button className="button button--primary" type="submit">저장</button>
+          <div className="field"><label>{t('admin.assets.displayName')}<input name="displayName" defaultValue={selectedOverride?.displayName || selected.title} /></label></div>
+          <div className="field"><label>{t('admin.assets.description')}<textarea name="description" defaultValue={selectedOverride?.description || selected.description || ''} /></label></div>
+          <div className="field"><label>{t('admin.assets.tags')}<input name="tags" defaultValue={(selectedOverride?.tags || selected.tags).join(', ')} /></label></div>
+          <div className="field"><label>{t('admin.assets.sourceUrl')}<input name="sourceUrl" defaultValue={selectedOverride?.sourceUrl || selected.sourceUrl || ''} /></label></div>
+          <div className="field"><label>{t('admin.assets.status')}<select name="status" defaultValue={selectedOverride?.status || selected.status}><option value="visible">{t('admin.status.visible')}</option><option value="hidden">{t('admin.status.hidden')}</option><option value="deleted">{t('admin.status.deleted')}</option></select></label></div>
+          <div className="field"><label>{t('admin.assets.sortOrder')}<input name="sortOrder" type="number" defaultValue={selectedOverride?.sortOrder ?? selected.sortOrder ?? 9999} /></label></div>
+          {message ? <p className="status-message">{renderAdminMessage(message, t)}</p> : null}
+          <button className="button button--primary" type="submit">{t('common.save')}</button>
         </form>
       ) : null}
     </section>
@@ -419,14 +456,15 @@ function AssetsAdmin({ token, onSessionExpired }: { token: string; onSessionExpi
 }
 
 function GuestbookAdmin({ token, onSessionExpired }: { token: string; onSessionExpired: () => void }) {
+  const { t } = useI18n();
   const [entries, setEntries] = useState<GuestbookAdminEntry[]>([]);
   const [ipBans, setIpBans] = useState<GuestbookIpBan[]>([]);
   const [view, setView] = useState<GuestbookAdminView>('entries');
   const [filter, setFilter] = useState<GuestbookFilter>('all');
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useState<AdminMessage>(null);
   const [loading, setLoading] = useState(true);
   const [bansLoading, setBansLoading] = useState(true);
-  const [banListError, setBanListError] = useState('');
+  const [banListError, setBanListError] = useState<AdminMessage>(null);
   const [limitedMode, setLimitedMode] = useState(false);
   const [hideTarget, setHideTarget] = useState<GuestbookEntry | null>(null);
   const [hiddenReason, setHiddenReason] = useState('');
@@ -436,7 +474,7 @@ function GuestbookAdmin({ token, onSessionExpired }: { token: string; onSessionE
     let active = true;
     const loadEntries = async () => {
       setLoading(true);
-      setMessage('');
+      setMessage(null);
       setLimitedMode(false);
       try {
         const items = await adminListGuestbook(token);
@@ -452,10 +490,10 @@ function GuestbookAdmin({ token, onSessionExpired }: { token: string; onSessionE
               setLimitedMode(true);
             }
           } catch (fallbackError) {
-            if (active) setMessage(fallbackError instanceof Error ? fallbackError.message : '방명록을 불러오지 못했습니다.');
+            if (active) setMessage(backendErrorMessage(fallbackError, 'admin.guestbook.loadFailed'));
           }
         } else if (active) {
-          setMessage(errorMessage || '방명록을 불러오지 못했습니다.');
+          setMessage(errorMessage ? { text: errorMessage } : translatedMessage('admin.guestbook.loadFailed'));
         }
       } finally {
         if (active) setLoading(false);
@@ -463,13 +501,13 @@ function GuestbookAdmin({ token, onSessionExpired }: { token: string; onSessionE
     };
     const loadBans = async () => {
       setBansLoading(true);
-      setBanListError('');
+      setBanListError(null);
       try {
         const bans = await adminListGuestbookIpBans(token);
         if (active) setIpBans(bans);
       } catch (err) {
         if (isAdminSessionError(err)) { onSessionExpired(); return; }
-        if (active) setBanListError(err instanceof Error ? err.message : 'IP 차단 목록을 불러오지 못했습니다.');
+        if (active) setBanListError(backendErrorMessage(err, 'admin.guestbook.banListLoadFailed'));
       } finally {
         if (active) setBansLoading(false);
       }
@@ -500,12 +538,12 @@ function GuestbookAdmin({ token, onSessionExpired }: { token: string; onSessionE
     try {
       await adminHideGuestbook(token, hideTarget.id, hiddenReason.trim());
       setEntries((items) => items.map((item) => item.id === hideTarget.id ? { ...item, status: 'hidden', hiddenReason: hiddenReason.trim() } : item));
-      setMessage('방명록 글을 숨겼습니다.');
+      setMessage(translatedMessage('admin.guestbook.hidden'));
       setHideTarget(null);
       setHiddenReason('');
     } catch (err) {
       if (isAdminSessionError(err)) { onSessionExpired(); return; }
-      setMessage(err instanceof Error ? err.message : '숨김 처리에 실패했습니다.');
+      setMessage(backendErrorMessage(err, 'admin.guestbook.hideFailed'));
     } finally {
       setChangingId('');
     }
@@ -513,14 +551,14 @@ function GuestbookAdmin({ token, onSessionExpired }: { token: string; onSessionE
 
   const restore = async (entry: GuestbookEntry) => {
     setChangingId(entry.id);
-    setMessage('');
+    setMessage(null);
     try {
       await adminRestoreGuestbook(token, entry.id);
       setEntries((items) => items.map((item) => item.id === entry.id ? { ...item, status: 'visible', hiddenReason: '' } : item));
-      setMessage('방명록 글을 다시 공개했습니다.');
+      setMessage(translatedMessage('admin.guestbook.restored'));
     } catch (err) {
       if (isAdminSessionError(err)) { onSessionExpired(); return; }
-      setMessage(err instanceof Error ? err.message : '복구에 실패했습니다.');
+      setMessage(backendErrorMessage(err, 'admin.guestbook.restoreFailed'));
     } finally {
       setChangingId('');
     }
@@ -528,10 +566,10 @@ function GuestbookAdmin({ token, onSessionExpired }: { token: string; onSessionE
 
   const updateIpBlock = async (entry: GuestbookAdminEntry, blocked: boolean) => {
     if (!entry.ipBanAvailable) return;
-    if (blocked && !window.confirm('이 글 작성자의 IP를 방명록 작성 차단 목록에 추가할까요?\n차단 해제 전까지 새 글을 남길 수 없습니다.')) return;
+    if (blocked && !window.confirm(t('admin.guestbook.blockConfirm'))) return;
 
     setChangingId(entry.id);
-    setMessage('');
+    setMessage(null);
     try {
       const result = blocked
         ? await adminBanGuestbookIp(token, entry.id)
@@ -543,8 +581,14 @@ function GuestbookAdmin({ token, onSessionExpired }: { token: string; onSessionE
       if (!blocked) {
         setIpBans((items) => items.filter((ban) => ban.sourceEntryId !== entry.id && !ban.relatedEntryIds.includes(entry.id)));
       }
-      const relatedNote = relatedEntryCount && relatedEntryCount > 1 ? ` 같은 IP로 연결된 글은 ${relatedEntryCount}개입니다.` : '';
-      setMessage(blocked ? `이 작성자의 IP를 차단했습니다.${relatedNote}` : `이 작성자의 IP 차단을 해제했습니다.${relatedNote}`);
+      const relatedNote = relatedEntryCount && relatedEntryCount > 1
+        ? { note: { key: 'admin.guestbook.relatedNote' as const, params: { count: relatedEntryCount } } }
+        : undefined;
+      setMessage(translatedMessage(
+        blocked ? 'admin.guestbook.blocked' : 'admin.guestbook.unblocked',
+        { note: '' },
+        relatedNote
+      ));
       try {
         const [refreshedEntries, refreshedBans] = await Promise.all([
           adminListGuestbook(token),
@@ -557,7 +601,7 @@ function GuestbookAdmin({ token, onSessionExpired }: { token: string; onSessionE
       }
     } catch (err) {
       if (isAdminSessionError(err)) { onSessionExpired(); return; }
-      setMessage(err instanceof Error ? err.message : blocked ? 'IP 차단에 실패했습니다.' : 'IP 차단 해제에 실패했습니다.');
+      setMessage(backendErrorMessage(err, blocked ? 'admin.guestbook.blockFailed' : 'admin.guestbook.unblockFailed'));
     } finally {
       setChangingId('');
     }
@@ -566,17 +610,17 @@ function GuestbookAdmin({ token, onSessionExpired }: { token: string; onSessionE
   const unbanFromList = async (ban: GuestbookIpBan) => {
     const entryId = ban.sourceEntryId || ban.relatedEntryIds[0];
     if (!entryId) {
-      setMessage('차단 해제에 사용할 연결 글을 찾지 못했습니다.');
+      setMessage(translatedMessage('admin.guestbook.unblockSourceMissing'));
       return;
     }
 
     setChangingId(entryId);
-    setMessage('');
+    setMessage(null);
     try {
       await adminUnbanGuestbookIp(token, entryId);
       setIpBans((items) => items.filter((item) => item !== ban));
       setEntries((items) => items.map((entry) => ban.relatedEntryIds.includes(entry.id) ? { ...entry, ipBlocked: false } : entry));
-      setMessage('IP 차단을 해제했습니다.');
+      setMessage(translatedMessage('admin.guestbook.unblocked', { note: '' }));
       try {
         const [refreshedEntries, refreshedBans] = await Promise.all([
           adminListGuestbook(token),
@@ -589,7 +633,7 @@ function GuestbookAdmin({ token, onSessionExpired }: { token: string; onSessionE
       }
     } catch (err) {
       if (isAdminSessionError(err)) { onSessionExpired(); return; }
-      setMessage(err instanceof Error ? err.message : 'IP 차단 해제에 실패했습니다.');
+      setMessage(backendErrorMessage(err, 'admin.guestbook.unblockFailed'));
     } finally {
       setChangingId('');
     }
@@ -598,13 +642,13 @@ function GuestbookAdmin({ token, onSessionExpired }: { token: string; onSessionE
   const showBanList = async () => {
     setView('bans');
     setBansLoading(true);
-    setBanListError('');
+    setBanListError(null);
     setIpBans([]);
     try {
       setIpBans(await adminListGuestbookIpBans(token));
     } catch (err) {
       if (isAdminSessionError(err)) { onSessionExpired(); return; }
-      setBanListError(err instanceof Error ? err.message : 'IP 차단 목록을 불러오지 못했습니다.');
+      setBanListError(backendErrorMessage(err, 'admin.guestbook.banListLoadFailed'));
     } finally {
       setBansLoading(false);
     }
@@ -616,60 +660,60 @@ function GuestbookAdmin({ token, onSessionExpired }: { token: string; onSessionE
     <section className="admin-guestbook">
       <header className="panel admin-guestbook-toolbar">
         <div>
-          <h2>방명록 관리</h2>
-          <p className="help-text">{view === 'entries' ? '작성 내용과 공개 상태를 관리합니다.' : '현재 차단 중인 항목과 관련 글을 확인하고 해제합니다.'}</p>
+          <h2>{t('admin.guestbook.manage')}</h2>
+          <p className="help-text">{view === 'entries' ? t('admin.guestbook.entriesHelp') : t('admin.guestbook.bansHelp')}</p>
         </div>
-        <div className="admin-view-switch admin-guestbook-view-switch" role="group" aria-label="방명록 관리 화면">
-          <button className={view === 'entries' ? 'admin-view-switch__active' : ''} type="button" aria-pressed={view === 'entries'} onClick={() => setView('entries')}>글 목록</button>
+        <div className="admin-view-switch admin-guestbook-view-switch" role="group" aria-label={t('admin.guestbook.screen')}>
+          <button className={view === 'entries' ? 'admin-view-switch__active' : ''} type="button" aria-pressed={view === 'entries'} onClick={() => setView('entries')}>{t('admin.guestbook.entries')}</button>
           <button className={view === 'bans' ? 'admin-view-switch__active' : ''} type="button" aria-pressed={view === 'bans'} onClick={() => { void showBanList(); }}>
-            IP 차단 <span className="admin-view-switch__count">{ipBans.length}</span>
+            {t('admin.guestbook.bans')} <span className="admin-view-switch__count">{ipBans.length}</span>
           </button>
         </div>
         {view === 'entries' ? (
-          <div className="admin-status-filters" aria-label="방명록 상태 필터">
+          <div className="admin-status-filters" aria-label={t('admin.guestbook.filters')}>
             {([
-              ['all', '전체', entries.length],
-              ['visible', '공개', statusCount('visible')],
-              ['hidden', '숨김', statusCount('hidden')],
-              ['deleted', '삭제됨', statusCount('deleted')]
-            ] as Array<[GuestbookFilter, string, number]>).map(([value, label, count]) => (
+              ['all', 'common.all', entries.length],
+              ['visible', GUESTBOOK_STATUS_LABEL_KEYS.visible, statusCount('visible')],
+              ['hidden', GUESTBOOK_STATUS_LABEL_KEYS.hidden, statusCount('hidden')],
+              ['deleted', GUESTBOOK_STATUS_LABEL_KEYS.deleted, statusCount('deleted')]
+            ] as Array<[GuestbookFilter, TranslationKey, number]>).map(([value, labelKey, count]) => (
               <button className={filter === value ? 'admin-status-filter--active' : ''} type="button" key={value} onClick={() => setFilter(value)} aria-pressed={filter === value}>
-                {label} <span>{count}</span>
+                {t(labelKey)} <span>{count}</span>
               </button>
             ))}
           </div>
         ) : null}
       </header>
 
-      {message ? <p className="status-message" role="status">{message}</p> : null}
+      {message ? <p className="status-message" role="status">{renderAdminMessage(message, t)}</p> : null}
       {view === 'entries' ? (
         <div className="admin-guestbook-panel">
-          {limitedMode ? <p className="status-message">전체 관리 목록 연결 전이라 현재는 공개 글만 표시합니다.</p> : null}
-          {loading && !entries.length ? <EmptyState label="방명록을 불러오는 중입니다." /> : null}
-          {!loading && !filteredEntries.length ? <EmptyState label="해당 상태의 방명록 글이 없습니다." /> : null}
+          {limitedMode ? <p className="status-message">{t('admin.guestbook.limited')}</p> : null}
+          {loading && !entries.length ? <EmptyState label={t('admin.guestbook.loading')} /> : null}
+          {!loading && !filteredEntries.length ? <EmptyState label={t('admin.guestbook.emptyStatus')} /> : null}
 
           {visibleItems.length ? (
             <div className="admin-guestbook-list">
-              <p className="result-count">{totalCount}개 중 {shownCount}개 표시</p>
+              <p className="result-count">{t('common.showingOf', { total: totalCount, shown: shownCount })}</p>
               {visibleItems.map((entry) => (
                 <article className="admin-guestbook-row" key={entry.id}>
                   <div className="admin-guestbook-row__head">
                     <strong>{entry.name}</strong>
-                    <span className={`status-chip status-chip--${entry.status}`}>{GUESTBOOK_STATUS_LABELS[entry.status]}</span>
+                    <span className={`status-chip status-chip--${entry.status}`}>{t(GUESTBOOK_STATUS_LABEL_KEYS[entry.status])}</span>
                   </div>
                   <p className="admin-guestbook-row__message">{entry.message}</p>
-                  {entry.hiddenReason ? <p className="admin-guestbook-row__reason">숨김 사유: {entry.hiddenReason}</p> : null}
+                  {entry.hiddenReason ? <p className="admin-guestbook-row__reason">{t('admin.guestbook.hiddenReason', { reason: entry.hiddenReason })}</p> : null}
                   <div className="admin-guestbook-row__footer">
                     <time className="meta" dateTime={entry.createdAt}>{formatDate(entry.createdAt)}</time>
                     <div className="admin-guestbook-row__controls">
                       <span className={`admin-ip-status ${entry.ipBlocked ? 'admin-ip-status--blocked' : ''}`}>
                         {entry.ipBlocked
-                          ? 'IP 차단 중'
+                          ? t('admin.guestbook.ipBlocked')
                           : entry.ipBanAvailable
                             ? entry.relatedEntryCount && entry.relatedEntryCount > 1
-                              ? `IP 차단 가능 · 연결 ${entry.relatedEntryCount}개`
-                              : 'IP 차단 가능'
-                            : 'IP 정보 없음'}
+                              ? t('admin.guestbook.ipBlockAvailableRelated', { count: entry.relatedEntryCount })
+                              : t('admin.guestbook.ipBlockAvailable')
+                            : t('admin.guestbook.ipUnavailable')}
                       </span>
                       {entry.ipBanAvailable ? (
                         <button
@@ -677,38 +721,38 @@ function GuestbookAdmin({ token, onSessionExpired }: { token: string; onSessionE
                           type="button"
                           onClick={() => updateIpBlock(entry, !entry.ipBlocked)}
                           disabled={Boolean(changingId)}
-                          aria-label={entry.ipBlocked ? `${entry.name} 작성자의 IP 차단 해제` : `${entry.name} 작성자의 IP 차단`}
-                          title={entry.ipBlocked ? 'IP 차단 해제' : 'IP 차단'}
+                          aria-label={entry.ipBlocked ? t('admin.guestbook.unblockBy', { name: entry.name }) : t('admin.guestbook.blockBy', { name: entry.name })}
+                          title={entry.ipBlocked ? t('admin.guestbook.unblock') : t('admin.guestbook.block')}
                         >
                           {entry.ipBlocked ? <ShieldCheckIcon /> : <ShieldBanIcon />}
                         </button>
                       ) : null}
                       {entry.status === 'visible' ? (
                         <button className="admin-row-action admin-row-action--danger" type="button" onClick={() => { setHideTarget(entry); setHiddenReason(''); }} disabled={Boolean(changingId)}>
-                          <EyeOffIcon /> 숨기기
+                          <EyeOffIcon /> {t('admin.guestbook.hide')}
                         </button>
                       ) : null}
                       {entry.status === 'hidden' ? (
                         <button className="admin-row-action" type="button" onClick={() => restore(entry)} disabled={Boolean(changingId)}>
-                          <RestoreIcon /> {changingId === entry.id ? '복구 중' : '다시 보이기'}
+                          <RestoreIcon /> {changingId === entry.id ? t('admin.guestbook.restoring') : t('admin.guestbook.restore')}
                         </button>
                       ) : null}
                     </div>
                   </div>
                 </article>
               ))}
-              <IncrementalLoadMore hasMore={hasMore} label={`${totalCount - shownCount}개 더보기`} onLoadMore={loadMore} />
+              <IncrementalLoadMore hasMore={hasMore} label={t('admin.guestbook.more', { count: totalCount - shownCount })} onLoadMore={loadMore} />
             </div>
           ) : null}
         </div>
       ) : (
         <div className="admin-guestbook-panel">
-          {banListError ? <p className="status-message status-message--danger">{banListError}</p> : null}
-          {bansLoading && !ipBans.length ? <EmptyState label="IP 차단 목록을 불러오는 중입니다." /> : null}
-          {!bansLoading && !banListError && !ipBans.length ? <EmptyState label="차단 중인 IP가 없습니다." /> : null}
+          {banListError ? <p className="status-message status-message--danger">{renderAdminMessage(banListError, t)}</p> : null}
+          {bansLoading && !ipBans.length ? <EmptyState label={t('admin.bans.loading')} /> : null}
+          {!bansLoading && !banListError && !ipBans.length ? <EmptyState label={t('admin.bans.empty')} /> : null}
           {ipBans.length ? (
-            <div className="admin-ban-list" aria-label="IP 차단 목록">
-              <p className="result-count">차단 중 {ipBans.length}개</p>
+            <div className="admin-ban-list" aria-label={t('admin.bans.list')}>
+              <p className="result-count">{t('admin.bans.activeCount', { count: ipBans.length })}</p>
               {ipBans.map((ban) => {
                 const relatedEntries = ban.relatedEntryIds.map((id) => entriesById.get(id)).filter((entry): entry is GuestbookAdminEntry => Boolean(entry));
                 const sourceEntry = ban.sourceEntryId ? entriesById.get(ban.sourceEntryId) : undefined;
@@ -719,43 +763,43 @@ function GuestbookAdmin({ token, onSessionExpired }: { token: string; onSessionE
                   <article className="admin-ban-row" key={`${ban.sourceEntryId || 'unknown'}-${ban.bannedAt}`}>
                     <div className="admin-ban-row__head">
                       <div className="admin-ban-row__state">
-                        <span className="admin-ip-status admin-ip-status--blocked">차단 중</span>
+                        <span className="admin-ip-status admin-ip-status--blocked">{t('admin.bans.active')}</span>
                         <time className="meta" dateTime={ban.bannedAt}>{formatDate(ban.bannedAt)}</time>
                       </div>
                       <button className="admin-row-action" type="button" onClick={() => unbanFromList(ban)} disabled={Boolean(changingId) || !unbanEntryId}>
-                        <ShieldCheckIcon /> {changingId === unbanEntryId ? '해제 중' : '차단 해제'}
+                        <ShieldCheckIcon /> {changingId === unbanEntryId ? t('admin.bans.unblocking') : t('admin.guestbook.unblock')}
                       </button>
                     </div>
                     <div className="admin-ban-row__source">
-                      <span className="admin-ban-row__label">{usesRelatedFallback ? '연결된 글 미리보기' : '차단 기준 글'}</span>
+                      <span className="admin-ban-row__label">{usesRelatedFallback ? t('admin.bans.relatedPreview') : t('admin.bans.sourcePreview')}</span>
                       {sourcePreviewEntry ? (
                         <>
                           <strong>{sourcePreviewEntry.name}</strong>
                           <p>{sourcePreviewEntry.message}</p>
                         </>
                       ) : (
-                        <p className="help-text">차단 기준 글과 연결된 글을 현재 목록에서 찾지 못했습니다.</p>
+                        <p className="help-text">{t('admin.bans.sourceMissing')}</p>
                       )}
                     </div>
                     <dl className="admin-ban-row__meta">
-                      <div><dt>사유</dt><dd>{ban.reason || '관리자 수동 차단'}</dd></div>
-                      <div><dt>연결된 글</dt><dd>{ban.relatedEntryCount}개</dd></div>
+                      <div><dt>{t('admin.bans.reason')}</dt><dd>{!ban.reason || ban.reason === '관리자 수동 차단' || ban.reason === 'Manual admin block' ? t('admin.bans.defaultReason') : ban.reason}</dd></div>
+                      <div><dt>{t('admin.bans.relatedEntries')}</dt><dd>{t('admin.bans.relatedCount', { count: ban.relatedEntryCount })}</dd></div>
                     </dl>
                     {relatedEntries.length ? (
                       <details className="admin-ban-related">
-                        <summary>연결된 글 {ban.relatedEntryCount}개 보기</summary>
+                        <summary>{t('admin.bans.showRelated', { count: ban.relatedEntryCount })}</summary>
                         <ul>
                           {relatedEntries.map((entry) => (
                             <li key={entry.id}>
                               <div>
                                 <strong>{entry.name}</strong>
-                                <span className={`status-chip status-chip--${entry.status}`}>{GUESTBOOK_STATUS_LABELS[entry.status]}</span>
+                                <span className={`status-chip status-chip--${entry.status}`}>{t(GUESTBOOK_STATUS_LABEL_KEYS[entry.status])}</span>
                               </div>
                               <p>{entry.message}</p>
                             </li>
                           ))}
                         </ul>
-                        {relatedEntries.length < ban.relatedEntryCount ? <p className="help-text">현재 방명록 목록에서 {relatedEntries.length}개를 확인할 수 있습니다.</p> : null}
+                        {relatedEntries.length < ban.relatedEntryCount ? <p className="help-text">{t('admin.bans.visibleRelated', { count: relatedEntries.length })}</p> : null}
                       </details>
                     ) : null}
                   </article>
@@ -770,18 +814,18 @@ function GuestbookAdmin({ token, onSessionExpired }: { token: string; onSessionE
         <div className="modal-backdrop admin-dialog-backdrop" role="presentation" onMouseDown={() => { if (!changingId) setHideTarget(null); }}>
           <section className="modal admin-dialog" role="dialog" aria-modal="true" aria-labelledby="admin-hide-title" onMouseDown={(event) => event.stopPropagation()}>
             <div className="admin-dialog__head">
-              <h2 id="admin-hide-title">방명록 글 숨기기</h2>
-              <button className="admin-dialog__close" type="button" onClick={() => setHideTarget(null)} aria-label="닫기" disabled={Boolean(changingId)}><CloseIcon /></button>
+              <h2 id="admin-hide-title">{t('admin.hide.title')}</h2>
+              <button className="admin-dialog__close" type="button" onClick={() => setHideTarget(null)} aria-label={t('common.close')} disabled={Boolean(changingId)}><CloseIcon /></button>
             </div>
-            <p><strong>{hideTarget.name}</strong>님의 글을 공개 목록에서 숨깁니다.</p>
+            <p>{t('admin.hide.description', { name: hideTarget.name })}</p>
             <form onSubmit={hide}>
               <div className="field">
-                <label htmlFor="guestbook-hidden-reason">숨김 사유</label>
+                <label htmlFor="guestbook-hidden-reason">{t('admin.hide.reason')}</label>
                 <input id="guestbook-hidden-reason" value={hiddenReason} onChange={(event) => setHiddenReason(event.target.value)} autoFocus required />
               </div>
               <div className="admin-dialog__actions">
-                <button className="button" type="button" onClick={() => setHideTarget(null)} disabled={Boolean(changingId)}>취소</button>
-                <button className="button button--danger" type="submit" disabled={Boolean(changingId)}>{changingId ? '처리 중' : '숨기기'}</button>
+                <button className="button" type="button" onClick={() => setHideTarget(null)} disabled={Boolean(changingId)}>{t('common.cancel')}</button>
+                <button className="button button--danger" type="submit" disabled={Boolean(changingId)}>{changingId ? t('admin.hide.processing') : t('admin.guestbook.hide')}</button>
               </div>
             </form>
           </section>
@@ -793,16 +837,17 @@ function GuestbookAdmin({ token, onSessionExpired }: { token: string; onSessionE
 }
 
 export function AdminApp() {
+  const { t } = useI18n();
   const [session, setSession] = useState(() => loadAdminSession());
   const [tab, setTab] = useState<Tab>('posts');
-  const [sessionMessage, setSessionMessage] = useState('');
+  const [sessionMessage, setSessionMessage] = useState<AdminMessage>(null);
   const lastServerRefreshAt = useRef(0);
   const refreshInFlight = useRef(false);
 
   const expireSession = () => {
     clearAdminSession();
     setSession(null);
-    setSessionMessage('세션이 만료되었습니다. 다시 로그인하면 작성 중인 화면으로 돌아올 수 있습니다.');
+    setSessionMessage(translatedMessage('admin.sessionExpired'));
   };
 
   const touchSession = () => {
@@ -823,7 +868,7 @@ export function AdminApp() {
         const latest = loadAdminSession();
         if (!latest || latest.token !== tokenBeforeRefresh) return;
         setSession(saveAdminSession(nextSession));
-        setSessionMessage('');
+        setSessionMessage(null);
       })
       .catch((err) => {
         if (isAdminSessionError(err)) expireSession();
@@ -852,23 +897,23 @@ export function AdminApp() {
     };
   }, []);
 
-  if (!session) return <LoginPanel initialMessage={sessionMessage} onLogin={() => { setSessionMessage(''); setSession(loadAdminSession()); }} />;
+  if (!session) return <LoginPanel initialMessage={sessionMessage} onLogin={() => { setSessionMessage(null); setSession(loadAdminSession()); }} />;
 
-  const logout = () => { clearAdminSession(); setSession(null); setSessionMessage(''); };
+  const logout = () => { clearAdminSession(); setSession(null); setSessionMessage(null); };
   const handleSessionExpired = () => expireSession();
   return (
     <AppLayout>
       <section className="admin-page-head" aria-labelledby="admin-title">
         <div>
-          <h1 id="admin-title" className="page-title">관리자</h1>
-          <p className="lead">글 작성, 자료 표시 정보, 방명록 관리를 처리합니다.</p>
+          <h1 id="admin-title" className="page-title">{t('admin.title')}</h1>
+          <p className="lead">{t('admin.lead')}</p>
         </div>
-        <button className="button admin-logout" type="button" onClick={logout}><LogOutIcon /> 로그아웃</button>
+        <button className="button admin-logout" type="button" onClick={logout}><LogOutIcon /> {t('admin.logout')}</button>
       </section>
 
-      <div className="tabs admin-tabs" role="tablist" aria-label="관리자 메뉴">
+      <div className="tabs admin-tabs" role="tablist" aria-label={t('admin.menu')}>
         {(['posts', 'assets', 'guestbook'] as Tab[]).map((item) => (
-          <button id={`admin-tab-${item}`} className={`button ${tab === item ? 'button--primary' : ''}`} type="button" role="tab" key={item} aria-selected={tab === item} aria-controls={`admin-panel-${item}`} onClick={() => setTab(item)}>{TAB_LABELS[item]}</button>
+          <button id={`admin-tab-${item}`} className={`button ${tab === item ? 'button--primary' : ''}`} type="button" role="tab" key={item} aria-selected={tab === item} aria-controls={`admin-panel-${item}`} onClick={() => setTab(item)}>{t(TAB_LABEL_KEYS[item])}</button>
         ))}
       </div>
 

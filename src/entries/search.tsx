@@ -6,12 +6,14 @@ import { TagList } from '../components/TagList';
 import { refreshArchive, refreshPosts, usePublicResource } from '../stores/publicDataStore';
 import type { SearchResult } from '../types';
 import { buildSearchResults } from '../utils/search';
+import { useI18n } from '../i18n';
 
 function getQuery(): string {
   return new URLSearchParams(window.location.search).get('q') || '';
 }
 
 export function SearchPage() {
+  const { t } = useI18n();
   const query = getQuery();
   const postsResource = usePublicResource('posts');
   const archiveResource = usePublicResource('archive');
@@ -38,20 +40,20 @@ export function SearchPage() {
 
   return (
     <AppLayout>
-      <h1 className="sr-only">통합 검색</h1>
+      <h1 className="sr-only">{t('search.pageTitle')}</h1>
       <section className="panel search-panel">
         <SearchForm initialValue={query} compact />
       </section>
-      {query ? <p className="meta">검색어: <strong>{query}</strong></p> : <p className="meta">아무 글과 자료를 검색합니다. 방명록은 제외합니다.</p>}
-      {postsResource.refreshing || archiveResource.refreshing ? <p className="meta">최신 검색 데이터 확인 중</p> : null}
+      {query ? <p className="meta">{t('search.queryLabel')} <strong>{query}</strong></p> : <p className="meta">{t('search.help')}</p>}
+      {postsResource.refreshing || archiveResource.refreshing ? <p className="meta">{t('search.refreshing')}</p> : null}
       {isLoading ? <LoadingState /> : null}
       {error ? <ErrorState message={error} onRetry={load} /> : null}
-      {!isLoading && !error && query && !results.length ? <EmptyState label="검색 결과가 없습니다." /> : null}
+      {!isLoading && !error && query && !results.length ? <EmptyState label={t('search.empty')} /> : null}
       {results.length ? (
-        <section className="stack" aria-label="검색 결과">
+        <section className="stack" aria-label={t('search.results')}>
           {results.map((result) => (
             <a className="list-item" href={result.href} key={`${result.type}-${result.id}`}>
-              <p className="meta">{result.type === 'post' ? '아무글' : '자료'}</p>
+              <p className="meta">{result.type === 'post' ? t('search.resultPost') : t('search.resultArchive')}</p>
               <h2>{result.title}</h2>
               <p>{result.excerpt}</p>
               <TagList tags={result.tags} />

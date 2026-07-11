@@ -1,5 +1,7 @@
+import { getLanguageLocale } from '../i18n';
+
 export function normalizeText(value: string): string {
-  return value.trim().toLocaleLowerCase('ko-KR');
+  return value.trim().toLocaleLowerCase(getLanguageLocale());
 }
 
 export function splitTags(value: string): string[] {
@@ -10,7 +12,7 @@ export function splitTags(value: string): string[] {
 }
 
 export function uniqueTags(items: Array<{ tags: string[] }>): string[] {
-  return Array.from(new Set(items.flatMap((item) => item.tags))).sort((a, b) => a.localeCompare(b, 'ko-KR'));
+  return Array.from(new Set(items.flatMap((item) => item.tags))).sort((a, b) => a.localeCompare(b, getLanguageLocale()));
 }
 
 export function excerpt(value: unknown, maxLength = 120): string {

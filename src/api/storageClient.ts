@@ -1,4 +1,5 @@
 import { config } from '../config';
+import { translate } from '../i18n';
 import type { Post } from '../types';
 import { excerpt } from '../utils/strings';
 
@@ -100,7 +101,7 @@ async function loadStoragePost(entry: StoragePostEntry): Promise<Post | null> {
 
   const rawMarkdown = entry.body ?? await fetchText(url);
   const { meta, body } = parseFrontmatter(rawMarkdown);
-  const title = asString(entry.title || meta.title).trim() || '(제목 없음)';
+  const title = asString(entry.title || meta.title).trim() || translate('common.untitled');
   const date = asString(entry.publishedAt || entry.date || meta.publishedAt || meta.date || entry.createdAt || meta.createdAt).trim();
   const publishedAt = asString(entry.publishedAt || meta.publishedAt || date).trim() || undefined;
   const createdAt = asString(entry.createdAt || meta.createdAt || date || new Date().toISOString());

@@ -1,5 +1,6 @@
 import { SearchForm } from '../components/SearchForm';
 import { SiteTools } from '../components/SiteTools';
+import { type TranslationKey, useI18n } from '../i18n';
 
 const canonicalRoutes = ['/posts', '/guestbook', '/archive', '/search', '/admin'];
 if (canonicalRoutes.includes(window.location.pathname)) {
@@ -7,11 +8,12 @@ if (canonicalRoutes.includes(window.location.pathname)) {
 }
 
 const menuItems = [
-  { href: '/posts/', label: '아무 글', icon: '/assets/ui/posts-icon.png' },
-  { href: '/archive/', label: '자료', icon: '/assets/ui/archive-icon.png' }
-];
+  { href: '/posts/', labelKey: 'nav.posts', icon: '/assets/ui/posts-icon.png' },
+  { href: '/archive/', labelKey: 'nav.archive', icon: '/assets/ui/archive-icon.png' }
+] satisfies Array<{ href: string; labelKey: TranslationKey; icon: string }>;
 
 export function HomePage() {
+  const { t } = useI18n();
   return (
     <main className="home-screen">
       <div className="site-header__tools">
@@ -19,14 +21,14 @@ export function HomePage() {
       </div>
       <section className="home-cluster" aria-labelledby="home-title">
         <div className="home-intro">
-          <img className="home-logo" src="/assets/ui/cha-amu-logo.png" alt="채아무 아이콘" />
-          <p id="home-title" className="home-copy">그냥 아무거나 올리는 채널</p>
+          <img className="home-logo" src="/assets/ui/cha-amu-logo.png" alt={t('home.logoAlt')} />
+          <p id="home-title" className="home-copy">{t('brand.name')}</p>
         </div>
-        <nav className="home-menu" aria-label="주요 메뉴">
+        <nav className="home-menu" aria-label={t('home.menu')}>
           {menuItems.map((item) => (
             <a className="home-menu-box" href={item.href} key={item.href}>
               <img src={item.icon} alt="" />
-              <span>{item.label}</span>
+              <span>{t(item.labelKey)}</span>
             </a>
           ))}
         </nav>

@@ -1,5 +1,6 @@
 import { config, isApiConfigured } from '../config';
-import { mockGuestbook, mockPosts } from '../data/mockData';
+import { getMockGuestbook, getMockPosts } from '../data/mockData';
+import { translate } from '../i18n';
 import type { AdminSession, ApiEnvelope, AssetOverride, GuestbookAdminEntry, GuestbookEntry, GuestbookIpBan, Post } from '../types';
 import { readCache, readCachePayload, writeCache, type CachePayload } from '../utils/localCache';
 
@@ -37,12 +38,12 @@ async function request<T>(action: string, payload: Record<string, unknown> = {})
   try {
     envelope = (await response.json()) as ApiEnvelope<T>;
   } catch (_) {
-    if (!response.ok) throw new ApiRequestError(`API 요청에 실패했습니다. (${response.status})`, response.status);
-    throw new ApiRequestError('API 응답 형식이 올바르지 않습니다.', response.status);
+    if (!response.ok) throw new ApiRequestError(translate('errors.apiRequest', { status: response.status }), response.status);
+    throw new ApiRequestError(translate('errors.invalidApiResponse'), response.status);
   }
 
   if (!response.ok || !envelope.ok) {
-    throw new ApiRequestError(envelope.error || `API 요청에 실패했습니다. (${response.status})`, response.status, envelope.code);
+    throw new ApiRequestError(envelope.error || translate('errors.apiRequest', { status: response.status }), response.status, envelope.code);
   }
   return envelope.data as T;
 }
@@ -99,7 +100,7 @@ export function normalizePost(value: unknown): Post | null {
   return {
     id,
     slug: asString(record.slug).trim() || undefined,
-    title: asString(record.title).trim() || '(제목 없음)',
+    title: asString(record.title).trim() || translate('common.untitled'),
     excerpt: asString(record.excerpt).trim(),
     body: asString(record.body || record.bodyMarkdown),
     tags: normalizeTags(record.tags),
@@ -159,7 +160,7 @@ export async function listPosts(): Promise<Post[]> {
     writeCachedPosts(publicPosts);
     return publicPosts;
   } catch (error) {
-    if (error instanceof ApiNotConfiguredError) return mockPosts;
+    if (error instanceof ApiNotConfiguredError) return getMockPosts();
     throw error;
   }
 }
@@ -171,7 +172,7 @@ export async function listGuestbook(): Promise<GuestbookEntry[]> {
     writeCachedGuestbook(visibleEntries);
     return visibleEntries;
   } catch (error) {
-    if (error instanceof ApiNotConfiguredError) return mockGuestbook;
+    if (error instanceof ApiNotConfiguredError) return getMockGuestbook();
     throw error;
   }
 }

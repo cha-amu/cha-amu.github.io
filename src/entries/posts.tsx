@@ -8,25 +8,26 @@ import { MarkdownView } from '../components/MarkdownView';
 import { TagList } from '../components/TagList';
 import { TagFilterPanel, countTagOptions } from '../components/TagFilterPanel';
 import { useIncrementalItems } from '../hooks/useIncrementalItems';
+import { translate, useI18n } from '../i18n';
 import { refreshPosts, usePublicResource } from '../stores/publicDataStore';
 import { formatDate } from '../utils/date';
 import { excerpt, normalizeText } from '../utils/strings';
 
 const POSTS_BATCH_SIZE = 10;
 
-export class PostsErrorBoundary extends Component<{ children: ReactNode }, { message: string }> {
-  state = { message: '' };
+export class PostsErrorBoundary extends Component<{ children: ReactNode }, { message: string | null }> {
+  state = { message: null };
 
   static getDerivedStateFromError(error: unknown) {
-    return { message: error instanceof Error ? error.message : '아무 글 화면을 표시하지 못했습니다.' };
+    return { message: error instanceof Error ? error.message : '' };
   }
 
   render() {
-    if (this.state.message) {
+    if (this.state.message !== null) {
       return (
         <AppLayout>
           <ErrorState
-            message={`아무 글 화면을 복구했습니다. ${this.state.message}`}
+            message={translate('posts.recovered', { message: this.state.message || translate('posts.failed') })}
             onRetry={() => { writeCachedPosts([]); window.location.reload(); }}
           />
         </AppLayout>
@@ -37,6 +38,7 @@ export class PostsErrorBoundary extends Component<{ children: ReactNode }, { mes
 }
 
 export function PostsPage() {
+  const { locale, t } = useI18n();
   const postsResource = usePublicResource('posts');
   const posts = postsResource.items;
   const postsCount = useRef(posts.length);
@@ -70,7 +72,7 @@ export function PostsPage() {
     if (!selectedId && posts[0]) setSelectedId(posts[0].id);
   }, [posts, selectedId]);
 
-  const tagOptions = useMemo(() => countTagOptions(posts), [posts]);
+  const tagOptions = useMemo(() => countTagOptions(posts, locale), [locale, posts]);
   const filteredPosts = useMemo(() => {
     const q = normalizeText(query);
     return posts.filter((post) => {
@@ -110,21 +112,21 @@ export function PostsPage() {
 
   return (
     <AppLayout>
-      <h1 className="sr-only">아무 글</h1>
+      <h1 className="sr-only">{t('posts.title')}</h1>
       {postsResource.status === 'loading' ? <LoadingState /> : null}
       {postsResource.status === 'error' ? <ErrorState message={postsResource.error} onRetry={() => load({ force: true })} /> : null}
-      {postsResource.status === 'ready' && !posts.length ? <EmptyState label="아직 공개된 글이 없습니다." /> : null}
+      {postsResource.status === 'ready' && !posts.length ? <EmptyState label={t('posts.empty')} /> : null}
       {postsResource.status === 'ready' && posts.length ? (
         <>
-          <section className="content-filter-bar" aria-label="아무 글 검색">
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="글 검색" aria-label="아무 글 검색어" />
+          <section className="content-filter-bar" aria-label={t('posts.search')}>
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('posts.searchPlaceholder')} aria-label={t('posts.searchQuery')} />
             <span className="result-count" aria-live="polite">
-              {shownCount === totalCount ? `${totalCount}개 표시 중` : `${totalCount}개 중 ${shownCount}개 표시`}
+              {shownCount === totalCount ? t('common.showing', { count: totalCount }) : t('common.showingOf', { total: totalCount, shown: shownCount })}
             </span>
-            {query.trim() || selectedTags.length ? <button className="filter-reset" type="button" onClick={resetFilters}>초기화</button> : null}
+            {query.trim() || selectedTags.length ? <button className="filter-reset" type="button" onClick={resetFilters}>{t('common.reset')}</button> : null}
           </section>
           <div className="tagged-layout">
-            <section className="post-flow tagged-main" aria-label="아무 글 목록">
+            <section className="post-flow tagged-main" aria-label={t('posts.list')}>
               {visiblePosts.map((post) => {
                 const expanded = selectedPost?.id === post.id;
                 return (
@@ -143,15 +145,15 @@ export function PostsPage() {
                   </article>
                 );
               })}
-              {filteredPosts.length === 0 ? <EmptyState label="선택한 태그에 맞는 글이 없습니다." /> : null}
+              {filteredPosts.length === 0 ? <EmptyState label={t('posts.noTagMatch')} /> : null}
               <IncrementalLoadMore
                 hasMore={hasMore}
-                label={`글 ${Math.min(POSTS_BATCH_SIZE, totalCount - shownCount)}개 더보기`}
+                label={t('posts.loadMore', { count: Math.min(POSTS_BATCH_SIZE, totalCount - shownCount) })}
                 onLoadMore={loadMore}
               />
             </section>
             <TagFilterPanel
-              label="아무 글"
+              label={t('posts.title')}
               tags={tagOptions}
               selectedTags={selectedTags}
               onToggleTag={toggleTag}

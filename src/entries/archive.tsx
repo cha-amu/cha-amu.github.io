@@ -7,6 +7,7 @@ import { EmptyState, ErrorState, LoadingState } from '../components/PageState';
 import { TagList } from '../components/TagList';
 import { TagFilterPanel, countTagOptions } from '../components/TagFilterPanel';
 import { useIncrementalItems } from '../hooks/useIncrementalItems';
+import { useI18n } from '../i18n';
 import { refreshArchive, usePublicResource } from '../stores/publicDataStore';
 import type { ArchiveAsset } from '../types';
 import { normalizeText } from '../utils/strings';
@@ -14,6 +15,7 @@ import { normalizeText } from '../utils/strings';
 const ARCHIVE_BATCH_SIZE = 24;
 
 export function ArchivePage() {
+  const { locale, t } = useI18n();
   const archiveResource = usePublicResource('archive');
   const assets = archiveResource.items;
   const [query, setQuery] = useState('');
@@ -28,7 +30,7 @@ export function ArchivePage() {
     void refreshArchive({ silent: assets.length > 0 }).catch(() => undefined);
   }, []);
 
-  const tags = useMemo(() => countTagOptions(assets), [assets]);
+  const tags = useMemo(() => countTagOptions(assets, locale), [assets, locale]);
   const filtered = useMemo(() => {
     const q = normalizeText(query);
     return assets.filter((asset) => {
@@ -57,24 +59,24 @@ export function ArchivePage() {
 
   return (
     <AppLayout>
-      <h1 className="sr-only">자료</h1>
-      <section className="content-filter-bar" aria-label="자료 검색">
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="자료 검색" aria-label="자료 검색어" />
+      <h1 className="sr-only">{t('archive.title')}</h1>
+      <section className="content-filter-bar" aria-label={t('archive.search')}>
+        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('archive.search')} aria-label={t('archive.searchQuery')} />
         <span className="result-count" aria-live="polite">
-          {shownCount === totalCount ? `${totalCount}개 표시 중` : `${totalCount}개 중 ${shownCount}개 표시`}
+          {shownCount === totalCount ? t('common.showing', { count: totalCount }) : t('common.showingOf', { total: totalCount, shown: shownCount })}
         </span>
-        {query.trim() || selectedTags.length ? <button className="filter-reset" type="button" onClick={resetFilters}>초기화</button> : null}
+        {query.trim() || selectedTags.length ? <button className="filter-reset" type="button" onClick={resetFilters}>{t('common.reset')}</button> : null}
       </section>
       <div className="tagged-layout">
         <main className="tagged-main">
-          {archiveResource.refreshing ? <p className="meta">최신 자료 확인 중</p> : null}
+          {archiveResource.refreshing ? <p className="meta">{t('archive.refreshing')}</p> : null}
           {archiveResource.status === 'loading' ? <LoadingState /> : null}
           {archiveResource.status === 'error' ? <ErrorState message={archiveResource.error} onRetry={load} /> : null}
-          {archiveResource.status === 'ready' && !filtered.length ? <EmptyState label="조건에 맞는 자료가 없습니다." /> : null}
-          <section className="archive-grid" aria-label="자료 목록">
+          {archiveResource.status === 'ready' && !filtered.length ? <EmptyState label={t('archive.empty')} /> : null}
+          <section className="archive-grid" aria-label={t('archive.list')}>
             {visibleAssets.map((asset) => (
               <article className={`asset-card ${window.location.hash === `#${asset.id}` ? 'list-item--active' : ''}`} id={asset.id} key={asset.id}>
-                <button className="asset-card__button" type="button" onClick={() => setModalAsset(asset)} aria-label={`${asset.title} 자료 자세히 보기`}>
+                <button className="asset-card__button" type="button" onClick={() => setModalAsset(asset)} aria-label={t('archive.details', { title: asset.title })}>
                   {asset.kind === 'file' ? (
                     <span className="asset-file-tile">{asset.fileName}</span>
                   ) : (
@@ -90,12 +92,12 @@ export function ArchivePage() {
           </section>
           <IncrementalLoadMore
             hasMore={hasMore}
-            label={`자료 ${Math.min(ARCHIVE_BATCH_SIZE, totalCount - shownCount)}개 더보기`}
+            label={t('archive.loadMore', { count: Math.min(ARCHIVE_BATCH_SIZE, totalCount - shownCount) })}
             onLoadMore={loadMore}
           />
         </main>
         <TagFilterPanel
-          label="자료"
+          label={t('archive.title')}
           tags={tags}
           selectedTags={selectedTags}
           onToggleTag={toggleTag}
@@ -103,9 +105,9 @@ export function ArchivePage() {
         />
       </div>
       {modalAsset ? (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label={`${modalAsset.title} 자료 상세`} onClick={() => setModalAsset(null)}>
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label={t('archive.dialog', { title: modalAsset.title })} onClick={() => setModalAsset(null)}>
           <div className="modal asset-modal" onClick={(event) => event.stopPropagation()}>
-            <button className="asset-modal__close" type="button" onClick={() => setModalAsset(null)} aria-label="닫기">
+            <button className="asset-modal__close" type="button" onClick={() => setModalAsset(null)} aria-label={t('common.close')}>
               <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <path d="M6 6l12 12M18 6L6 18" />
               </svg>
@@ -121,7 +123,7 @@ export function ArchivePage() {
               )}
               {modalAsset.description ? <MarkdownView markdown={modalAsset.description} baseUrl={modalAsset.markdownBaseUrl} rootUrl={modalAsset.markdownRootUrl} /> : null}
               <TagList tags={modalAsset.tags} />
-              {modalAsset.sourceUrl ? <p className="meta"><a href={modalAsset.sourceUrl} target="_blank" rel="noreferrer">출처</a></p> : null}
+              {modalAsset.sourceUrl ? <p className="meta"><a href={modalAsset.sourceUrl} target="_blank" rel="noreferrer">{t('common.source')}</a></p> : null}
               <p className="meta">{modalAsset.path}</p>
             </div>
           </div>

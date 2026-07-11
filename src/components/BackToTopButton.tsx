@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
+import { useI18n } from '../i18n';
 import { ArrowUpIcon } from './ToolIcons';
 
 export function BackToTopButton() {
+  const { t } = useI18n();
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -23,7 +25,7 @@ export function BackToTopButton() {
       className="back-to-top"
       type="button"
       onClick={scrollToTop}
-      aria-label="맨 위로"
+      aria-label={t('common.backToTop')}
     >
       <ArrowUpIcon />
     </button>

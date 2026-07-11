@@ -1,17 +1,18 @@
 import { useMemo, useState } from 'react';
+import { useI18n } from '../i18n';
 
 export interface TagOption {
   name: string;
   count: number;
 }
 
-export function countTagOptions(items: Array<{ tags: string[] }>): TagOption[] {
+export function countTagOptions(items: Array<{ tags: string[] }>, locale = 'ko-KR'): TagOption[] {
   const counts = new Map<string, number>();
   for (const item of items) {
     for (const tag of item.tags) counts.set(tag, (counts.get(tag) || 0) + 1);
   }
   return Array.from(counts, ([name, count]) => ({ name, count }))
-    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'ko-KR'));
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, locale));
 }
 
 interface TagFilterPanelProps {
@@ -31,6 +32,7 @@ export function TagFilterPanel({
   onToggleTag,
   onClearTags
 }: TagFilterPanelProps) {
+  const { t } = useI18n();
   const [expanded, setExpanded] = useState(false);
   const selectedTagSet = useMemo(() => new Set(selectedTags), [selectedTags]);
   const visibleTags = useMemo(() => {
@@ -40,10 +42,10 @@ export function TagFilterPanel({
   const hiddenCount = tags.length - visibleTags.length;
 
   return (
-    <aside className="tag-panel" aria-label={`${label} 태그 필터`}>
+    <aside className="tag-panel" aria-label={t('tags.filter', { label })}>
       <div className="tag-panel__head">
-        <h2>태그</h2>
-        <span>{tags.length}개</span>
+        <h2>{t('tags.label')}</h2>
+        <span>{t('common.count', { count: tags.length })}</span>
       </div>
       <div className="tag-filter-list">
         <button
@@ -52,7 +54,7 @@ export function TagFilterPanel({
           onClick={onClearTags}
           aria-pressed={selectedTags.length === 0}
         >
-          <span>전체</span>
+          <span>{t('common.all')}</span>
         </button>
         {visibleTags.map((tag) => {
           const selected = selectedTagSet.has(tag.name);
@@ -76,7 +78,7 @@ export function TagFilterPanel({
             onClick={() => setExpanded((current) => !current)}
             aria-expanded={expanded}
           >
-            <span>{expanded ? '태그 접기' : `태그 ${hiddenCount}개 더보기`}</span>
+            <span>{expanded ? t('tags.collapse') : t('tags.more', { count: hiddenCount })}</span>
           </button>
         ) : null}
       </div>

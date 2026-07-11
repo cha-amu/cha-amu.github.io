@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { config, isTurnstileConfigured } from '../config';
+import { useI18n } from '../i18n';
 
 type TurnstileAction = 'guestbook_create' | 'admin_login';
 
@@ -60,6 +61,7 @@ export function TurnstileBox({
   onTokenChange: (token: string) => void;
   resetKey?: number;
 }) {
+  const { language, t } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
   const widgetIdRef = useRef<string | null>(null);
   const onTokenChangeRef = useRef(onTokenChange);
@@ -70,8 +72,10 @@ export function TurnstileBox({
   }, [onTokenChange]);
 
   useEffect(() => {
+    onTokenChangeRef.current('');
     if (!isTurnstileConfigured) return undefined;
     let cancelled = false;
+    setError('');
 
     void loadTurnstileScript()
       .then((turnstile) => {
@@ -79,6 +83,7 @@ export function TurnstileBox({
         widgetIdRef.current = turnstile.render(containerRef.current, {
           sitekey: config.turnstileSiteKey,
           action,
+          language,
           size: 'flexible',
           callback: (token: string) => {
             setError('');
@@ -88,25 +93,27 @@ export function TurnstileBox({
           'timeout-callback': () => onTokenChangeRef.current(''),
           'error-callback': () => {
             onTokenChangeRef.current('');
-            setError('보안 확인을 불러오지 못했습니다. 잠시 후 다시 시도하세요.');
+            setError(t('turnstile.loadFailed'));
           },
           'response-field': false
         });
       })
       .catch(() => {
-        if (!cancelled) setError('보안 확인을 불러오지 못했습니다. 잠시 후 다시 시도하세요.');
+        if (!cancelled) setError(t('turnstile.loadFailed'));
       });
 
     return () => {
       cancelled = true;
+      onTokenChangeRef.current('');
       const widgetId = widgetIdRef.current;
       widgetIdRef.current = null;
       if (widgetId && window.turnstile) window.turnstile.remove(widgetId);
     };
-  }, [action]);
+  }, [action, language, t]);
 
   useEffect(() => {
     setError('');
+    onTokenChangeRef.current('');
     const widgetId = widgetIdRef.current;
     if (widgetId && window.turnstile) window.turnstile.reset(widgetId);
   }, [resetKey]);
@@ -114,14 +121,14 @@ export function TurnstileBox({
   if (!isTurnstileConfigured) {
     return (
       <div className="status-message">
-        Turnstile site key가 아직 설정되지 않았습니다. 배포 전 `VITE_TURNSTILE_SITE_KEY`를 설정해야 합니다.
+        {t('turnstile.missingKey')}
       </div>
     );
   }
 
   return (
     <div className="turnstile-box">
-      <div ref={containerRef} aria-label="Cloudflare Turnstile" />
+      <div ref={containerRef} aria-label={t('turnstile.label')} />
       {error ? <p className="status-message status-message--danger" role="status">{error}</p> : null}
     </div>
   );

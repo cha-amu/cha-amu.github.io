@@ -1,5 +1,6 @@
 import { config } from '../config';
-import { mockAssets } from '../data/mockData';
+import { getMockAssets } from '../data/mockData';
+import { getLanguageLocale } from '../i18n';
 import type { ArchiveAsset, ArchiveManifest, AssetOverride } from '../types';
 import { readCache, readCachePayload, writeCache, type CachePayload } from '../utils/localCache';
 
@@ -100,7 +101,7 @@ export async function loadArchiveManifest(): Promise<ArchiveManifest> {
     return {
       version: 1,
       generatedAt: '',
-      assets: mockAssets
+      assets: getMockAssets()
     };
   }
 }
@@ -123,5 +124,5 @@ export function mergeAssetOverrides(assets: ArchiveAsset[], overrides: AssetOver
       };
     })
     .filter((asset) => asset.status === 'visible')
-    .sort((a, b) => (a.sortOrder ?? 9999) - (b.sortOrder ?? 9999) || a.title.localeCompare(b.title, 'ko-KR'));
+    .sort((a, b) => (a.sortOrder ?? 9999) - (b.sortOrder ?? 9999) || a.title.localeCompare(b.title, getLanguageLocale()));
 }

@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import { translate } from '../i18n';
 import { loadArchiveManifest, mergeAssetOverrides, readCachedArchiveAssetsPayload, writeCachedArchiveAssets } from '../api/archiveManifestClient';
 import { listAssetOverrides, listGuestbook, listPosts, readCachedGuestbookPayload, readCachedPostsPayload, writeCachedGuestbook, writeCachedPosts } from '../api/appsScriptClient';
 import { listStoragePosts } from '../api/storageClient';
@@ -223,7 +224,7 @@ export function refreshPosts(options: { force?: boolean; silent?: boolean } = {}
       updateResource('posts', {
         status: state.posts.items.length ? 'ready' : 'error',
         refreshing: false,
-        error: errorMessage(error, '아무 글을 불러오지 못했습니다.')
+        error: errorMessage(error, translate('errors.postsLoad'))
       });
       throw error;
     })
@@ -248,7 +249,7 @@ export function refreshGuestbook(options: { force?: boolean; silent?: boolean } 
       updateResource('guestbook', {
         status: state.guestbook.items.length ? 'ready' : 'error',
         refreshing: false,
-        error: errorMessage(error, '방명록을 불러오지 못했습니다.')
+        error: errorMessage(error, translate('errors.guestbookLoad'))
       });
       throw error;
     })
@@ -273,7 +274,7 @@ export function refreshArchive(options: { force?: boolean; silent?: boolean } = 
       updateResource('archive', {
         status: state.archive.items.length ? 'ready' : 'error',
         refreshing: false,
-        error: errorMessage(error, '자료 목록을 불러오지 못했습니다.')
+        error: errorMessage(error, translate('errors.archiveLoad'))
       });
       throw error;
     })

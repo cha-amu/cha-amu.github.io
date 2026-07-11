@@ -1,11 +1,12 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
+import { type TranslationKey, useI18n } from '../i18n';
 import { SiteTools } from './SiteTools';
 import '../styles/global.css';
 
 const navItems = [
-  { href: '/posts/', label: '아무 글', icon: '/assets/ui/posts-icon.png' },
-  { href: '/archive/', label: '자료', icon: '/assets/ui/archive-icon.png' }
-];
+  { href: '/posts/', labelKey: 'nav.posts', icon: '/assets/ui/posts-icon.png' },
+  { href: '/archive/', labelKey: 'nav.archive', icon: '/assets/ui/archive-icon.png' }
+] satisfies Array<{ href: string; labelKey: TranslationKey; icon: string }>;
 
 const HEADER_COMPACT_DISTANCE = 112;
 
@@ -13,14 +14,15 @@ function currentPath(): string {
   return window.location.pathname.endsWith('/') ? window.location.pathname : `${window.location.pathname}/`;
 }
 
-function MainNav({ className = '', label = '주요 메뉴' }: { className?: string; label?: string }) {
+function MainNav({ className = '', label }: { className?: string; label?: string }) {
+  const { t } = useI18n();
   const path = currentPath();
   return (
-    <nav className={`main-nav ${className}`.trim()} aria-label={label}>
+    <nav className={`main-nav ${className}`.trim()} aria-label={label || t('aria.mainMenu')}>
       {navItems.map((item) => (
-        <a key={item.href} href={item.href} aria-label={item.label} aria-current={path === item.href ? 'page' : undefined}>
+        <a key={item.href} href={item.href} aria-label={t(item.labelKey)} aria-current={path === item.href ? 'page' : undefined}>
           <img src={item.icon} alt="" />
-          <span>{item.label}</span>
+          <span>{t(item.labelKey)}</span>
         </a>
       ))}
     </nav>
@@ -28,6 +30,7 @@ function MainNav({ className = '', label = '주요 메뉴' }: { className?: stri
 }
 
 export function Header() {
+  const { t } = useI18n();
   const [scrollProgress, setScrollProgress] = useState(() => {
     if (typeof window === 'undefined') return 0;
     return Math.min(1, window.scrollY / HEADER_COMPACT_DISTANCE);
@@ -68,11 +71,11 @@ export function Header() {
   return (
     <header className={`site-header ${scrollProgress > 0.82 ? 'site-header--compact' : ''}`} style={headerStyle}>
       <div className="site-header__tools">
-        <a className="topbar-brand" href="/" aria-label="홈으로 이동">
+        <a className="topbar-brand" href="/" aria-label={t('aria.home')}>
           <img src="/assets/ui/cha-amu-logo.png" alt="" />
-          <span>그냥 아무거나 올리는 채널</span>
+          <span>{t('brand.name')}</span>
         </a>
-        <MainNav className="main-nav--compact" label="상단 주요 메뉴" />
+        <MainNav className="main-nav--compact" label={t('aria.topMenu')} />
         <SiteTools />
       </div>
       <div className="site-header__inner">
