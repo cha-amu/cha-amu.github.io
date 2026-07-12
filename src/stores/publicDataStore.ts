@@ -34,13 +34,15 @@ type PendingMap = Partial<Record<ResourceKey, Promise<unknown>>>;
 
 const PUBLIC_REFRESH_COOLDOWN_MS = 60_000;
 
-function emptyResource<T>(items: T[] = [], loadedAt = ''): PublicResource<T> {
+function hydratedResource<T>(items: T[] = []): PublicResource<T> {
   return {
     items,
     status: items.length ? 'ready' : 'idle',
     refreshing: false,
     error: '',
-    loadedAt: items.length ? loadedAt : ''
+    // Persisted data can paint immediately, but only this document's network
+    // validation may start the in-memory refresh cooldown.
+    loadedAt: ''
   };
 }
 
@@ -76,15 +78,11 @@ const cachedArchive = readCachedArchiveAssetsPayload();
 const cachedAssetOverrides = readCachedAssetOverridesPayload();
 
 let state: PublicDataState = {
-  posts: emptyResource(
-    cachedPostControls ? normalizePostList(mergePosts(cachedPosts?.data || [], cachedPostControls.data)) : [],
-    cachedPostControls && cachedPosts ? cachedPosts.savedAt : ''
+  posts: hydratedResource(
+    cachedPostControls ? normalizePostList(mergePosts(cachedPosts?.data || [], cachedPostControls.data)) : []
   ),
-  guestbook: emptyResource(normalizeGuestbookList(cachedGuestbook?.data || []), cachedGuestbook?.savedAt || ''),
-  archive: emptyResource(
-    cachedAssetOverrides ? cachedArchive?.data || [] : [],
-    cachedAssetOverrides && cachedArchive ? cachedArchive.savedAt : ''
-  )
+  guestbook: hydratedResource(normalizeGuestbookList(cachedGuestbook?.data || [])),
+  archive: hydratedResource(cachedAssetOverrides ? cachedArchive?.data || [] : [])
 };
 
 const listeners = new Set<() => void>();
