@@ -16,7 +16,7 @@ Cloudflare Worker entry point for browser writes, administrator authentication, 
    - `STORAGE_SYNC_SECRET`
 6. Run `npm run deploy`.
 
-`GATEWAY_SHARED_SECRET` must also be stored in Apps Script as a Script Property. `STORAGE_SYNC_SECRET` is only for the noninteractive storage synchronizer. Its `Authorization: Bearer ...` header bypasses Turnstile for `admin.login`; it is never forwarded upstream.
+`GATEWAY_SHARED_SECRET` must also be stored in Apps Script as a Script Property. `STORAGE_SYNC_SECRET` is only for the noninteractive storage synchronizer. It authorizes the seven `storage.sync.*` actions directly, is checked on every request, and is never forwarded upstream. It cannot create an administrator session or bypass interactive login verification.
 
 The D1 database ID is a public resource identifier, not a secret. Never commit `.dev.vars` or secret values. Keep `IP_HASH_SECRET` stable: rotating it makes existing mappings and bans unresolvable.
 
@@ -27,6 +27,7 @@ The D1 database ID is a public resource identifier, not a secret. Never commit `
 - Browser CORS is restricted to the exact `ALLOWED_ORIGIN` value.
 - `guestbook.create` requires a Turnstile token with action `guestbook_create`.
 - Interactive `admin.login` requires a Turnstile token with action `admin_login`.
+- Storage synchronization requires `Authorization: Bearer <STORAGE_SYNC_SECRET>` and is limited to the explicit `storage.sync.*` allowlist. These requests never carry an administrator password or session token.
 - `admin.guestbook.ip.ban` and `admin.guestbook.ip.unban` accept `{ token, entryId, reason? }` and create or revoke an indefinite manual ban. The older `id` field is accepted as a compatibility alias.
 - `admin.guestbook.list` adds `ipBanAvailable`, `ipBlocked`, and `relatedEntryCount` to every entry.
 

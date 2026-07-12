@@ -10,7 +10,6 @@ const PROXIED_ACTIONS = new Set([
   'admin.session.refresh',
   'admin.post.list',
   'admin.post.save',
-  'admin.post.syncFromStorage',
   'admin.guestbook.hide',
   'admin.guestbook.restore',
   'admin.assetOverride.list',
@@ -20,17 +19,20 @@ const PROXIED_ACTIONS = new Set([
 const VALIDATED_ADMIN_ACTIONS = new Set([
   'admin.post.bulkStatus',
   'admin.post.bulkDelete',
-  'admin.postDeletion.list',
-  'admin.postDeletion.finalize',
   'admin.guestbook.bulkStatus',
   'admin.guestbook.bulkDelete',
   'admin.assetOverride.bulkStatus',
   'admin.assetOverride.delete'
 ]);
 
-const TRUSTED_SERVICE_ADMIN_ACTIONS = new Set([
-  'admin.postDeletion.list',
-  'admin.postDeletion.finalize'
+const STORAGE_SYNC_ACTIONS = new Set([
+  'storage.sync.post.list',
+  'storage.sync.post.save',
+  'storage.sync.postDeletion.list',
+  'storage.sync.postDeletion.finalize',
+  'storage.sync.assetOverride.list',
+  'storage.sync.assetOverride.save',
+  'storage.sync.assetOverride.delete'
 ]);
 
 const DELETE_RESULT_ACTIONS = new Set([
@@ -50,11 +52,8 @@ const UPSTREAM_FIELDS = new Map([
   ['admin.session.refresh', ['token']],
   ['admin.post.list', ['token']],
   ['admin.post.save', ['token', 'post']],
-  ['admin.post.syncFromStorage', ['token', 'post']],
   ['admin.post.bulkStatus', ['token', 'ids', 'status']],
   ['admin.post.bulkDelete', ['token', 'ids']],
-  ['admin.postDeletion.list', ['token']],
-  ['admin.postDeletion.finalize', ['token', 'deletions']],
   ['admin.guestbook.list', ['token']],
   ['admin.guestbook.hide', ['token', 'id', 'hiddenReason']],
   ['admin.guestbook.restore', ['token', 'id']],
@@ -63,7 +62,14 @@ const UPSTREAM_FIELDS = new Map([
   ['admin.assetOverride.list', ['token']],
   ['admin.assetOverride.save', ['token', 'override']],
   ['admin.assetOverride.bulkStatus', ['token', 'ids', 'status']],
-  ['admin.assetOverride.delete', ['token', 'ids']]
+  ['admin.assetOverride.delete', ['token', 'ids']],
+  ['storage.sync.post.list', []],
+  ['storage.sync.post.save', ['post']],
+  ['storage.sync.postDeletion.list', []],
+  ['storage.sync.postDeletion.finalize', ['deletions']],
+  ['storage.sync.assetOverride.list', []],
+  ['storage.sync.assetOverride.save', ['override']],
+  ['storage.sync.assetOverride.delete', ['ids']]
 ]);
 
 const IP_BAN_SCOPE = 'guestbook.create';
@@ -75,6 +81,11 @@ const MAX_GUESTBOOK_ID_LENGTH = 128;
 const MAX_DELETION_NONCE_LENGTH = 128;
 const MAX_TOKEN_LENGTH = 2048;
 const MAX_HIDDEN_REASON_LENGTH = 500;
+const MAX_STORAGE_POST_BODY_LENGTH = 60_000;
+const MAX_STORAGE_TEXT_LENGTH = 5_000;
+const MAX_STORAGE_URL_LENGTH = 2_048;
+const MAX_STORAGE_TAGS = 100;
+const MAX_STORAGE_TAG_LENGTH = 100;
 const D1_MUTATION_BATCH_SIZE = 100;
 const encoder = new TextEncoder();
 
@@ -200,17 +211,119 @@ function normalizePostDeletions(value) {
   return deletions;
 }
 
+function requirePlainObject(value, name) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new GatewayError(400, `${name} 값이 올바르지 않습니다.`);
+  }
+  return value;
+}
+
+function normalizeOptionalString(value, name, maxLength) {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string' || value.length > maxLength) {
+    throw new GatewayError(400, `${name} 값이 올바르지 않습니다.`);
+  }
+  return value;
+}
+
+function normalizeStorageTags(value) {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.length > MAX_STORAGE_TAGS) {
+    throw new GatewayError(400, 'tags 값이 올바르지 않습니다.');
+  }
+  return value.map((tag) => requireRequestString(tag, 'tag', MAX_STORAGE_TAG_LENGTH));
+}
+
+function normalizeStoragePost(value) {
+  const post = requirePlainObject(value, 'post');
+  const fields = [
+    'id', 'title', 'excerpt', 'body', 'tags', 'status', 'createdAt', 'updatedAt',
+    'publishedAt', 'storagePath', 'bodyUrl'
+  ];
+  assertOnlyFields(post, fields);
+  const status = requireRequestString(post.status, 'status', 32);
+  if (!new Set(['published', 'draft', 'hidden']).has(status)) {
+    throw new GatewayError(400, '지원하지 않는 글 상태입니다.');
+  }
+  const normalized = {
+    id: requireRequestString(post.id, 'id', MAX_POST_OR_ASSET_ID_LENGTH),
+    status
+  };
+  const limits = {
+    title: MAX_STORAGE_TEXT_LENGTH,
+    excerpt: MAX_STORAGE_TEXT_LENGTH,
+    body: MAX_STORAGE_POST_BODY_LENGTH,
+    createdAt: 64,
+    updatedAt: 64,
+    publishedAt: 64,
+    storagePath: MAX_STORAGE_URL_LENGTH,
+    bodyUrl: MAX_STORAGE_URL_LENGTH
+  };
+  for (const [field, maxLength] of Object.entries(limits)) {
+    const fieldValue = normalizeOptionalString(post[field], field, maxLength);
+    if (fieldValue !== undefined) normalized[field] = fieldValue;
+  }
+  const tags = normalizeStorageTags(post.tags);
+  if (tags !== undefined) normalized.tags = tags;
+  return normalized;
+}
+
+function normalizeStorageAssetOverride(value) {
+  const override = requirePlainObject(value, 'override');
+  const fields = ['assetId', 'displayName', 'description', 'tags', 'sourceUrl', 'status', 'sortOrder'];
+  assertOnlyFields(override, fields);
+  const normalized = {
+    assetId: requireRequestString(override.assetId, 'assetId', MAX_POST_OR_ASSET_ID_LENGTH)
+  };
+  for (const [field, maxLength] of Object.entries({
+    displayName: MAX_STORAGE_TEXT_LENGTH,
+    description: MAX_STORAGE_TEXT_LENGTH,
+    sourceUrl: MAX_STORAGE_URL_LENGTH
+  })) {
+    const fieldValue = normalizeOptionalString(override[field], field, maxLength);
+    if (fieldValue !== undefined) normalized[field] = fieldValue;
+  }
+  const tags = normalizeStorageTags(override.tags);
+  if (tags !== undefined) normalized.tags = tags;
+  if (override.status !== undefined) {
+    const status = requireRequestString(override.status, 'status', 32);
+    if (!new Set(['visible', 'hidden', 'deleted']).has(status)) {
+      throw new GatewayError(400, '지원하지 않는 자료 상태입니다.');
+    }
+    normalized.status = status;
+  }
+  if (override.sortOrder !== undefined) {
+    if (!Number.isFinite(override.sortOrder) || Math.abs(override.sortOrder) > Number.MAX_SAFE_INTEGER) {
+      throw new GatewayError(400, 'sortOrder 값이 올바르지 않습니다.');
+    }
+    normalized.sortOrder = override.sortOrder;
+  }
+  return normalized;
+}
+
+function normalizeStorageSyncAction(action, body) {
+  if (action.endsWith('.list')) {
+    assertOnlyFields(body, ['action']);
+    return {};
+  }
+  if (action === 'storage.sync.post.save') {
+    assertOnlyFields(body, ['action', 'post']);
+    return { post: normalizeStoragePost(body.post) };
+  }
+  if (action === 'storage.sync.postDeletion.finalize') {
+    assertOnlyFields(body, ['action', 'deletions']);
+    return { deletions: normalizePostDeletions(body.deletions) };
+  }
+  if (action === 'storage.sync.assetOverride.save') {
+    assertOnlyFields(body, ['action', 'override']);
+    return { override: normalizeStorageAssetOverride(body.override) };
+  }
+  assertOnlyFields(body, ['action', 'ids']);
+  return { ids: normalizeBulkIds(body.ids, MAX_POST_OR_ASSET_ID_LENGTH) };
+}
+
 function normalizeAdminAction(action, body) {
   const token = requireRequestString(body.token, 'token', MAX_TOKEN_LENGTH);
-  if (action === 'admin.postDeletion.list') {
-    assertOnlyFields(body, ['action', 'token']);
-    return { token };
-  }
-  if (action === 'admin.postDeletion.finalize') {
-    assertOnlyFields(body, ['action', 'token', 'deletions']);
-    return { token, deletions: normalizePostDeletions(body.deletions) };
-  }
-
   const isBulkStatus = action.endsWith('.bulkStatus');
   const allowedFields = ['action', 'token', 'ids'];
   if (isBulkStatus) allowedFields.push('status');
@@ -340,11 +453,12 @@ function constantTimeEqual(left, right) {
   return difference === 0;
 }
 
-function isTrustedService(request, env) {
-  const configured = env.STORAGE_SYNC_SECRET;
-  if (typeof configured !== 'string' || configured.length < 32) return false;
+function requireTrustedStorageSync(request, env) {
+  const configured = requireString(env.STORAGE_SYNC_SECRET, 'STORAGE_SYNC_SECRET', 32);
   const authorization = request.headers.get('Authorization') || '';
-  return constantTimeEqual(authorization, `Bearer ${configured}`);
+  if (!constantTimeEqual(authorization, `Bearer ${configured}`)) {
+    throw new GatewayError(403, '저장소 동기화 인증에 실패했습니다.');
+  }
 }
 
 async function verifyTurnstile(body, request, env, expectedAction, fetchImpl) {
@@ -519,6 +633,12 @@ async function handleValidatedAdminAction(action, body, env, dependencies) {
   return envelope;
 }
 
+async function handleStorageSyncAction(action, body, request, env, dependencies) {
+  requireTrustedStorageSync(request, env);
+  const normalized = normalizeStorageSyncAction(action, body);
+  return callUpstream(action, normalized, env, dependencies.fetch);
+}
+
 async function isIpBanned(db, ipHash) {
   const row = await db.prepare(
     `SELECT 1 AS banned
@@ -604,9 +724,7 @@ async function handleGuestbookDelete(body, request, env, dependencies) {
 async function handleAdminLogin(body, request, env, dependencies) {
   const ipHash = await hashClientIp(request, env, dependencies.subtle);
   await enforceRateLimit(env, 'ADMIN_LOGIN_RATE_LIMITER', ipHash);
-  if (!isTrustedService(request, env)) {
-    await verifyTurnstile(body, request, env, 'admin_login', dependencies.fetch);
-  }
+  await verifyTurnstile(body, request, env, 'admin_login', dependencies.fetch);
   return callUpstream('admin.login', body, env, dependencies.fetch);
 }
 
@@ -834,10 +952,10 @@ async function routeApi(body, request, env, dependencies) {
   if (action === 'admin.guestbook.ip.unban') {
     return handleIpBan(body, env, dependencies, false);
   }
+  if (STORAGE_SYNC_ACTIONS.has(action)) {
+    return handleStorageSyncAction(action, body, request, env, dependencies);
+  }
   if (VALIDATED_ADMIN_ACTIONS.has(action)) {
-    if (TRUSTED_SERVICE_ADMIN_ACTIONS.has(action) && !isTrustedService(request, env)) {
-      throw new GatewayError(403, '저장소 동기화 서비스만 삭제 큐를 처리할 수 있습니다.');
-    }
     return handleValidatedAdminAction(action, body, env, dependencies);
   }
   if (PROXIED_ACTIONS.has(action)) {

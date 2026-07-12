@@ -106,11 +106,8 @@ function route_(action, body) {
     case 'admin.session.refresh': requireAdmin_(body.token); return createAdminSession_();
     case 'admin.post.list': requireAdmin_(body.token); return rowsToObjects_(SHEETS.posts);
     case 'admin.post.save': requireAdmin_(body.token); return savePost_(body.post);
-    case 'admin.post.syncFromStorage': requireAdmin_(body.token); return syncPostFromStorage_(body.post);
     case 'admin.post.bulkStatus': requireAdmin_(body.token); return bulkPostStatus_(body);
     case 'admin.post.bulkDelete': requireAdmin_(body.token); return bulkDeletePosts_(body);
-    case 'admin.postDeletion.list': requireAdmin_(body.token); return listPostDeletions_();
-    case 'admin.postDeletion.finalize': requireAdmin_(body.token); return finalizePostDeletions_(body);
     case 'admin.guestbook.list': requireAdmin_(body.token); return listAdminGuestbook_();
     case 'admin.guestbook.hide': requireAdmin_(body.token); return adminHideGuestbook_(body);
     case 'admin.guestbook.restore': requireAdmin_(body.token); return adminRestoreGuestbook_(body);
@@ -120,6 +117,13 @@ function route_(action, body) {
     case 'admin.assetOverride.save': requireAdmin_(body.token); return saveAssetOverride_(body.override);
     case 'admin.assetOverride.bulkStatus': requireAdmin_(body.token); return bulkAssetOverrideStatus_(body);
     case 'admin.assetOverride.delete': requireAdmin_(body.token); return bulkDeleteAssetOverrides_(body);
+    case 'storage.sync.post.list': return rowsToObjects_(SHEETS.posts);
+    case 'storage.sync.post.save': return syncPostFromStorage_(body.post);
+    case 'storage.sync.postDeletion.list': return listPostDeletions_();
+    case 'storage.sync.postDeletion.finalize': return finalizePostDeletions_(body);
+    case 'storage.sync.assetOverride.list': return rowsToObjects_(SHEETS.assetOverrides);
+    case 'storage.sync.assetOverride.save': return saveAssetOverride_(body.override);
+    case 'storage.sync.assetOverride.delete': return bulkDeleteAssetOverrides_(body);
     default: throw new Error('Unknown action: ' + action);
   }
 }

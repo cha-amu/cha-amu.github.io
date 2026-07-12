@@ -216,6 +216,9 @@ function loadAppsScript(initial = {}) {
     call(action, payload = {}) {
       return plain(route(action, { gatewaySecret: GATEWAY_SECRET, token: adminToken(), ...payload }));
     },
+    storageCall(action, payload = {}) {
+      return plain(route(action, { gatewaySecret: GATEWAY_SECRET, ...payload }));
+    },
     publicCall(action) {
       return plain(route(action, {}));
     },
@@ -295,6 +298,52 @@ test('bulk routes require gateway and admin authentication and reject unbounded 
   assert.equal(sheetObjects(app.spreadsheet, 'posts')[0].status, 'published');
 });
 
+test('storage sync routes require only the gateway channel and expose exactly the sync operations', () => {
+  const deletion = {
+    id: 'deleted-post', storagePath: 'posts/deleted-post.md', nonce: 'deletion-nonce',
+    deletedAt: '2026-07-12T00:00:00.000Z'
+  };
+  const app = loadAppsScript({
+    posts: tableRows(COLUMNS.posts, [post('existing')]),
+    postDeletions: tableRows(COLUMNS.postDeletions, [deletion]),
+    assetOverrides: tableRows(COLUMNS.assetOverrides, [{ assetId: 'existing-asset', status: 'visible' }])
+  });
+  const cases = [
+    ['storage.sync.post.list', {}],
+    ['storage.sync.post.save', { post: post('storage-new') }],
+    ['storage.sync.postDeletion.list', {}],
+    ['storage.sync.postDeletion.finalize', { deletions: [{ id: deletion.id, nonce: deletion.nonce }] }],
+    ['storage.sync.assetOverride.list', {}],
+    ['storage.sync.assetOverride.save', { override: { assetId: 'new-asset', status: 'visible' } }],
+    ['storage.sync.assetOverride.delete', { ids: ['new-asset'] }]
+  ];
+
+  for (const [action, payload] of cases) {
+    assert.throws(() => app.rawCall(action, payload), /gateway authentication failed/i, action);
+    assert.throws(
+      () => app.rawCall(action, { gatewaySecret: 'wrong-gateway-secret', ...payload }),
+      /gateway authentication failed/i,
+      action
+    );
+    app.storageCall(action, payload);
+  }
+
+  assert.deepEqual(sheetObjects(app.spreadsheet, 'posts').map((entry) => entry.id), ['existing', 'storage-new']);
+  assert.equal(sheetObjects(app.spreadsheet, 'postDeletions')[0].finalizedAt !== '', true);
+  assert.deepEqual(sheetObjects(app.spreadsheet, 'assetOverrides').map((entry) => entry.assetId), ['existing-asset']);
+  assert.throws(
+    () => app.rawCall('admin.post.list', { gatewaySecret: GATEWAY_SECRET }),
+    /admin session is required/i
+  );
+  assert.throws(
+    () => app.rawCall('admin.assetOverride.save', {
+      gatewaySecret: GATEWAY_SECRET,
+      override: { assetId: 'admin-without-session' }
+    }),
+    /admin session is required/i
+  );
+});
+
 test('post bulk status patches only status fields and public results suppress private nonpublished data', () => {
   const app = loadAppsScript({
     posts: tableRows(COLUMNS.posts, [post('public'), post('draft', 'draft'), post('hidden', 'hidden')])
@@ -335,11 +384,11 @@ test('post save and storage sync cannot revive an id while its deletion tombston
     /permanently deleted/i
   );
   assert.throws(
-    () => app.call('admin.post.syncFromStorage', { post: post('deleted', 'published', { body: 'stale storage body' }) }),
+    () => app.storageCall('storage.sync.post.save', { post: post('deleted', 'published', { body: 'stale storage body' }) }),
     /permanently deleted/i
   );
   assert.deepEqual(sheetObjects(app.spreadsheet, 'posts').map((entry) => entry.id), ['existing']);
-  assert.deepEqual(app.call('admin.postDeletion.list').map((entry) => entry.id), ['deleted']);
+  assert.deepEqual(app.storageCall('storage.sync.postDeletion.list').map((entry) => entry.id), ['deleted']);
 
   const saved = app.call('admin.post.save', {
     post: post('existing', 'draft', { body: 'updated editor body' })
@@ -353,7 +402,7 @@ test('post save and storage sync cannot revive an id while its deletion tombston
   assert.ok(created.id);
   assert.equal(sheetObjects(app.spreadsheet, 'posts').some((entry) => entry.id === created.id), true);
 
-  const synced = app.call('admin.post.syncFromStorage', { post: post('storage-new') });
+  const synced = app.storageCall('storage.sync.post.save', { post: post('storage-new') });
   assert.equal(synced.id, 'storage-new');
   assert.equal(sheetObjects(app.spreadsheet, 'posts').some((entry) => entry.id === 'storage-new'), true);
 });
@@ -370,7 +419,7 @@ test('deleting a missing post creates an idempotent tombstone and blocks storage
     { deletedIds: [], alreadyMissingIds: ['missing'] }
   );
 
-  const tombstones = app.call('admin.postDeletion.list');
+  const tombstones = app.storageCall('storage.sync.postDeletion.list');
   assert.equal(tombstones.length, 1);
   assert.equal(tombstones[0].id, 'missing');
   assert.equal(tombstones[0].storagePath, '');
@@ -381,14 +430,14 @@ test('deleting a missing post creates an idempotent tombstone and blocks storage
     { id: 'missing', status: 'deleted', updatedAt: tombstones[0].deletedAt }
   );
   assert.throws(
-    () => app.call('admin.post.syncFromStorage', { post: post('missing') }),
+    () => app.storageCall('storage.sync.post.save', { post: post('missing') }),
     /permanently deleted/i
   );
   assert.deepEqual(
     app.call('admin.post.bulkDelete', { ids: ['missing'] }),
     { deletedIds: [], alreadyMissingIds: ['missing'] }
   );
-  assert.deepEqual(app.call('admin.postDeletion.list'), tombstones);
+  assert.deepEqual(app.storageCall('storage.sync.postDeletion.list'), tombstones);
 });
 
 test('post bulk delete removes nonadjacent rows bottom-up, preserves tombstone nonce on retry, and finalizes by id plus nonce', () => {
@@ -406,7 +455,7 @@ test('post bulk delete removes nonadjacent rows bottom-up, preserves tombstone n
   assert.deepEqual(deleted, { deletedIds: ['p2', 'p4'], alreadyMissingIds: [] });
   assert.deepEqual(sheetObjects(app.spreadsheet, 'posts').map((entry) => entry.id), ['p1', 'p3']);
 
-  const tombstones = app.call('admin.postDeletion.list');
+  const tombstones = app.storageCall('storage.sync.postDeletion.list');
   assert.deepEqual(tombstones.map((entry) => entry.id), ['p4', 'p2']);
   assert.deepEqual(tombstones.map((entry) => entry.storagePath), ['posts/p4.md', 'posts/p2.md']);
   assert.equal(tombstones[0].nonce, 'existing-nonce');
@@ -420,10 +469,10 @@ test('post bulk delete removes nonadjacent rows bottom-up, preserves tombstone n
 
   const retried = app.call('admin.post.bulkDelete', { ids: ['p2', 'p4'] });
   assert.deepEqual(retried, { deletedIds: [], alreadyMissingIds: ['p2', 'p4'] });
-  assert.deepEqual(app.call('admin.postDeletion.list'), tombstones);
+  assert.deepEqual(app.storageCall('storage.sync.postDeletion.list'), tombstones);
 
   assert.throws(
-    () => app.call('admin.postDeletion.finalize', {
+    () => app.storageCall('storage.sync.postDeletion.finalize', {
       deletions: [
         { id: 'p2', nonce: p2Deletion.nonce },
         { id: 'p4', nonce: 'wrong-nonce' }
@@ -431,13 +480,13 @@ test('post bulk delete removes nonadjacent rows bottom-up, preserves tombstone n
     }),
     /nonce is invalid/i
   );
-  assert.equal(app.call('admin.postDeletion.list').length, 2);
+  assert.equal(app.storageCall('storage.sync.postDeletion.list').length, 2);
 
-  const finalized = app.call('admin.postDeletion.finalize', {
+  const finalized = app.storageCall('storage.sync.postDeletion.finalize', {
     deletions: tombstones.map((entry) => ({ id: entry.id, nonce: entry.nonce }))
   });
   assert.deepEqual(finalized, { finalizedIds: ['p4', 'p2'], alreadyMissingIds: [] });
-  assert.deepEqual(app.call('admin.postDeletion.list'), []);
+  assert.deepEqual(app.storageCall('storage.sync.postDeletion.list'), []);
   const ledger = sheetObjects(app.spreadsheet, 'postDeletions');
   assert.deepEqual(ledger.map((entry) => entry.id), ['p4', 'p2']);
   assert.ok(ledger.every((entry) => entry.finalizedAt));
@@ -450,12 +499,12 @@ test('post bulk delete removes nonadjacent rows bottom-up, preserves tombstone n
     /permanently deleted/i
   );
   assert.throws(
-    () => app.call('admin.post.syncFromStorage', { post: post('p4', 'published', { body: 'storage reappeared after finalize' }) }),
+    () => app.storageCall('storage.sync.post.save', { post: post('p4', 'published', { body: 'storage reappeared after finalize' }) }),
     /permanently deleted/i
   );
   assert.deepEqual(sheetObjects(app.spreadsheet, 'posts').map((entry) => entry.id), ['p1', 'p3']);
   assert.deepEqual(
-    app.call('admin.postDeletion.finalize', { deletions: tombstones.map((entry) => ({ id: entry.id, nonce: entry.nonce })) }),
+    app.storageCall('storage.sync.postDeletion.finalize', { deletions: tombstones.map((entry) => ({ id: entry.id, nonce: entry.nonce })) }),
     { finalizedIds: [], alreadyMissingIds: ['p4', 'p2'] }
   );
 });
@@ -489,7 +538,7 @@ test('single-row mutations read and write their sheets only while ScriptLock is 
   assertSheetMutationLocked(app, 'posts', () => app.call('admin.post.save', {
     post: post('p1', 'draft', { body: 'locked editor update' })
   }));
-  assertSheetMutationLocked(app, 'posts', () => app.call('admin.post.syncFromStorage', {
+  assertSheetMutationLocked(app, 'posts', () => app.storageCall('storage.sync.post.save', {
     post: post('storage-p1', 'published', { body: 'locked storage update' })
   }));
 

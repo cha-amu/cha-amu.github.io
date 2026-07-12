@@ -390,7 +390,7 @@ test('interactive admin login requires admin_login Turnstile action', async () =
   assert.equal('turnstileToken' in appCalls[0].body, false);
 });
 
-test('trusted storage sync can log in without forwarding its bearer secret', async () => {
+test('storage sync bearer cannot bypass interactive admin login verification', async () => {
   const env = createEnv();
   const { gateway, appCalls, turnstileCalls } = fixture({
     appHandler: () => ({ ok: true, data: { token: 'admin-token' } })
@@ -400,10 +400,9 @@ test('trusted storage sync can log in without forwarding its bearer secret', asy
     Authorization: `Bearer ${env.STORAGE_SYNC_SECRET}`
   }), env);
 
-  assert.equal(response.status, 200);
+  assert.equal(response.status, 400);
   assert.equal(turnstileCalls.length, 0);
-  assert.equal(appCalls.length, 1);
-  assert.equal(JSON.stringify(appCalls[0]).includes(env.STORAGE_SYNC_SECRET), false);
+  assert.equal(appCalls.length, 0);
 });
 
 test('admin list exposes only ban state and related count, never the IP hash', async () => {
@@ -695,31 +694,6 @@ test('bulk admin actions normalize and forward only their action-specific fields
       expected: { token: 'admin-token', ids: ['post-1'] }
     },
     {
-      action: 'admin.postDeletion.list',
-      payload: { token: 'admin-token' },
-      expected: { token: 'admin-token' },
-      trustedService: true
-    },
-    {
-      action: 'admin.postDeletion.finalize',
-      payload: {
-        token: 'admin-token',
-        deletions: [
-          { id: ' post-1 ', nonce: ' nonce-1 ' },
-          { id: 'post-1', nonce: 'nonce-1' },
-          { id: 'post-2', nonce: 'nonce-2' }
-        ]
-      },
-      expected: {
-        token: 'admin-token',
-        deletions: [
-          { id: 'post-1', nonce: 'nonce-1' },
-          { id: 'post-2', nonce: 'nonce-2' }
-        ]
-      },
-      trustedService: true
-    },
-    {
       action: 'admin.guestbook.bulkStatus',
       payload: {
         token: 'admin-token',
@@ -752,10 +726,7 @@ test('bulk admin actions normalize and forward only their action-specific fields
   ];
 
   for (const testCase of cases) {
-    const headers = testCase.trustedService
-      ? { Origin: '', Authorization: `Bearer ${env.STORAGE_SYNC_SECRET}` }
-      : {};
-    const response = await gateway.fetch(apiRequest(testCase.action, testCase.payload, headers), env);
+    const response = await gateway.fetch(apiRequest(testCase.action, testCase.payload), env);
     assert.equal(response.status, 200, testCase.action);
   }
 
@@ -769,37 +740,154 @@ test('bulk admin actions normalize and forward only their action-specific fields
   }
 });
 
-test('post deletion queue actions require the trusted storage sync bearer', async () => {
+test('storage sync actions require their bearer and forward no human credentials', async () => {
   const env = createEnv();
   const cases = [
-    ['admin.postDeletion.list', { token: 'admin-token' }],
-    ['admin.postDeletion.finalize', {
-      token: 'admin-token',
-      deletions: [{ id: 'post-1', nonce: 'nonce-1' }]
-    }]
+    {
+      action: 'storage.sync.post.list',
+      payload: {},
+      expected: {}
+    },
+    {
+      action: 'storage.sync.post.save',
+      payload: {
+        post: {
+          id: ' post-1 ', title: 'Post', excerpt: '', body: 'Body', tags: [' tag '],
+          status: ' published ', createdAt: '2026-07-12T00:00:00.000Z',
+          updatedAt: '2026-07-12T01:00:00.000Z', publishedAt: '2026-07-12T00:00:00.000Z',
+          storagePath: 'posts/2026/post-1.md', bodyUrl: 'https://example.test/post-1.md'
+        }
+      },
+      expected: {
+        post: {
+          id: 'post-1', title: 'Post', excerpt: '', body: 'Body', tags: ['tag'],
+          status: 'published', createdAt: '2026-07-12T00:00:00.000Z',
+          updatedAt: '2026-07-12T01:00:00.000Z', publishedAt: '2026-07-12T00:00:00.000Z',
+          storagePath: 'posts/2026/post-1.md', bodyUrl: 'https://example.test/post-1.md'
+        }
+      }
+    },
+    {
+      action: 'storage.sync.postDeletion.list',
+      payload: {},
+      expected: {}
+    },
+    {
+      action: 'storage.sync.postDeletion.finalize',
+      payload: {
+        deletions: [
+          { id: ' post-1 ', nonce: ' nonce-1 ' },
+          { id: 'post-1', nonce: 'nonce-1' },
+          { id: 'post-2', nonce: 'nonce-2' }
+        ]
+      },
+      expected: {
+        deletions: [
+          { id: 'post-1', nonce: 'nonce-1' },
+          { id: 'post-2', nonce: 'nonce-2' }
+        ]
+      }
+    },
+    {
+      action: 'storage.sync.assetOverride.list',
+      payload: {},
+      expected: {}
+    },
+    {
+      action: 'storage.sync.assetOverride.save',
+      payload: {
+        override: {
+          assetId: ' asset-1 ', displayName: 'Asset', description: '', tags: [' image '],
+          sourceUrl: 'https://example.test/asset', status: ' visible ', sortOrder: 4.5
+        }
+      },
+      expected: {
+        override: {
+          assetId: 'asset-1', displayName: 'Asset', description: '', tags: ['image'],
+          sourceUrl: 'https://example.test/asset', status: 'visible', sortOrder: 4.5
+        }
+      }
+    },
+    {
+      action: 'storage.sync.assetOverride.delete',
+      payload: { ids: [' asset-1 ', 'asset-1', 'asset-2'] },
+      expected: { ids: ['asset-1', 'asset-2'] }
+    }
   ];
 
-  for (const [action, payload] of cases) {
+  for (const testCase of cases) {
     const { gateway, appCalls } = fixture();
-    const adminOnly = await gateway.fetch(apiRequest(action, payload), env);
-    assert.equal(adminOnly.status, 403, action);
-    assert.equal(appCalls.length, 0, action);
+    const missingBearer = await gateway.fetch(apiRequest(testCase.action, testCase.payload, { Origin: '' }), env);
+    assert.equal(missingBearer.status, 403, testCase.action);
+    assert.equal(appCalls.length, 0, testCase.action);
 
-    const wrongBearer = await gateway.fetch(apiRequest(action, payload, {
+    const wrongBearer = await gateway.fetch(apiRequest(testCase.action, testCase.payload, {
       Origin: '',
       Authorization: 'Bearer wrong-storage-sync-secret-000000000000000'
     }), env);
-    assert.equal(wrongBearer.status, 403, action);
-    assert.equal(appCalls.length, 0, action);
+    assert.equal(wrongBearer.status, 403, testCase.action);
+    assert.equal(appCalls.length, 0, testCase.action);
 
-    const trusted = await gateway.fetch(apiRequest(action, payload, {
+    const trusted = await gateway.fetch(apiRequest(testCase.action, testCase.payload, {
       Origin: '',
       Authorization: `Bearer ${env.STORAGE_SYNC_SECRET}`
     }), env);
-    assert.equal(trusted.status, 200, action);
-    assert.equal(appCalls.length, 1, action);
-    assert.equal(JSON.stringify(appCalls[0]).includes(env.STORAGE_SYNC_SECRET), false, action);
+    assert.equal(trusted.status, 200, testCase.action);
+    assert.equal(appCalls.length, 1, testCase.action);
+    assert.deepEqual(appCalls[0].body, {
+      action: testCase.action,
+      ...testCase.expected,
+      gatewaySecret: env.GATEWAY_SHARED_SECRET
+    });
+    const upstream = JSON.stringify(appCalls[0]);
+    assert.equal(upstream.includes(env.STORAGE_SYNC_SECRET), false, testCase.action);
+    assert.equal(upstream.includes('password'), false, testCase.action);
+    assert.equal(upstream.includes('token'), false, testCase.action);
   }
+});
+
+test('storage sync fails closed on missing configuration, extra fields, or admin namespace use', async () => {
+  for (const configuredSecret of [undefined, 'too-short']) {
+    const env = createEnv();
+    if (configuredSecret === undefined) delete env.STORAGE_SYNC_SECRET;
+    else env.STORAGE_SYNC_SECRET = configuredSecret;
+    const { gateway, appCalls } = fixture();
+    const response = await gateway.fetch(apiRequest('storage.sync.post.list', {}, {
+      Origin: '', Authorization: 'Bearer any-secret-value'
+    }), env);
+    assert.equal(response.status, 503);
+    assert.equal(appCalls.length, 0);
+  }
+
+  const env = createEnv();
+  for (const payload of [
+    { token: 'admin-token' },
+    { password: 'admin-password' },
+    { gatewaySecret: 'client-selected-secret' }
+  ]) {
+    const { gateway, appCalls } = fixture();
+    const response = await gateway.fetch(apiRequest('storage.sync.post.list', payload, {
+      Origin: '', Authorization: `Bearer ${env.STORAGE_SYNC_SECRET}`
+    }), env);
+    assert.equal(response.status, 400);
+    assert.equal(appCalls.length, 0);
+  }
+
+  const { gateway: unknownGateway, appCalls: unknownCalls } = fixture();
+  const unknownResponse = await unknownGateway.fetch(apiRequest('storage.sync.guestbook.list', {}, {
+    Origin: '', Authorization: `Bearer ${env.STORAGE_SYNC_SECRET}`
+  }), env);
+  assert.equal(unknownResponse.status, 400);
+  assert.equal(unknownCalls.length, 0);
+
+  const { gateway, appCalls } = fixture();
+  const adminResponse = await gateway.fetch(apiRequest('admin.guestbook.ip.ban', {
+    entryId: 'entry-1'
+  }, {
+    Origin: '', Authorization: `Bearer ${env.STORAGE_SYNC_SECRET}`
+  }), env);
+  assert.equal(adminResponse.status, 401);
+  assert.equal(appCalls.length, 0);
 });
 
 test('bulk admin actions reject unknown fields, invalid statuses, and malformed finalize pairs', async () => {
@@ -807,13 +895,6 @@ test('bulk admin actions reject unknown fields, invalid statuses, and malformed 
     ['admin.post.bulkStatus', { token: 'token', ids: ['post'], status: 'deleted' }],
     ['admin.post.bulkStatus', { token: 'token', ids: ['post'], status: 'draft', hiddenReason: 'no' }],
     ['admin.post.bulkDelete', { token: 'token', ids: ['post'], status: 'hidden' }],
-    ['admin.postDeletion.list', { token: 'token', ids: ['post'] }],
-    ['admin.postDeletion.finalize', {
-      token: 'token', deletions: [{ id: 'post', nonce: 'nonce', extra: true }]
-    }],
-    ['admin.postDeletion.finalize', {
-      token: 'token', deletions: [{ id: 'post', nonce: 'one' }, { id: 'post', nonce: 'two' }]
-    }],
     ['admin.guestbook.bulkStatus', { token: 'token', ids: ['entry'], status: 'draft' }],
     ['admin.guestbook.bulkStatus', { token: 'token', ids: ['entry'], status: 'hidden' }],
     ['admin.guestbook.bulkStatus', {
@@ -826,10 +907,7 @@ test('bulk admin actions reject unknown fields, invalid statuses, and malformed 
   for (const [action, payload] of invalidCases) {
     const { gateway, appCalls } = fixture();
     const env = createEnv();
-    const headers = action.startsWith('admin.postDeletion.')
-      ? { Origin: '', Authorization: `Bearer ${env.STORAGE_SYNC_SECRET}` }
-      : {};
-    const response = await gateway.fetch(apiRequest(action, payload, headers), env);
+    const response = await gateway.fetch(apiRequest(action, payload), env);
     assert.equal(response.status, 400, action);
     assert.equal(appCalls.length, 0, action);
   }
@@ -854,8 +932,7 @@ test('bulk requests allow at most 100 unique ids after deduplication', async () 
   assert.equal(rejected.status, 400);
   assert.equal(appCalls.length, 1);
 
-  const rejectedFinalize = await gateway.fetch(apiRequest('admin.postDeletion.finalize', {
-    token: 'token',
+  const rejectedFinalize = await gateway.fetch(apiRequest('storage.sync.postDeletion.finalize', {
     deletions: [...ids, 'id-100'].map((id) => ({ id, nonce: `nonce-${id}` }))
   }, {
     Origin: '',
