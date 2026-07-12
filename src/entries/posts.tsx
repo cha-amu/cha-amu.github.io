@@ -11,6 +11,7 @@ import { useIncrementalItems } from '../hooks/useIncrementalItems';
 import { translate, useI18n } from '../i18n';
 import { refreshPosts, usePublicResource } from '../stores/publicDataStore';
 import { formatDate } from '../utils/date';
+import { postTimestamp } from '../utils/postTimestamp';
 import { readHashId } from '../utils/router';
 import { excerpt, normalizeText } from '../utils/strings';
 
@@ -148,7 +149,7 @@ export function PostsPage() {
                       <h2>{post.title}</h2>
                       <p>{post.excerpt || excerpt(post.body)}</p>
                       <TagList tags={post.tags} />
-                      <p className="meta">{formatDate(post.publishedAt || post.createdAt)}</p>
+                      <p className="meta">{formatDate(postTimestamp(post))}</p>
                     </a>
                     {expanded ? (
                       <div className="post-entry__body">

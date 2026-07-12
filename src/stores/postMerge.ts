@@ -1,7 +1,8 @@
 import type { Post } from '../types';
+import { postTimestamp } from '../utils/postTimestamp';
 
 function byNewestPost(a: Post, b: Post) {
-  return new Date(b.publishedAt || b.updatedAt || b.createdAt || '').getTime() - new Date(a.publishedAt || a.updatedAt || a.createdAt || '').getTime();
+  return new Date(postTimestamp(b)).getTime() - new Date(postTimestamp(a)).getTime();
 }
 
 export function normalizePostList(posts: Post[]) {
@@ -9,7 +10,7 @@ export function normalizePostList(posts: Post[]) {
 }
 
 function postFreshness(post: Post) {
-  const value = post.updatedAt || post.publishedAt || post.createdAt || '';
+  const value = postTimestamp(post);
   const time = new Date(value).getTime();
   return Number.isFinite(time) ? time : 0;
 }

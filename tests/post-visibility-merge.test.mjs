@@ -18,7 +18,10 @@ const compile = spawnSync(resolve(repoRoot, 'node_modules/.bin/tsc'), [
   '--outDir', outputDirectory
 ], { cwd: repoRoot, encoding: 'utf8' });
 if (compile.status !== 0) throw new Error(compile.stderr || compile.stdout || 'Failed to compile post merge helpers.');
-const compiledSource = readFileSync(join(outputDirectory, 'stores/postMerge.js'), 'utf8');
+const postTimestampSource = readFileSync(join(outputDirectory, 'utils/postTimestamp.js'), 'utf8');
+const postTimestampModuleUrl = `data:text/javascript;base64,${Buffer.from(postTimestampSource).toString('base64')}`;
+const compiledSource = readFileSync(join(outputDirectory, 'stores/postMerge.js'), 'utf8')
+  .replace("'../utils/postTimestamp'", JSON.stringify(postTimestampModuleUrl));
 const compiledModuleUrl = `data:text/javascript;base64,${Buffer.from(compiledSource).toString('base64')}`;
 const controlsSource = readFileSync(join(outputDirectory, 'stores/controlSnapshot.js'), 'utf8');
 const controlsModuleUrl = `data:text/javascript;base64,${Buffer.from(controlsSource).toString('base64')}`;

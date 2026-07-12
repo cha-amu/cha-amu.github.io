@@ -1,4 +1,5 @@
 import type { ArchiveAsset, Post, SearchResult } from '../types';
+import { postTimestamp } from './postTimestamp';
 import { normalizeText } from './strings';
 
 const SEARCH_SNIPPET_LENGTH = 180;
@@ -50,7 +51,7 @@ export function buildSearchResults(posts: Post[], assets: ArchiveAsset[], query:
         excerpt: matchedSnippet([post.excerpt, post.body], q, [post.excerpt, post.body]),
         tags: post.tags,
         href: `/posts/#${encodeURIComponent(post.id)}`,
-        date: post.publishedAt || post.createdAt
+        date: postTimestamp(post)
       });
     }
   }

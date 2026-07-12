@@ -14,6 +14,7 @@ import { useI18n, type Translate, type TranslationKey, type TranslationParams } 
 import { setPublicGuestbook, syncPublicArchiveOverrides, syncPublicPost } from '../stores/publicDataStore';
 import type { ArchiveAsset, AssetOverride, GuestbookAdminEntry, GuestbookEntry, GuestbookIpBan, Post } from '../types';
 import { formatDate } from '../utils/date';
+import { postTimestamp } from '../utils/postTimestamp';
 import { clearAdminSession, loadAdminSession, refreshAdminSession, saveAdminSession } from '../utils/session';
 import { splitTags } from '../utils/strings';
 
@@ -229,8 +230,8 @@ const blankPost = (): Partial<Post> => ({
 
 function sortPostsByNewest(posts: Post[]) {
   return [...posts].sort((a, b) => {
-    const left = a.publishedAt || a.updatedAt || a.createdAt || '';
-    const right = b.publishedAt || b.updatedAt || b.createdAt || '';
+    const left = postTimestamp(a);
+    const right = postTimestamp(b);
     return right.localeCompare(left);
   });
 }

@@ -677,6 +677,60 @@ img {
   overflow-x: auto;
   white-space: pre;
   overflow-wrap: normal;
+  margin: 1rem 0;
+  padding: 1rem;
+  border: 1.5px solid var(--color-ink);
+  border-radius: 0.75rem;
+  background: var(--color-soft-primary);
+}
+
+.markdown-body code {
+  padding: 0.1em 0.35em;
+  border-radius: 0.3rem;
+  background: var(--color-soft-primary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.9em;
+}
+
+.markdown-body pre code {
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  font-size: 0.88rem;
+}
+
+.markdown-table-wrap {
+  max-width: 100%;
+  margin: 1rem 0;
+  overflow-x: auto;
+}
+
+.markdown-body table {
+  width: 100%;
+  min-width: 32rem;
+  border-collapse: collapse;
+  background: var(--color-surface);
+}
+
+.markdown-body th,
+.markdown-body td {
+  padding: 0.65rem 0.75rem;
+  border: 1.5px solid var(--color-line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.markdown-body th {
+  border-color: var(--color-ink);
+  background: var(--color-soft-primary);
+}
+
+.markdown-body .markdown-align-center {
+  text-align: center;
+}
+
+.markdown-body .markdown-align-right {
+  text-align: right;
 }
 
 .markdown-body img {

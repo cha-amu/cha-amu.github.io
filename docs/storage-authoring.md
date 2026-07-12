@@ -60,6 +60,9 @@ excerpt: 목록과 검색에 보일 짧은 설명
 ```txt
 title      필수. 글 제목.
 date       권장. YYYY-MM-DD 또는 ISO 날짜.
+createdAt  선택. 최초 작성 시각을 보존할 때 ISO 날짜로 지정.
+updatedAt  선택. 생략하거나 날짜만 쓰면 마지막 Git 커밋 시각을 사용.
+publishedAt 선택. 공개 시각을 작성 시각과 따로 보존할 때 ISO 날짜로 지정.
 tags       선택. [태그1, 태그2] 형식.
 status     선택. published, draft, hidden 중 하나. 기본값은 published.
 excerpt    선택. 비워두면 본문에서 자동 생성.
@@ -185,13 +188,14 @@ GitHub Actions가 `cha-amu/storage`와 Google Sheets를 맞춘다.
 
 - sync는 메인 사이트 repo가 아니라 `cha-amu/storage` repo의 `Sync storage repo` GitHub Actions에서 돈다.
 - `posts/**`, `assets/**`, sync 스크립트, `package.json`, sync workflow가 `main`에 push되면 즉시 실행된다.
-- 주기 sync는 매주 월요일 03:17 KST에 실행된다. GitHub cron 기준으로는 일요일 18:17 UTC다.
+- 주기 sync는 매시간 17분에 실행된다.
 - storage repo에 직접 push한 글은 즉시 Sheets에 본문까지 복사된다.
 - Sheets에만 있거나 Sheets 쪽 `updatedAt`이 더 최신인 글은 주기적 sync 때 `posts/YYYY/title.md`로 storage repo에 반영된다.
 - storage에만 있는 글은 Sheets에 `source=storage`, `storagePath=...`, `syncStatus=synced` 표시와 함께 본문까지 추가된다.
 - storage에만 있는 자료 파일은 Sheets asset override에 link-only 행으로 추가한다.
 - 사이트에서 글을 표시할 때는 Sheets의 `updatedAt`이 storage의 `updatedAt`보다 최신이면 Sheets 본문을 쓰고, 같거나 storage가 최신이면 storage Markdown을 쓴다.
 - GitHub push로 실행된 sync는 사람이 frontmatter `updatedAt`을 직접 바꾸지 않아도 storage 파일을 최신으로 보고 Sheets에 반영한다.
+- `YYYY-MM-DD` 형식의 날짜는 사이트에서 시간 없이 표시한다. 업로드 시각까지 고정하려면 ISO 날짜를 쓰고, 정밀한 `updatedAt`이 없으면 Git 커밋 시각으로 보강한다.
 - Sheets에서 `hidden`이나 `deleted`로 둔 항목은 그 상태의 `updatedAt`이 최신이면 공개 사이트에서 숨긴다.
 
 ## 수동 sync 실행
