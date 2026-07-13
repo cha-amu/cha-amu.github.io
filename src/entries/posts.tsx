@@ -1,4 +1,4 @@
-import { Component, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Component, ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { writeCachedPosts } from '../api/appsScriptClient';
 import { AppLayout } from '../components/AppLayout';
 import { BackToTopButton } from '../components/BackToTopButton';
@@ -19,7 +19,6 @@ const POSTS_BATCH_SIZE = 10;
 
 interface PendingPostScroll {
   id: string;
-  smooth: boolean;
 }
 
 export class PostsErrorBoundary extends Component<{ children: ReactNode }, { message: string | null }> {
@@ -50,13 +49,13 @@ export function PostsPage() {
   const posts = postsResource.items;
   const postsCount = useRef(posts.length);
   const [selectedId, setSelectedId] = useState(() => readHashId());
-  const pendingPostScroll = useRef<PendingPostScroll | null>(selectedId ? { id: selectedId, smooth: false } : null);
+  const pendingPostScroll = useRef<PendingPostScroll | null>(selectedId ? { id: selectedId } : null);
   const [postScrollRequest, setPostScrollRequest] = useState(0);
   const [query, setQuery] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
 
-  const requestPostScroll = useCallback((id: string, smooth: boolean) => {
-    pendingPostScroll.current = { id, smooth };
+  const requestPostScroll = useCallback((id: string) => {
+    pendingPostScroll.current = { id };
     setPostScrollRequest((current) => current + 1);
   }, []);
 
@@ -81,7 +80,7 @@ export function PostsPage() {
         pendingPostScroll.current = null;
         return;
       }
-      if (pendingPostScroll.current?.id !== hashId) requestPostScroll(hashId, false);
+      if (pendingPostScroll.current?.id !== hashId) requestPostScroll(hashId);
     };
     window.addEventListener('hashchange', syncHash);
     window.addEventListener('popstate', syncHash);
@@ -131,38 +130,24 @@ export function PostsPage() {
     ensureVisible(selectedIndex);
   }, [ensureVisible, selectedIndex]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const request = pendingPostScroll.current;
     if (!request || request.id !== selectedId) return;
     if (!visiblePosts.some((post) => post.id === request.id)) return;
 
-    let scrollFrame = 0;
-    const layoutFrame = window.requestAnimationFrame(() => {
-      scrollFrame = window.requestAnimationFrame(() => {
-        if (pendingPostScroll.current !== request) return;
-        const target = document.getElementById(request.id);
-        if (!target) return;
+    const target = document.getElementById(request.id);
+    if (!target) return;
 
-        pendingPostScroll.current = null;
-        const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        const scrollMarginTop = Number.parseFloat(window.getComputedStyle(target).scrollMarginTop) || 0;
-        const scrollTop = window.scrollY + target.getBoundingClientRect().top - scrollMarginTop;
-        target.focus({ preventScroll: true });
-        window.scrollTo({
-          behavior: request.smooth && !reduceMotion ? 'smooth' : 'auto',
-          top: Math.max(0, scrollTop)
-        });
-      });
-    });
-    return () => {
-      window.cancelAnimationFrame(layoutFrame);
-      if (scrollFrame) window.cancelAnimationFrame(scrollFrame);
-    };
+    pendingPostScroll.current = null;
+    const scrollMarginTop = Number.parseFloat(window.getComputedStyle(target).scrollMarginTop) || 0;
+    const scrollTop = window.scrollY + target.getBoundingClientRect().top - scrollMarginTop;
+    target.focus({ preventScroll: true });
+    window.scrollTo({ behavior: 'auto', top: Math.max(0, scrollTop) });
   }, [postScrollRequest, selectedId, visiblePosts]);
 
   const openPost = (id: string) => {
     setSelectedId(id);
-    requestPostScroll(id, true);
+    requestPostScroll(id);
   };
 
   const toggleTag = (tag: string) => {
