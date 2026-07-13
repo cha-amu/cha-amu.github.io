@@ -17,6 +17,11 @@ import { excerpt, normalizeText } from '../utils/strings';
 
 const POSTS_BATCH_SIZE = 10;
 
+interface PendingPostScroll {
+  id: string;
+  smooth: boolean;
+}
+
 export class PostsErrorBoundary extends Component<{ children: ReactNode }, { message: string | null }> {
   state = { message: null };
 
@@ -45,8 +50,15 @@ export function PostsPage() {
   const posts = postsResource.items;
   const postsCount = useRef(posts.length);
   const [selectedId, setSelectedId] = useState(() => readHashId());
+  const pendingPostScroll = useRef<PendingPostScroll | null>(selectedId ? { id: selectedId, smooth: false } : null);
+  const [postScrollRequest, setPostScrollRequest] = useState(0);
   const [query, setQuery] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+
+  const requestPostScroll = useCallback((id: string, smooth: boolean) => {
+    pendingPostScroll.current = { id, smooth };
+    setPostScrollRequest((current) => current + 1);
+  }, []);
 
   useEffect(() => {
     postsCount.current = posts.length;
@@ -61,14 +73,23 @@ export function PostsPage() {
   }, [load]);
 
   useEffect(() => {
-    const syncHash = () => setSelectedId(readHashId());
+    const syncHash = () => {
+      const hashId = readHashId();
+      setSelectedId(hashId);
+
+      if (!hashId) {
+        pendingPostScroll.current = null;
+        return;
+      }
+      if (pendingPostScroll.current?.id !== hashId) requestPostScroll(hashId, false);
+    };
     window.addEventListener('hashchange', syncHash);
     window.addEventListener('popstate', syncHash);
     return () => {
       window.removeEventListener('hashchange', syncHash);
       window.removeEventListener('popstate', syncHash);
     };
-  }, []);
+  }, [requestPostScroll]);
 
   useEffect(() => {
     if (!selectedId && posts[0]) setSelectedId(posts[0].id);
@@ -96,24 +117,53 @@ export function PostsPage() {
   const selectedIndex = useMemo(() => filteredPosts.findIndex((post) => post.id === selectedId), [filteredPosts, selectedId]);
 
   useEffect(() => {
-    if (filteredPosts.length && !filteredPosts.some((post) => post.id === selectedId)) setSelectedId(filteredPosts[0].id);
-  }, [filteredPosts, selectedId]);
+    if (!filteredPosts.length || filteredPosts.some((post) => post.id === selectedId)) return;
+
+    const pendingId = pendingPostScroll.current?.id;
+    const awaitingPendingPost = pendingId === selectedId && !postsResource.loadedAt && !postsResource.error;
+    if (awaitingPendingPost) return;
+
+    if (pendingId === selectedId) pendingPostScroll.current = null;
+    setSelectedId(filteredPosts[0].id);
+  }, [filteredPosts, postsResource.error, postsResource.loadedAt, selectedId]);
 
   useEffect(() => {
     ensureVisible(selectedIndex);
   }, [ensureVisible, selectedIndex]);
 
   useEffect(() => {
-    if (!selectedId || readHashId() !== selectedId) return;
-    if (!visiblePosts.some((post) => post.id === selectedId)) return;
+    const request = pendingPostScroll.current;
+    if (!request || request.id !== selectedId) return;
+    if (!visiblePosts.some((post) => post.id === request.id)) return;
 
-    const frame = window.requestAnimationFrame(() => {
-      const target = document.getElementById(selectedId);
-      target?.scrollIntoView({ block: 'start' });
-      target?.focus({ preventScroll: true });
+    let scrollFrame = 0;
+    const layoutFrame = window.requestAnimationFrame(() => {
+      scrollFrame = window.requestAnimationFrame(() => {
+        if (pendingPostScroll.current !== request) return;
+        const target = document.getElementById(request.id);
+        if (!target) return;
+
+        pendingPostScroll.current = null;
+        const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        const scrollMarginTop = Number.parseFloat(window.getComputedStyle(target).scrollMarginTop) || 0;
+        const scrollTop = window.scrollY + target.getBoundingClientRect().top - scrollMarginTop;
+        target.focus({ preventScroll: true });
+        window.scrollTo({
+          behavior: request.smooth && !reduceMotion ? 'smooth' : 'auto',
+          top: Math.max(0, scrollTop)
+        });
+      });
     });
-    return () => window.cancelAnimationFrame(frame);
-  }, [selectedId, visiblePosts]);
+    return () => {
+      window.cancelAnimationFrame(layoutFrame);
+      if (scrollFrame) window.cancelAnimationFrame(scrollFrame);
+    };
+  }, [postScrollRequest, selectedId, visiblePosts]);
+
+  const openPost = (id: string) => {
+    setSelectedId(id);
+    requestPostScroll(id, true);
+  };
 
   const toggleTag = (tag: string) => {
     setSelectedTags((current) => current.includes(tag) ? current.filter((item) => item !== tag) : [...current, tag]);
@@ -143,16 +193,33 @@ export function PostsPage() {
             <section className="post-flow tagged-main" aria-label={t('posts.list')}>
               {visiblePosts.map((post) => {
                 const expanded = selectedPost?.id === post.id;
+                const titleId = `post-title-${encodeURIComponent(post.id)}`;
+                const bodyId = `post-body-${encodeURIComponent(post.id)}`;
                 return (
-                  <article className={`post-entry ${expanded ? 'post-entry--active' : ''}`} id={post.id} key={post.id} tabIndex={expanded ? -1 : undefined}>
-                    <a className="post-entry__summary" href={`#${encodeURIComponent(post.id)}`} onClick={() => setSelectedId(post.id)}>
-                      <h2>{post.title}</h2>
+                  <article
+                    aria-labelledby={titleId}
+                    className={`post-entry ${expanded ? 'post-entry--active' : ''}`}
+                    id={post.id}
+                    key={post.id}
+                    tabIndex={expanded ? -1 : undefined}
+                  >
+                    <a
+                      aria-controls={bodyId}
+                      aria-expanded={expanded}
+                      className="post-entry__summary"
+                      href={`#${encodeURIComponent(post.id)}`}
+                      onClick={(event) => {
+                        if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+                        openPost(post.id);
+                      }}
+                    >
+                      <h2 id={titleId}>{post.title}</h2>
                       <p>{post.excerpt || excerpt(post.body)}</p>
                       <TagList tags={post.tags} />
                       <p className="meta">{formatDate(postTimestamp(post))}</p>
                     </a>
                     {expanded ? (
-                      <div className="post-entry__body">
+                      <div className="post-entry__body" id={bodyId}>
                         <MarkdownView markdown={post.body} baseUrl={post.markdownBaseUrl} rootUrl={post.markdownRootUrl} />
                       </div>
                     ) : null}

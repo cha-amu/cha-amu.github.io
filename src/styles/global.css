@@ -1497,7 +1497,7 @@ img {
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.86);
   overflow: hidden;
-  scroll-margin-top: 90px;
+  scroll-margin-top: calc(var(--site-tools-top) + var(--site-tools-row-height) + 1rem);
 }
 
 .post-entry--active {
