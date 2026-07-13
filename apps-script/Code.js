@@ -192,8 +192,8 @@ function createGuestbook_(body) {
   const passwordHash = hashPassword_(deletePassword, salt);
   const entry = {
     id: gatewayEntryId,
-    name: name.slice(0, 40),
-    message,
+    name: literalSheetText_(name.slice(0, 40)),
+    message: literalSheetText_(message),
     status: 'visible',
     createdAt: new Date().toISOString(),
     passwordSalt: salt,
@@ -204,7 +204,7 @@ function createGuestbook_(body) {
   };
   appendObject_(SHEETS.guestbook, entry);
   invalidatePublicCache_(PUBLIC_CACHE_KEYS.guestbook);
-  return { id: entry.id, name: entry.name, message: entry.message, status: entry.status, createdAt: entry.createdAt };
+  return { id: entry.id, name: name.slice(0, 40), message, status: entry.status, createdAt: entry.createdAt };
 }
 
 function hideGuestbookByPassword_(body) {
@@ -830,6 +830,10 @@ function parseCell_(value) {
   try { return JSON.parse(value); } catch (_) { return value; }
 }
 function formatCell_(value) { return Array.isArray(value) || (value && typeof value === 'object') ? JSON.stringify(value) : value; }
+function literalSheetText_(value) {
+  const text = String(value || '');
+  return /^[=+\-@]/.test(text) ? "'" + text : text;
+}
 function sha256Hex_(value) { return bytesToHex_(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, value)); }
 function hmacHex_(value, secret) { return bytesToHex_(Utilities.computeHmacSha256Signature(value, secret)); }
 function hashPassword_(password, salt) {
