@@ -46,6 +46,7 @@ export interface Thing {
   title: string;
   description?: string;
   url: string;
+  imageUrl?: string;
   status: 'visible' | 'hidden';
   sortOrder: number;
   updatedAt: string;

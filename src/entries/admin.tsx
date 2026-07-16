@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { loadArchiveManifest } from '../api/archiveManifestClient';
+import { loadArchiveManifest, mergeAssetOverrides } from '../api/archiveManifestClient';
 import { adminBanGuestbookIp, adminBulkDeleteGuestbook, adminBulkDeletePosts, adminBulkUpdateAssetOverrides, adminBulkUpdateGuestbook, adminBulkUpdatePosts, adminDeleteThings, adminHideGuestbook, adminListAssetOverrides, adminListGuestbook, adminListGuestbookIpBans, adminListPosts, adminListThings, adminLogin, adminRefreshSession, adminRestoreGuestbook, adminSaveAssetOverride, adminSavePost, adminSaveThing, adminUnbanGuestbookIp, listGuestbook } from '../api/appsScriptClient';
 import { AppLayout } from '../components/AppLayout';
 import { BackToTopButton } from '../components/BackToTopButton';
@@ -246,6 +246,7 @@ const blankThing = (): Partial<Thing> => ({
   title: '',
   description: '',
   url: '',
+  imageUrl: '',
   status: 'visible',
   sortOrder: 0
 });
@@ -616,14 +617,34 @@ function PostsAdmin({ token, onSessionExpired }: { token: string; onSessionExpir
 }
 
 function ThingsAdmin({ token, onSessionExpired }: { token: string; onSessionExpired: () => void }) {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const [things, setThings] = useState<Thing[]>([]);
   const [current, setCurrent] = useState<Partial<Thing>>(() => blankThing());
+  const [storageImages, setStorageImages] = useState<ArchiveAsset[]>([]);
+  const [storageImagesLoading, setStorageImagesLoading] = useState(true);
+  const [imagePreviewFailed, setImagePreviewFailed] = useState(false);
   const [message, setMessage] = useState<AdminMessage>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const editorRef = useRef<HTMLFormElement>(null);
+  const storageImageChoices = useMemo(() => {
+    const seen = new Set<string>();
+    const choices: Array<ArchiveAsset & { imageUrl: string }> = [];
+    for (const asset of storageImages) {
+      const imageUrl = asset.imageUrl?.trim();
+      if (asset.kind !== 'image' || asset.status !== 'visible' || !imageUrl || !safeThingUrl(imageUrl) || seen.has(imageUrl)) continue;
+      seen.add(imageUrl);
+      choices.push({ ...asset, imageUrl });
+    }
+    return choices.sort((left, right) => left.title.localeCompare(right.title, locale, { numeric: true, sensitivity: 'base' }));
+  }, [locale, storageImages]);
+  const imagePreviewUrl = String(current.imageUrl || '').trim();
+  const canPreviewImage = Boolean(imagePreviewUrl) && safeThingUrl(imagePreviewUrl);
+
+  useEffect(() => {
+    setImagePreviewFailed(false);
+  }, [imagePreviewUrl]);
 
   const moveToEditorOnMobile = () => {
     if (!window.matchMedia('(max-width: 760px)').matches) return;
@@ -642,6 +663,19 @@ function ThingsAdmin({ token, onSessionExpired }: { token: string; onSessionExpi
   };
 
   useEffect(() => { void load(); }, [token]);
+
+  useEffect(() => {
+    let active = true;
+    setStorageImages([]);
+    setStorageImagesLoading(true);
+    void Promise.allSettled([loadArchiveManifest(), adminListAssetOverrides(token)])
+      .then(([manifestResult, overridesResult]) => {
+        if (!active || manifestResult.status !== 'fulfilled' || overridesResult.status !== 'fulfilled') return;
+        setStorageImages(mergeAssetOverrides(manifestResult.value.assets, overridesResult.value));
+      })
+      .finally(() => { if (active) setStorageImagesLoading(false); });
+    return () => { active = false; };
+  }, [token]);
 
   const selectThing = (thing: Thing) => {
     setCurrent(thing);
@@ -664,6 +698,7 @@ function ThingsAdmin({ token, onSessionExpired }: { token: string; onSessionExpi
     if (saving || deleting) return;
     const title = String(current.title || '').trim();
     const url = String(current.url || '').trim();
+    const imageUrl = String(current.imageUrl || '').trim();
     const sortOrder = Number(current.sortOrder ?? 0);
     if (!title) {
       setMessage(translatedMessage('admin.things.titleRequired'));
@@ -673,6 +708,11 @@ function ThingsAdmin({ token, onSessionExpired }: { token: string; onSessionExpi
     if (!safeThingUrl(url)) {
       setMessage(translatedMessage('admin.things.urlInvalid'));
       window.requestAnimationFrame(() => document.getElementById('thing-url')?.focus());
+      return;
+    }
+    if (imageUrl && !safeThingUrl(imageUrl)) {
+      setMessage(translatedMessage('admin.things.imageInvalid'));
+      window.requestAnimationFrame(() => document.getElementById('thing-image-url')?.focus());
       return;
     }
     if (!Number.isSafeInteger(sortOrder) || Math.abs(sortOrder) > 1_000_000_000) {
@@ -686,6 +726,7 @@ function ThingsAdmin({ token, onSessionExpired }: { token: string; onSessionExpi
       title,
       description: String(current.description || ''),
       url,
+      imageUrl,
       status: current.status === 'hidden' ? 'hidden' : 'visible',
       sortOrder
     };
@@ -781,6 +822,47 @@ function ThingsAdmin({ token, onSessionExpired }: { token: string; onSessionExpi
               <label htmlFor="thing-url">{t('admin.things.urlField')}</label>
               <input id="thing-url" type="url" value={current.url || ''} maxLength={2048} onChange={(event) => updateCurrent('url', event.target.value)} placeholder="https://" required />
               <span className="help-text">{t('admin.things.urlHelp')}</span>
+            </div>
+            <div className="field admin-field--wide">
+              <label htmlFor="thing-image-url">{t('admin.things.imageField')}</label>
+              <input
+                id="thing-image-url"
+                type="url"
+                list="thing-storage-images"
+                value={current.imageUrl || ''}
+                maxLength={2048}
+                onChange={(event) => updateCurrent('imageUrl', event.target.value)}
+                placeholder="https://"
+                aria-describedby="thing-image-help thing-image-options-status"
+              />
+              <datalist id="thing-storage-images">
+                {storageImageChoices.map((asset) => (
+                  <option key={asset.id} value={asset.imageUrl} label={`${asset.title} — ${asset.path}`} />
+                ))}
+              </datalist>
+              <span className="help-text" id="thing-image-help">{t('admin.things.imageHelp')}</span>
+              <span className="help-text" id="thing-image-options-status" aria-live="polite">
+                {storageImagesLoading
+                  ? t('admin.things.imageOptionsLoading')
+                  : storageImageChoices.length
+                    ? t('admin.things.imageOptionsCount', { count: storageImageChoices.length })
+                    : t('admin.things.imageOptionsEmpty')}
+              </span>
+              {canPreviewImage ? (
+                imagePreviewFailed ? (
+                  <p className="help-text admin-thing-image-preview-error" role="status">{t('admin.things.imagePreviewFailed')}</p>
+                ) : (
+                  <img
+                    className="admin-asset-preview admin-thing-image-preview"
+                    src={imagePreviewUrl}
+                    alt={t('admin.things.imagePreviewAlt')}
+                    loading="lazy"
+                    decoding="async"
+                    referrerPolicy="no-referrer"
+                    onError={() => setImagePreviewFailed(true)}
+                  />
+                )
+              ) : null}
             </div>
             <div className="field admin-field--wide">
               <label htmlFor="thing-description">{t('admin.things.descriptionField')}</label>

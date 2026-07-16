@@ -174,12 +174,14 @@ export function normalizeThing(value: unknown): Thing | null {
   const title = asString(record.title).trim();
   const url = normalizeHttpUrl(record.url);
   if (!id || !title || !url) return null;
+  const imageUrl = normalizeHttpUrl(record.imageUrl);
   const numericSortOrder = Number(record.sortOrder);
   return {
     id,
     title,
     description: asString(record.description),
     url,
+    imageUrl: imageUrl || undefined,
     status: record.status === 'visible' ? 'visible' : 'hidden',
     sortOrder: Number.isSafeInteger(numericSortOrder) ? numericSortOrder : 0,
     updatedAt: asString(record.updatedAt)
