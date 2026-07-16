@@ -6,6 +6,7 @@ const SHEETS = {
   posts: 'posts',
   postDeletions: 'postDeletions',
   guestbook: 'guestbook',
+  things: 'things',
   assetOverrides: 'assetOverrides',
   settings: 'settings',
   auditLog: 'auditLog'
@@ -23,6 +24,7 @@ const SHEET_COLUMNS = {
     'id', 'name', 'message', 'status', 'createdAt', 'passwordSalt',
     'passwordHash', 'passwordHashAlgorithm', 'passwordHashIterations', 'hiddenReason'
   ],
+  things: ['id', 'title', 'description', 'url', 'status', 'sortOrder', 'updatedAt'],
   assetOverrides: [
     'assetId', 'displayName', 'description', 'tags', 'sourceUrl',
     'status', 'sortOrder', 'updatedAt'
@@ -40,7 +42,8 @@ const MAX_BULK_ITEMS = 100;
 const PUBLIC_CACHE_TTL_SECONDS = Math.max(1, Number(getProperty_('PUBLIC_CACHE_TTL_SECONDS', '300')) || 300);
 const PUBLIC_CACHE_KEYS = {
   posts: 'public:posts:v2',
-  guestbook: 'public:guestbook:v1'
+  guestbook: 'public:guestbook:v1',
+  things: 'public:things:v1'
 };
 const RATE_LIMITS = {
   adminLoginEmergencyWindow: { key: 'admin-login-emergency-window', limit: 120, windowSeconds: 3600, message: '관리자 로그인 요청이 일시적으로 많습니다. 나중에 다시 시도하세요.' },
@@ -99,6 +102,7 @@ function route_(action, body) {
     case 'post.listPublic': return listPublicPosts_();
     case 'guestbook.listPublic': return listPublicGuestbook_();
     case 'assetOverride.listPublic': return listPublicAssetOverrides_();
+    case 'thing.listPublic': return listPublicThings_();
     case 'guestbook.create': return createGuestbook_(body);
     case 'guestbook.hideByPassword': return hideGuestbookByPassword_(body);
     case 'admin.login': return adminLogin_(body);
@@ -117,6 +121,9 @@ function route_(action, body) {
     case 'admin.assetOverride.save': requireAdmin_(body.token); return saveAssetOverride_(body.override);
     case 'admin.assetOverride.bulkStatus': requireAdmin_(body.token); return bulkAssetOverrideStatus_(body);
     case 'admin.assetOverride.delete': requireAdmin_(body.token); return bulkDeleteAssetOverrides_(body);
+    case 'admin.thing.list': requireAdmin_(body.token); return rowsToObjects_(SHEETS.things);
+    case 'admin.thing.save': requireAdmin_(body.token); return saveThing_(body.thing);
+    case 'admin.thing.delete': requireAdmin_(body.token); return deleteThings_(body);
     case 'storage.sync.post.list': return rowsToObjects_(SHEETS.posts);
     case 'storage.sync.post.save': return syncPostFromStorage_(body.post);
     case 'storage.sync.postDeletion.list': return listPostDeletions_();
@@ -129,7 +136,7 @@ function route_(action, body) {
 }
 
 function isPublicAction_(action) {
-  return action === 'post.listPublic' || action === 'guestbook.listPublic' || action === 'assetOverride.listPublic';
+  return action === 'post.listPublic' || action === 'guestbook.listPublic' || action === 'assetOverride.listPublic' || action === 'thing.listPublic';
 }
 
 function requireGateway_(secret) {
@@ -169,6 +176,27 @@ function listPublicGuestbook_() {
 
 function listPublicAssetOverrides_() {
   return rowsToObjects_(SHEETS.assetOverrides);
+}
+
+function listPublicThings_() {
+  return readPublicCache_(PUBLIC_CACHE_KEYS.things, function () {
+    return rowsToObjects_(SHEETS.things)
+      .filter(function (thing) { return thing.id && thing.status === 'visible'; })
+      .map(function (thing) {
+        return {
+          id: String(thing.id),
+          title: String(thing.title || ''),
+          description: String(thing.description || ''),
+          url: String(thing.url || ''),
+          status: 'visible',
+          sortOrder: Number(thing.sortOrder || 0),
+          updatedAt: String(thing.updatedAt || '')
+        };
+      })
+      .sort(function (left, right) {
+        return left.sortOrder - right.sortOrder || left.title.localeCompare(right.title) || left.id.localeCompare(right.id);
+      });
+  });
 }
 
 function createGuestbook_(body) {
@@ -313,6 +341,63 @@ function saveAssetOverride_(override) {
   });
   audit_('assetOverride.update', 'asset', next.assetId);
   return next;
+}
+
+function validateThingUrl_(value) {
+  const url = String(value || '').trim();
+  assert_(url && url.length <= 2048 && /^https?:\/\/[^\s]+$/i.test(url), 'Thing URL must be an absolute HTTP or HTTPS URL.');
+  assert_(!/^https?:\/\/[^/?#]*@/i.test(url), 'Thing URL must not contain credentials.');
+  const match = url.match(/^https?:\/\/(\[[0-9a-f:.]+\]|[^/?#:@\\\s]+)(?::([0-9]{1,5}))?(?:[/?#][^\s]*)?$/i);
+  assert_(match, 'Thing URL must contain a valid hostname.');
+  const hostname = match[1];
+  const validHostname = hostname[0] === '['
+    ? /^\[[0-9a-f]*:[0-9a-f:.]*\]$/i.test(hostname)
+    : hostname !== '.' && hostname[0] !== '.' && hostname.indexOf('..') === -1;
+  assert_(validHostname && (!match[2] || Number(match[2]) <= 65535), 'Thing URL must contain a valid hostname.');
+  return url;
+}
+
+function validateThingId_(value) {
+  const id = String(value || '').trim();
+  assert_(id && id.length <= 128 && !/[\u0000-\u001f\u007f]/.test(id) && !/^[=+\-@]/.test(id), 'Invalid thing id.');
+  return id;
+}
+
+function saveThing_(thing) {
+  assert_(thing && typeof thing === 'object' && !Array.isArray(thing), 'Thing is required.');
+  const requestedId = String(thing.id || '').trim();
+  const id = requestedId ? validateThingId_(requestedId) : Utilities.getUuid();
+  const title = String(thing.title || '').trim();
+  const description = String(thing.description || '');
+  const status = String(thing.status || 'visible');
+  const sortOrder = Number(thing.sortOrder);
+  assert_(title && title.length <= 160 && !/[\u0000-\u001f\u007f]/.test(title), 'Invalid thing title.');
+  assert_(description.length <= 2000, 'Thing description is too long.');
+  assert_(['visible', 'hidden'].indexOf(status) >= 0, 'Invalid thing status.');
+  assert_(Number.isSafeInteger(sortOrder) && Math.abs(sortOrder) <= 1000000000, 'Invalid thing sort order.');
+  const url = validateThingUrl_(thing.url);
+  const updatedAt = new Date().toISOString();
+  const next = { id, title, description, url, status, sortOrder, updatedAt };
+  const stored = Object.assign({}, next, {
+    title: literalSheetText_(title),
+    description: literalSheetText_(description)
+  });
+  withScriptLock_(function () {
+    upsertObject_(SHEETS.things, 'id', stored);
+  });
+  invalidatePublicCache_(PUBLIC_CACHE_KEYS.things);
+  audit_('thing.save', 'thing', id);
+  return next;
+}
+
+function deleteThings_(body) {
+  const ids = normalizeBulkIds_(body.ids, 'Thing ids', 128).map(validateThingId_);
+  const result = withScriptLock_(function () {
+    return deleteSheetRowsByIds_(SHEETS.things, 'id', ids);
+  });
+  if (result.deletedIds.length) invalidatePublicCache_(PUBLIC_CACHE_KEYS.things);
+  result.deletedIds.forEach(function (id) { audit_('thing.delete', 'thing', id); });
+  return result;
 }
 
 function bulkPostStatus_(body) {

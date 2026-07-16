@@ -20,6 +20,7 @@ const COLUMNS = {
     'id', 'name', 'message', 'status', 'createdAt', 'passwordSalt',
     'passwordHash', 'passwordHashAlgorithm', 'passwordHashIterations', 'hiddenReason'
   ],
+  things: ['id', 'title', 'description', 'url', 'status', 'sortOrder', 'updatedAt'],
   assetOverrides: [
     'assetId', 'displayName', 'description', 'tags', 'sourceUrl',
     'status', 'sortOrder', 'updatedAt'
@@ -257,6 +258,19 @@ function guestbook(id, status = 'visible') {
     passwordHashAlgorithm: 'SHA-256+salt+pepper',
     passwordHashIterations: 1,
     hiddenReason: status === 'hidden' ? 'old reason' : ''
+  };
+}
+
+function thing(id, overrides = {}) {
+  return {
+    id,
+    title: `title-${id}`,
+    description: `description-${id}`,
+    url: `https://example.test/${id}`,
+    status: 'visible',
+    sortOrder: 100,
+    updatedAt: '2026-07-10T00:00:00.000Z',
+    ...overrides
   };
 }
 
@@ -604,4 +618,121 @@ test('asset override bulk status patches existing metadata, creates minimal over
     app.call('admin.assetOverride.delete', { ids: ['a1', 'a3'] }),
     { deletedIds: [], alreadyMissingIds: ['a1', 'a3'] }
   );
+});
+
+test('things expose only visible projected rows and admin create, update, and delete invalidate the public cache', () => {
+  const thingColumns = [...COLUMNS.things, 'internalNote'];
+  const app = loadAppsScript({
+    things: tableRows(thingColumns, [
+      thing('visible-z', { title: 'Zulu', sortOrder: 20, internalNote: 'not public' }),
+      thing('hidden', { status: 'hidden', sortOrder: 1, internalNote: 'private row' }),
+      thing('visible-a', { title: 'Alpha', sortOrder: 20, internalNote: 'not public either' })
+    ])
+  });
+
+  assert.throws(
+    () => app.rawCall('admin.thing.list', { token: adminToken() }),
+    /gateway authentication failed/i
+  );
+  assert.throws(
+    () => app.rawCall('admin.thing.list', { gatewaySecret: GATEWAY_SECRET, token: 'invalid.token' }),
+    /invalid|json|session/i
+  );
+
+  const initialPublic = app.publicCall('thing.listPublic');
+  assert.deepEqual(initialPublic.map((entry) => entry.id), ['visible-a', 'visible-z']);
+  assert.ok(initialPublic.every((entry) => (
+    Object.keys(entry).sort().join(',') === 'description,id,sortOrder,status,title,updatedAt,url'
+  )));
+  assert.equal(JSON.stringify(initialPublic).includes('internalNote'), false);
+  assert.deepEqual(app.call('admin.thing.list').map((entry) => entry.id), ['visible-z', 'hidden', 'visible-a']);
+
+  const created = assertSheetMutationLocked(app, 'things', () => app.call('admin.thing.save', {
+    thing: {
+      title: '  New thing  ',
+      description: 'first description',
+      url: ' https://example.test/new ',
+      status: 'visible',
+      sortOrder: 5
+    }
+  }));
+  assert.equal(created.id, 'test-uuid-1');
+  assert.equal(created.title, 'New thing');
+  assert.equal(created.url, 'https://example.test/new');
+  assert.equal(app.publicCall('thing.listPublic')[0].id, created.id);
+
+  const updated = assertSheetMutationLocked(app, 'things', () => app.call('admin.thing.save', {
+    thing: {
+      id: created.id,
+      title: 'Updated thing',
+      description: 'updated description',
+      url: 'https://example.test/updated',
+      status: 'visible',
+      sortOrder: 30
+    }
+  }));
+  assert.equal(updated.id, created.id);
+  assert.equal(updated.title, 'Updated thing');
+  const rowsAfterUpdate = sheetObjects(app.spreadsheet, 'things');
+  assert.equal(rowsAfterUpdate.filter((entry) => entry.id === created.id).length, 1);
+  assert.equal(rowsAfterUpdate.find((entry) => entry.id === created.id).description, 'updated description');
+  assert.equal(app.publicCall('thing.listPublic').find((entry) => entry.id === created.id).title, 'Updated thing');
+
+  const deleted = assertSheetMutationLocked(app, 'things', () => app.call('admin.thing.delete', {
+    ids: [created.id, 'missing']
+  }));
+  assert.deepEqual(deleted, { deletedIds: [created.id], alreadyMissingIds: ['missing'] });
+  assert.equal(app.publicCall('thing.listPublic').some((entry) => entry.id === created.id), false);
+  assert.deepEqual(
+    app.call('admin.thing.delete', { ids: [created.id] }),
+    { deletedIds: [], alreadyMissingIds: [created.id] }
+  );
+});
+
+test('thing saves reject invalid URLs and malformed fields before mutating the sheet', () => {
+  const app = loadAppsScript({ things: tableRows(COLUMNS.things, []) });
+  const valid = {
+    title: 'Valid thing',
+    description: 'description',
+    url: 'https://example.test/app',
+    status: 'visible',
+    sortOrder: 10
+  };
+  const invalidCases = [
+    [{ ...valid, url: 'javascript:alert(1)' }, /absolute http or https url/i],
+    [{ ...valid, url: 'https://user:password@example.test/app' }, /credentials/i],
+    [{ ...valid, url: 'https://?missing-host' }, /valid hostname/i],
+    [{ ...valid, url: 'http:///example.test' }, /valid hostname/i],
+    [{ ...valid, url: 'https://example.test:99999/app' }, /valid hostname/i],
+    [{ ...valid, title: '' }, /invalid thing title/i],
+    [{ ...valid, title: 'bad\nline' }, /invalid thing title/i],
+    [{ ...valid, description: 'x'.repeat(2001) }, /description is too long/i],
+    [{ ...valid, status: 'deleted' }, /invalid thing status/i],
+    [{ ...valid, sortOrder: 1.5 }, /invalid thing sort order/i],
+    [{ ...valid, id: `bad\u0000id` }, /invalid thing id/i],
+    ...['=FORMULA()', '+formula', '-formula', '@formula'].map((id) => [{ ...valid, id }, /invalid thing id/i])
+  ];
+
+  for (const [invalidThing, expectedError] of invalidCases) {
+    assert.throws(() => app.call('admin.thing.save', { thing: invalidThing }), expectedError);
+  }
+  assert.throws(() => app.call('admin.thing.save', { thing: [] }), /thing is required/i);
+  for (const id of ['=FORMULA()', '+formula', '-formula', '@formula']) {
+    assert.throws(() => app.call('admin.thing.delete', { ids: [id] }), /invalid thing id/i);
+  }
+  assert.deepEqual(sheetObjects(app.spreadsheet, 'things'), []);
+
+  const formulaLike = app.call('admin.thing.save', {
+    thing: {
+      ...valid,
+      title: '=HYPERLINK("https://attacker.test", "open")',
+      description: '@SUM(A1:A2)',
+      status: 'hidden'
+    }
+  });
+  assert.equal(formulaLike.title, '=HYPERLINK("https://attacker.test", "open")');
+  assert.equal(formulaLike.description, '@SUM(A1:A2)');
+  const stored = sheetObjects(app.spreadsheet, 'things')[0];
+  assert.equal(stored.title, "'=HYPERLINK(\"https://attacker.test\", \"open\")");
+  assert.equal(stored.description, "'@SUM(A1:A2)");
 });

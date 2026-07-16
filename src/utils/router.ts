@@ -1,4 +1,4 @@
-const CANONICAL_ROUTES = new Set(['/posts', '/guestbook', '/archive', '/search', '/privacy', '/admin']);
+const CANONICAL_ROUTES = new Set(['/posts', '/things', '/guestbook', '/archive', '/search', '/privacy', '/admin']);
 
 export interface AppLocation {
   pathname: string;

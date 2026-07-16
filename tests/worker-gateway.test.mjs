@@ -11,7 +11,8 @@ const CREATED_ID = '11111111-1111-4111-8111-111111111111';
 const DELETE_ACTIONS = new Set([
   'admin.post.bulkDelete',
   'admin.guestbook.bulkDelete',
-  'admin.assetOverride.delete'
+  'admin.assetOverride.delete',
+  'admin.thing.delete'
 ]);
 
 class FakeD1Statement {
@@ -722,6 +723,11 @@ test('bulk admin actions normalize and forward only their action-specific fields
       action: 'admin.assetOverride.delete',
       payload: { token: 'admin-token', ids: ['asset-1'] },
       expected: { token: 'admin-token', ids: ['asset-1'] }
+    },
+    {
+      action: 'admin.thing.delete',
+      payload: { token: ' admin-token ', ids: [' thing-1 ', 'thing-1', 'thing-2'] },
+      expected: { token: 'admin-token', ids: ['thing-1', 'thing-2'] }
     }
   ];
 
@@ -737,6 +743,129 @@ test('bulk admin actions normalize and forward only their action-specific fields
       ...cases[index].expected,
       gatewaySecret: env.GATEWAY_SHARED_SECRET
     });
+  }
+});
+
+test('thing public and admin list actions forward only their allowlisted fields', async () => {
+  const { gateway, appCalls } = fixture({
+    appHandler: (body) => ({ ok: true, data: body.action === 'thing.listPublic' ? [] : [{ id: 'thing-1' }] })
+  });
+  const env = createEnv();
+
+  const publicResponse = await gateway.fetch(apiRequest('thing.listPublic', {
+    token: 'client-selected-token',
+    ids: ['client-selected-id'],
+    thing: { title: 'client-selected-thing' },
+    gatewaySecret: 'client-selected-secret'
+  }), env);
+  const adminResponse = await gateway.fetch(apiRequest('admin.thing.list', {
+    token: 'admin-token',
+    ids: ['ignored-id'],
+    gatewaySecret: 'client-selected-secret'
+  }), env);
+
+  assert.equal(publicResponse.status, 200);
+  assert.deepEqual((await publicResponse.json()).data, []);
+  assert.equal(adminResponse.status, 200);
+  assert.deepEqual((await adminResponse.json()).data, [{ id: 'thing-1' }]);
+  assert.deepEqual(appCalls.map((call) => call.body), [
+    { action: 'thing.listPublic', gatewaySecret: env.GATEWAY_SHARED_SECRET },
+    { action: 'admin.thing.list', token: 'admin-token', gatewaySecret: env.GATEWAY_SHARED_SECRET }
+  ]);
+});
+
+test('thing save normalizes create and update payloads before forwarding them', async () => {
+  const { gateway, appCalls } = fixture({
+    appHandler: (body) => ({ ok: true, data: { id: body.thing.id || 'generated-id', ...body.thing } })
+  });
+  const env = createEnv();
+  const createResponse = await gateway.fetch(apiRequest('admin.thing.save', {
+    token: ' admin-token ',
+    thing: {
+      title: ' New thing ',
+      url: ' HTTPS://Example.TEST/path with space ',
+      status: ' visible ',
+      sortOrder: 10
+    }
+  }), env);
+  const updateResponse = await gateway.fetch(apiRequest('admin.thing.save', {
+    token: 'admin-token',
+    thing: {
+      id: ' thing-1 ',
+      title: 'Updated thing',
+      description: ' keep surrounding spaces ',
+      url: 'https://example.test/updated?from=admin',
+      status: 'hidden',
+      sortOrder: -5
+    }
+  }), env);
+
+  assert.equal(createResponse.status, 200);
+  assert.equal(updateResponse.status, 200);
+  assert.deepEqual(appCalls.map((call) => call.body), [
+    {
+      action: 'admin.thing.save',
+      token: 'admin-token',
+      thing: {
+        title: 'New thing',
+        description: '',
+        url: 'https://example.test/path%20with%20space',
+        status: 'visible',
+        sortOrder: 10
+      },
+      gatewaySecret: env.GATEWAY_SHARED_SECRET
+    },
+    {
+      action: 'admin.thing.save',
+      token: 'admin-token',
+      thing: {
+        title: 'Updated thing',
+        description: ' keep surrounding spaces ',
+        url: 'https://example.test/updated?from=admin',
+        status: 'hidden',
+        id: 'thing-1',
+        sortOrder: -5
+      },
+      gatewaySecret: env.GATEWAY_SHARED_SECRET
+    }
+  ]);
+});
+
+test('thing save rejects unsafe URLs, malformed fields, and unknown request data', async () => {
+  const validThing = {
+    title: 'Valid thing',
+    description: 'description',
+    url: 'https://example.test/app',
+    status: 'visible',
+    sortOrder: 10
+  };
+  const invalidPayloads = [
+    { token: 'token', thing: { ...validThing, url: 'javascript:alert(1)' } },
+    { token: 'token', thing: { ...validThing, url: 'data:text/html,unsafe' } },
+    { token: 'token', thing: { ...validThing, url: '/relative/path' } },
+    { token: 'token', thing: { ...validThing, url: 'https://user:password@example.test/app' } },
+    { token: 'token', thing: { ...validThing, url: 'https://?missing-host' } },
+    { token: 'token', thing: { ...validThing, url: 'https://example.test/path\nsegment' } },
+    { token: 'token', thing: { ...validThing, title: '' } },
+    { token: 'token', thing: { ...validThing, title: 'x'.repeat(161) } },
+    { token: 'token', thing: { ...validThing, description: 'x'.repeat(2001) } },
+    { token: 'token', thing: { ...validThing, status: 'deleted' } },
+    { token: 'token', thing: { ...validThing, sortOrder: 1.5 } },
+    { token: 'token', thing: { ...validThing, id: 'x'.repeat(129) } },
+    ...['=FORMULA()', '+formula', '-formula', '@formula'].map((id) => ({
+      token: 'token', thing: { ...validThing, id }
+    })),
+    { token: 'token', thing: { ...validThing, id: 'bad\u0000id' } },
+    { token: 'token', thing: { ...validThing, unsupported: true } },
+    { token: 'token', thing: validThing, ids: ['unsupported'] },
+    { token: 'token', thing: null }
+  ];
+
+  for (const payload of invalidPayloads) {
+    const { gateway, appCalls } = fixture();
+    const response = await gateway.fetch(apiRequest('admin.thing.save', payload), createEnv());
+    assert.equal(response.status, 400, JSON.stringify(payload).slice(0, 200));
+    assert.equal(appCalls.length, 0);
   }
 });
 
@@ -901,7 +1030,11 @@ test('bulk admin actions reject unknown fields, invalid statuses, and malformed 
       token: 'token', ids: ['entry'], status: 'visible', hiddenReason: 'not allowed'
     }],
     ['admin.assetOverride.bulkStatus', { token: 'token', ids: ['asset'], status: 'draft' }],
-    ['admin.assetOverride.delete', { token: 'token', ids: ['asset'], status: 'deleted' }]
+    ['admin.assetOverride.delete', { token: 'token', ids: ['asset'], status: 'deleted' }],
+    ['admin.thing.delete', { token: 'token', ids: ['thing'], status: 'hidden' }],
+    ...['=FORMULA()', '+formula', '-formula', '@formula'].map((id) => [
+      'admin.thing.delete', { token: 'token', ids: [id] }
+    ])
   ];
 
   for (const [action, payload] of invalidCases) {

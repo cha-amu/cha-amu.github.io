@@ -1,7 +1,7 @@
 import { config, isApiConfigured } from '../config';
 import { getMockGuestbook, getMockPosts } from '../data/mockData';
 import { translate } from '../i18n';
-import type { AdminSession, ApiEnvelope, AssetOverride, GuestbookAdminEntry, GuestbookEntry, GuestbookIpBan, Post } from '../types';
+import type { AdminSession, ApiEnvelope, AssetOverride, GuestbookAdminEntry, GuestbookEntry, GuestbookIpBan, Post, Thing } from '../types';
 import { readCache, readCachePayload, writeCache, type CachePayload } from '../utils/localCache';
 
 export class ApiNotConfiguredError extends Error {
@@ -57,6 +57,7 @@ const POSTS_CACHE_KEY = 'posts:v1';
 const POST_CONTROLS_CACHE_KEY = 'posts-control:v1';
 const ASSET_OVERRIDES_CACHE_KEY = 'asset-overrides:v1';
 const GUESTBOOK_CACHE_KEY = 'guestbook:v1';
+const THINGS_CACHE_KEY = 'things:v1';
 const GUESTBOOK_CLIENT_ID_CACHE_KEY = 'guestbook-client-id:v1';
 let sessionGuestbookClientId = '';
 
@@ -154,6 +155,42 @@ function normalizeAssetOverrides(values: unknown): AssetOverride[] {
   return values.map(normalizeAssetOverride).filter((override): override is AssetOverride => Boolean(override));
 }
 
+function normalizeHttpUrl(value: unknown): string {
+  const raw = asString(value).trim();
+  if (!raw) return '';
+  try {
+    const url = new URL(raw);
+    if ((url.protocol !== 'http:' && url.protocol !== 'https:') || url.username || url.password) return '';
+    return url.href;
+  } catch (_) {
+    return '';
+  }
+}
+
+export function normalizeThing(value: unknown): Thing | null {
+  const record = asRecord(value);
+  if (!record) return null;
+  const id = asString(record.id).trim();
+  const title = asString(record.title).trim();
+  const url = normalizeHttpUrl(record.url);
+  if (!id || !title || !url) return null;
+  const numericSortOrder = Number(record.sortOrder);
+  return {
+    id,
+    title,
+    description: asString(record.description),
+    url,
+    status: record.status === 'visible' ? 'visible' : 'hidden',
+    sortOrder: Number.isSafeInteger(numericSortOrder) ? numericSortOrder : 0,
+    updatedAt: asString(record.updatedAt)
+  };
+}
+
+export function normalizeThings(values: unknown): Thing[] {
+  if (!Array.isArray(values)) return [];
+  return values.map(normalizeThing).filter((thing): thing is Thing => Boolean(thing));
+}
+
 export function readCachedPosts(): Post[] {
   return normalizePosts(readCache<unknown>(POSTS_CACHE_KEY));
 }
@@ -229,6 +266,19 @@ export function writeCachedGuestbook(entries: GuestbookEntry[]) {
   writeCache(GUESTBOOK_CACHE_KEY, entries);
 }
 
+export function readCachedThingsPayload(): CachePayload<Thing[]> | null {
+  const payload = readCachePayload<unknown>(THINGS_CACHE_KEY);
+  if (!payload) return null;
+  return {
+    savedAt: payload.savedAt,
+    data: normalizeThings(payload.data).filter((thing) => thing.status === 'visible')
+  };
+}
+
+export function writeCachedThings(things: Thing[]) {
+  writeCache(THINGS_CACHE_KEY, normalizeThings(things).filter((thing) => thing.status === 'visible'));
+}
+
 export async function listPosts(): Promise<Post[]> {
   try {
     const posts = requireArrayResponse<Post>(await request<unknown>('post.listPublic'));
@@ -262,6 +312,13 @@ export async function listAssetOverrides(): Promise<AssetOverride[]> {
     if (error instanceof ApiNotConfiguredError) return [];
     throw error;
   }
+}
+
+export async function listThings(): Promise<Thing[]> {
+  const things = normalizeThings(requireArrayResponse<Thing>(await request<unknown>('thing.listPublic')))
+    .filter((thing) => thing.status === 'visible');
+  writeCachedThings(things);
+  return things;
 }
 
 export async function createGuestbookEntry(input: {
@@ -373,4 +430,18 @@ export async function adminBulkUpdateAssetOverrides(
     writeCachedAssetOverrides(Array.from(cached.values()));
   }
   return result;
+}
+
+export async function adminListThings(token: string): Promise<Thing[]> {
+  return normalizeThings(requireArrayResponse<Thing>(await request<unknown>('admin.thing.list', { token })));
+}
+
+export async function adminSaveThing(token: string, thing: Partial<Thing>): Promise<Thing> {
+  const saved = normalizeThing(await request<unknown>('admin.thing.save', { token, thing }));
+  if (!saved) throw new ApiRequestError(translate('errors.invalidApiResponse'), 502);
+  return saved;
+}
+
+export async function adminDeleteThings(token: string, ids: string[]): Promise<{ deletedIds: string[]; alreadyMissingIds?: string[] }> {
+  return request<{ deletedIds: string[]; alreadyMissingIds?: string[] }>('admin.thing.delete', { token, ids });
 }

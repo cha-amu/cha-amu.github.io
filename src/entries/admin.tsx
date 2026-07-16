@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { loadArchiveManifest } from '../api/archiveManifestClient';
-import { adminBanGuestbookIp, adminBulkDeleteGuestbook, adminBulkDeletePosts, adminBulkUpdateAssetOverrides, adminBulkUpdateGuestbook, adminBulkUpdatePosts, adminHideGuestbook, adminListAssetOverrides, adminListGuestbook, adminListGuestbookIpBans, adminListPosts, adminLogin, adminRefreshSession, adminRestoreGuestbook, adminSaveAssetOverride, adminSavePost, adminUnbanGuestbookIp, listGuestbook } from '../api/appsScriptClient';
+import { adminBanGuestbookIp, adminBulkDeleteGuestbook, adminBulkDeletePosts, adminBulkUpdateAssetOverrides, adminBulkUpdateGuestbook, adminBulkUpdatePosts, adminDeleteThings, adminHideGuestbook, adminListAssetOverrides, adminListGuestbook, adminListGuestbookIpBans, adminListPosts, adminListThings, adminLogin, adminRefreshSession, adminRestoreGuestbook, adminSaveAssetOverride, adminSavePost, adminSaveThing, adminUnbanGuestbookIp, listGuestbook } from '../api/appsScriptClient';
 import { AppLayout } from '../components/AppLayout';
 import { BackToTopButton } from '../components/BackToTopButton';
 import { IncrementalLoadMore } from '../components/IncrementalLoadMore';
@@ -11,14 +11,14 @@ import { CloseIcon, EyeOffIcon, LogOutIcon, RestoreIcon, ShieldBanIcon, ShieldCh
 import { TurnstileBox } from '../components/TurnstileBox';
 import { useIncrementalItems } from '../hooks/useIncrementalItems';
 import { useI18n, type Translate, type TranslationKey, type TranslationParams } from '../i18n';
-import { setPublicGuestbook, syncPublicArchiveOverrides, syncPublicPost } from '../stores/publicDataStore';
-import type { ArchiveAsset, AssetOverride, GuestbookAdminEntry, GuestbookEntry, GuestbookIpBan, Post } from '../types';
+import { setPublicGuestbook, setPublicThings, syncPublicArchiveOverrides, syncPublicPost, syncPublicThing } from '../stores/publicDataStore';
+import type { ArchiveAsset, AssetOverride, GuestbookAdminEntry, GuestbookEntry, GuestbookIpBan, Post, Thing } from '../types';
 import { formatDate } from '../utils/date';
 import { postTimestamp } from '../utils/postTimestamp';
 import { clearAdminSession, loadAdminSession, refreshAdminSession, saveAdminSession } from '../utils/session';
 import { splitTags } from '../utils/strings';
 
-type Tab = 'posts' | 'assets' | 'guestbook';
+type Tab = 'posts' | 'things' | 'assets' | 'guestbook';
 type GuestbookFilter = 'all' | GuestbookEntry['status'];
 type GuestbookAdminView = 'entries' | 'bans';
 type EditorView = 'edit' | 'preview';
@@ -26,8 +26,14 @@ type EditablePostStatus = Exclude<Post['status'], 'deleted'>;
 
 const TAB_LABEL_KEYS: Record<Tab, TranslationKey> = {
   posts: 'admin.tab.posts',
+  things: 'admin.tab.things',
   assets: 'admin.tab.assets',
   guestbook: 'admin.tab.guestbook'
+};
+
+const THING_STATUS_LABEL_KEYS: Record<Thing['status'], TranslationKey> = {
+  visible: 'admin.status.visible',
+  hidden: 'admin.status.hidden'
 };
 
 const POST_STATUS_LABEL_KEYS: Record<Post['status'], TranslationKey> = {
@@ -234,6 +240,27 @@ function sortPostsByNewest(posts: Post[]) {
     const right = postTimestamp(b);
     return right.localeCompare(left);
   });
+}
+
+const blankThing = (): Partial<Thing> => ({
+  title: '',
+  description: '',
+  url: '',
+  status: 'visible',
+  sortOrder: 0
+});
+
+function sortThings(things: Thing[]) {
+  return [...things].sort((left, right) => left.sortOrder - right.sortOrder || left.title.localeCompare(right.title) || left.id.localeCompare(right.id));
+}
+
+function safeThingUrl(value: string) {
+  try {
+    const url = new URL(value);
+    return (url.protocol === 'http:' || url.protocol === 'https:') && !url.username && !url.password;
+  } catch (_) {
+    return false;
+  }
 }
 
 function LoginPanel({ onLogin, initialMessage = null }: { onLogin: () => void; initialMessage?: AdminMessage }) {
@@ -583,6 +610,200 @@ function PostsAdmin({ token, onSessionExpired }: { token: string; onSessionExpir
           </article>
         </section>
       )}
+      {message ? <p className="status-message" role="status">{renderAdminMessage(message, t)}</p> : null}
+    </section>
+  );
+}
+
+function ThingsAdmin({ token, onSessionExpired }: { token: string; onSessionExpired: () => void }) {
+  const { t } = useI18n();
+  const [things, setThings] = useState<Thing[]>([]);
+  const [current, setCurrent] = useState<Partial<Thing>>(() => blankThing());
+  const [message, setMessage] = useState<AdminMessage>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const editorRef = useRef<HTMLFormElement>(null);
+
+  const moveToEditorOnMobile = () => {
+    if (!window.matchMedia('(max-width: 760px)').matches) return;
+    window.requestAnimationFrame(() => editorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  };
+
+  const load = () => {
+    setLoading(true);
+    return adminListThings(token)
+      .then((items) => setThings(sortThings(items)))
+      .catch((err) => {
+        if (isAdminSessionError(err)) { onSessionExpired(); return; }
+        setMessage(backendErrorMessage(err, 'admin.things.loadFailed'));
+      })
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => { void load(); }, [token]);
+
+  const selectThing = (thing: Thing) => {
+    setCurrent(thing);
+    setMessage(null);
+    moveToEditorOnMobile();
+  };
+
+  const startNewThing = () => {
+    setCurrent(blankThing());
+    setMessage(null);
+    moveToEditorOnMobile();
+  };
+
+  const updateCurrent = <K extends keyof Thing>(key: K, value: Thing[K]) => {
+    setCurrent((thing) => ({ ...thing, [key]: value }));
+  };
+
+  const save = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (saving || deleting) return;
+    const title = String(current.title || '').trim();
+    const url = String(current.url || '').trim();
+    const sortOrder = Number(current.sortOrder ?? 0);
+    if (!title) {
+      setMessage(translatedMessage('admin.things.titleRequired'));
+      window.requestAnimationFrame(() => document.getElementById('thing-title')?.focus());
+      return;
+    }
+    if (!safeThingUrl(url)) {
+      setMessage(translatedMessage('admin.things.urlInvalid'));
+      window.requestAnimationFrame(() => document.getElementById('thing-url')?.focus());
+      return;
+    }
+    if (!Number.isSafeInteger(sortOrder) || Math.abs(sortOrder) > 1_000_000_000) {
+      setMessage(translatedMessage('admin.things.sortOrderInvalid'));
+      window.requestAnimationFrame(() => document.getElementById('thing-sort-order')?.focus());
+      return;
+    }
+
+    const thing: Partial<Thing> = {
+      ...(current.id ? { id: current.id } : {}),
+      title,
+      description: String(current.description || ''),
+      url,
+      status: current.status === 'hidden' ? 'hidden' : 'visible',
+      sortOrder
+    };
+    setSaving(true);
+    setMessage(null);
+    try {
+      const saved = await adminSaveThing(token, thing);
+      setThings((items) => sortThings([saved, ...items.filter((item) => item.id !== saved.id)]));
+      setCurrent(saved);
+      syncPublicThing(saved);
+      setMessage(translatedMessage('admin.things.saved'));
+    } catch (err) {
+      if (isAdminSessionError(err)) { onSessionExpired(); return; }
+      setMessage(backendErrorMessage(err, 'admin.things.saveFailed'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteThing = async () => {
+    const id = current.id;
+    if (!id || saving || deleting || !window.confirm(t('admin.things.deleteConfirm', { title: current.title || t('common.untitled') }))) return;
+    setDeleting(true);
+    setMessage(null);
+    try {
+      const result = await adminDeleteThings(token, [id]);
+      const deleted = new Set([...(result.deletedIds || []), ...(result.alreadyMissingIds || [])]);
+      if (!deleted.has(id)) throw new Error(t('admin.things.deleteFailed'));
+      setThings((items) => items.filter((thing) => !deleted.has(thing.id)));
+      setPublicThings((items) => items.filter((thing) => !deleted.has(thing.id)));
+      setCurrent(blankThing());
+      setMessage(translatedMessage('admin.things.deleted'));
+    } catch (err) {
+      if (isAdminSessionError(err)) { onSessionExpired(); return; }
+      setMessage(backendErrorMessage(err, 'admin.things.deleteFailed'));
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <section className="admin-posts" aria-label={t('admin.things.manage')}>
+      <header className="panel admin-section-head">
+        <div>
+          <h2>{t('admin.things.manage')}</h2>
+          <p className="help-text">{t('admin.things.help')}</p>
+        </div>
+        <div className="admin-section-head__actions">
+          <button className="button button--primary" type="button" onClick={startNewThing} disabled={saving || deleting}>{t('admin.things.new')}</button>
+        </div>
+      </header>
+
+      <div className="admin-post-layout">
+        <aside className="panel admin-list-panel admin-things-list-panel" aria-label={t('admin.things.list')}>
+          <div className="admin-list-panel__top">
+            <strong>{t('admin.things.list')}</strong>
+            <span>{loading && !things.length ? t('admin.things.loading') : t('common.count', { count: things.length })}</span>
+          </div>
+          {loading && !things.length ? <p className="status-message">{t('admin.things.loadingList')}</p> : null}
+          {!loading && !things.length ? <p className="admin-empty-note">{t('admin.things.empty')}</p> : null}
+          <div className="admin-list">
+            {things.map((thing) => (
+              <div className={`admin-list-card admin-thing-list-card ${current.id === thing.id ? 'admin-list-card--active' : ''}`} key={thing.id}>
+                <button className="admin-list-card__content admin-thing-list-card__content" type="button" onClick={() => selectThing(thing)} disabled={saving || deleting} aria-pressed={current.id === thing.id}>
+                  <span className={`status-chip status-chip--${thing.status}`}>{t(THING_STATUS_LABEL_KEYS[thing.status])}</span>
+                  <strong>{thing.title}</strong>
+                  <small>{thing.url}</small>
+                </button>
+              </div>
+            ))}
+          </div>
+        </aside>
+
+        <form className="panel admin-editor" onSubmit={save} ref={editorRef} aria-busy={saving || deleting}>
+          <div className="admin-editor__bar">
+            <h3>{current.id ? t('admin.things.edit') : t('admin.things.new')}</h3>
+            <div className="admin-editor__actions">
+              {current.id ? (
+                <button className="admin-editor__delete" type="button" onClick={() => { void deleteThing(); }} disabled={saving || deleting} aria-label={t('admin.things.deleteOne')} title={t('admin.things.deleteOne')}>
+                  <TrashIcon />
+                </button>
+              ) : null}
+              <button className="button button--primary" type="submit" disabled={saving || deleting}>{saving ? t('common.saving') : t('common.save')}</button>
+            </div>
+          </div>
+
+          <div className="admin-form-grid">
+            <div className="field admin-field--wide">
+              <label htmlFor="thing-title">{t('admin.things.titleField')}</label>
+              <input id="thing-title" value={current.title || ''} maxLength={160} onChange={(event) => updateCurrent('title', event.target.value)} required />
+            </div>
+            <div className="field admin-field--wide">
+              <label htmlFor="thing-url">{t('admin.things.urlField')}</label>
+              <input id="thing-url" type="url" value={current.url || ''} maxLength={2048} onChange={(event) => updateCurrent('url', event.target.value)} placeholder="https://" required />
+              <span className="help-text">{t('admin.things.urlHelp')}</span>
+            </div>
+            <div className="field admin-field--wide">
+              <label htmlFor="thing-description">{t('admin.things.descriptionField')}</label>
+              <textarea id="thing-description" value={current.description || ''} maxLength={2000} onChange={(event) => updateCurrent('description', event.target.value)} />
+            </div>
+            <div className="field admin-post-status" role="radiogroup" aria-labelledby="thing-status-label">
+              <span id="thing-status-label" className="admin-post-status__label">{t('admin.things.statusField')}</span>
+              <div className="admin-post-status__options admin-thing-status__options">
+                {(['visible', 'hidden'] as Thing['status'][]).map((status) => (
+                  <label key={status}>
+                    <input type="radio" name="thing-status" value={status} checked={(current.status || 'visible') === status} onChange={() => updateCurrent('status', status)} />
+                    <span>{t(THING_STATUS_LABEL_KEYS[status])}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="field">
+              <label htmlFor="thing-sort-order">{t('admin.things.sortOrderField')}</label>
+              <input id="thing-sort-order" type="number" step="1" value={current.sortOrder ?? 0} onChange={(event) => updateCurrent('sortOrder', Number(event.target.value))} required />
+            </div>
+          </div>
+        </form>
+      </div>
       {message ? <p className="status-message" role="status">{renderAdminMessage(message, t)}</p> : null}
     </section>
   );
@@ -1380,13 +1601,14 @@ export function AdminApp() {
       </section>
 
       <div className="tabs admin-tabs" role="tablist" aria-label={t('admin.menu')}>
-        {(['posts', 'assets', 'guestbook'] as Tab[]).map((item) => (
+        {(['posts', 'things', 'assets', 'guestbook'] as Tab[]).map((item) => (
           <button id={`admin-tab-${item}`} className={`button ${tab === item ? 'button--primary' : ''}`} type="button" role="tab" key={item} aria-selected={tab === item} aria-controls={`admin-panel-${item}`} onClick={() => setTab(item)}>{t(TAB_LABEL_KEYS[item])}</button>
         ))}
       </div>
 
       <div id={`admin-panel-${tab}`} className="admin-tab-panel" role="tabpanel" aria-labelledby={`admin-tab-${tab}`}>
         {tab === 'posts' ? <PostsAdmin token={session.token} onSessionExpired={handleSessionExpired} /> : null}
+        {tab === 'things' ? <ThingsAdmin token={session.token} onSessionExpired={handleSessionExpired} /> : null}
         {tab === 'assets' ? <AssetsAdmin token={session.token} onSessionExpired={handleSessionExpired} /> : null}
         {tab === 'guestbook' ? <GuestbookAdmin token={session.token} onSessionExpired={handleSessionExpired} /> : null}
       </div>

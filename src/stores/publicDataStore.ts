@@ -1,14 +1,14 @@
 import { useSyncExternalStore } from 'react';
 import { translate } from '../i18n';
 import { loadArchiveManifest, mergeAssetOverrides, readCachedArchiveAssetsPayload, writeCachedArchiveAssets } from '../api/archiveManifestClient';
-import { listAssetOverrides, listGuestbook, listPosts, readCachedAssetOverridesPayload, readCachedGuestbookPayload, readCachedPostControls, readCachedPostControlsPayload, readCachedPostsPayload, writeCachedGuestbook, writeCachedPostControls, writeCachedPosts } from '../api/appsScriptClient';
+import { listAssetOverrides, listGuestbook, listPosts, listThings, readCachedAssetOverridesPayload, readCachedGuestbookPayload, readCachedPostControls, readCachedPostControlsPayload, readCachedPostsPayload, readCachedThingsPayload, writeCachedGuestbook, writeCachedPostControls, writeCachedPosts, writeCachedThings } from '../api/appsScriptClient';
 import { listStoragePosts } from '../api/storageClient';
-import type { ArchiveAsset, AssetOverride, GuestbookEntry, Post } from '../types';
+import type { ArchiveAsset, AssetOverride, GuestbookEntry, Post, Thing } from '../types';
 import { resolveControlSnapshot } from './controlSnapshot';
 import { mergePosts, normalizePostList } from './postMerge';
 
 type ResourceStatus = 'idle' | 'loading' | 'ready' | 'error';
-type ResourceKey = 'posts' | 'guestbook' | 'archive';
+type ResourceKey = 'posts' | 'guestbook' | 'archive' | 'things';
 
 export interface PublicResource<T> {
   items: T[];
@@ -22,12 +22,14 @@ interface PublicDataState {
   posts: PublicResource<Post>;
   guestbook: PublicResource<GuestbookEntry>;
   archive: PublicResource<ArchiveAsset>;
+  things: PublicResource<Thing>;
 }
 
 type ResourceMap = {
   posts: Post;
   guestbook: GuestbookEntry;
   archive: ArchiveAsset;
+  things: Thing;
 };
 
 type PendingMap = Partial<Record<ResourceKey, Promise<unknown>>>;
@@ -71,18 +73,26 @@ function normalizeGuestbookList(entries: GuestbookEntry[]) {
     .sort(byNewestGuestbook);
 }
 
+function normalizeThingList(things: Thing[]) {
+  return things
+    .filter((thing) => thing.status === 'visible')
+    .sort((left, right) => left.sortOrder - right.sortOrder || left.title.localeCompare(right.title) || left.id.localeCompare(right.id));
+}
+
 const cachedPosts = readCachedPostsPayload();
 const cachedPostControls = readCachedPostControlsPayload();
 const cachedGuestbook = readCachedGuestbookPayload();
 const cachedArchive = readCachedArchiveAssetsPayload();
 const cachedAssetOverrides = readCachedAssetOverridesPayload();
+const cachedThings = readCachedThingsPayload();
 
 let state: PublicDataState = {
   posts: hydratedResource(
     cachedPostControls ? normalizePostList(mergePosts(cachedPosts?.data || [], cachedPostControls.data)) : []
   ),
   guestbook: hydratedResource(normalizeGuestbookList(cachedGuestbook?.data || [])),
-  archive: hydratedResource(cachedAssetOverrides ? cachedArchive?.data || [] : [])
+  archive: hydratedResource(cachedAssetOverrides ? cachedArchive?.data || [] : []),
+  things: hydratedResource(normalizeThingList(cachedThings?.data || []))
 };
 
 const listeners = new Set<() => void>();
@@ -172,6 +182,19 @@ export function syncPublicArchiveOverrides(assets: ArchiveAsset[], overrides: As
   updateResource('archive', { items: nextAssets, status: 'ready', refreshing: false, error: '', loadedAt: new Date().toISOString() });
 }
 
+export function setPublicThings(updater: Thing[] | ((current: Thing[]) => Thing[])) {
+  const nextThings = normalizeThingList(typeof updater === 'function' ? updater(state.things.items) : updater);
+  writeCachedThings(nextThings);
+  updateResource('things', { items: nextThings, status: 'ready', refreshing: false, error: '', loadedAt: new Date().toISOString() });
+}
+
+export function syncPublicThing(saved: Thing) {
+  setPublicThings((current) => {
+    const withoutSaved = current.filter((thing) => thing.id !== saved.id);
+    return saved.status === 'visible' ? [...withoutSaved, saved] : withoutSaved;
+  });
+}
+
 export function refreshPosts(options: { force?: boolean; silent?: boolean } = {}) {
   if (pending.posts) return pending.posts as Promise<Post[]>;
   if (!options.force && state.posts.status === 'ready' && isFresh(state.posts)) return Promise.resolve(state.posts.items);
@@ -256,10 +279,35 @@ export function refreshArchive(options: { force?: boolean; silent?: boolean } = 
   return request;
 }
 
+export function refreshThings(options: { force?: boolean; silent?: boolean } = {}) {
+  if (pending.things) return pending.things as Promise<Thing[]>;
+  if (!options.force && state.things.status === 'ready' && isFresh(state.things)) return Promise.resolve(state.things.items);
+  setLoading('things', Boolean(options.silent));
+  const request = listThings()
+    .then((things) => {
+      const nextThings = normalizeThingList(things);
+      writeCachedThings(nextThings);
+      updateResource('things', { items: nextThings, status: 'ready', refreshing: false, error: '', loadedAt: new Date().toISOString() });
+      return nextThings;
+    })
+    .catch((error: unknown) => {
+      updateResource('things', {
+        status: state.things.items.length ? 'ready' : 'error',
+        refreshing: false,
+        error: errorMessage(error, translate('errors.thingsLoad'))
+      });
+      throw error;
+    })
+    .finally(() => { delete pending.things; });
+  pending.things = request;
+  return request;
+}
+
 export function preloadPublicData() {
   if (didPreload) return;
   didPreload = true;
   void refreshPosts({ silent: true }).catch(() => undefined);
   void refreshGuestbook({ silent: true }).catch(() => undefined);
   void refreshArchive({ silent: true }).catch(() => undefined);
+  void refreshThings({ silent: true }).catch(() => undefined);
 }

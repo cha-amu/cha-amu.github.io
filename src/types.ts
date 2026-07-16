@@ -41,6 +41,16 @@ export interface GuestbookIpBan {
   relatedEntryIds: string[];
 }
 
+export interface Thing {
+  id: string;
+  title: string;
+  description?: string;
+  url: string;
+  status: 'visible' | 'hidden';
+  sortOrder: number;
+  updatedAt: string;
+}
+
 export interface ArchiveAsset {
   id: string;
   path: string;

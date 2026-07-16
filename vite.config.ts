@@ -4,9 +4,9 @@ import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 import type { Plugin, PreviewServer, ViteDevServer } from 'vite';
 
-const canonicalRoutes = new Set(['/posts', '/guestbook', '/archive', '/search', '/privacy', '/admin']);
-const spaRoutes = new Set(['/', '/posts/', '/guestbook/', '/archive/', '/search/', '/privacy/', '/admin/']);
-const staticRouteDirs = ['posts', 'guestbook', 'archive', 'search', 'privacy', 'admin'];
+const canonicalRoutes = new Set(['/posts', '/things', '/guestbook', '/archive', '/search', '/privacy', '/admin']);
+const spaRoutes = new Set(['/', '/posts/', '/things/', '/guestbook/', '/archive/', '/search/', '/privacy/', '/admin/']);
+const staticRouteDirs = ['posts', 'things', 'guestbook', 'archive', 'search', 'privacy', 'admin'];
 
 function splitUrl(originalUrl = '') {
   const match = originalUrl.match(/^([^?#]*)(.*)$/);

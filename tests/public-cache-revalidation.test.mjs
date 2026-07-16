@@ -56,14 +56,20 @@ function compilePublicDataStore() {
           globalThis.__publicRevalidationCalls.postsApi += 1;
           return [{ ...cachedPost, id: 'fresh-api-post' }];
         }
+        export async function listThings() {
+          globalThis.__publicRevalidationCalls.things += 1;
+          return [{ id: 'fresh-thing', title: 'Fresh thing', description: '', url: 'https://example.com/', status: 'visible', sortOrder: 0, updatedAt: cachedAt }];
+        }
         export const readCachedAssetOverridesPayload = () => ({ savedAt: cachedAt, data: [] });
         export const readCachedGuestbookPayload = () => ({ savedAt: cachedAt, data: [{ id: 'cached-guestbook', name: 'Cached', message: 'Cached', status: 'visible', createdAt: cachedAt }] });
         export const readCachedPostControls = () => [];
         export const readCachedPostControlsPayload = () => ({ savedAt: cachedAt, data: [] });
         export const readCachedPostsPayload = () => ({ savedAt: cachedAt, data: [cachedPost] });
+        export const readCachedThingsPayload = () => ({ savedAt: cachedAt, data: [{ id: 'cached-thing', title: 'Cached thing', description: '', url: 'https://example.com/', status: 'visible', sortOrder: 0, updatedAt: cachedAt }] });
         export const writeCachedGuestbook = () => undefined;
         export const writeCachedPostControls = () => undefined;
         export const writeCachedPosts = () => undefined;
+        export const writeCachedThings = () => undefined;
       `)],
       [/'\.\.\/api\/storageClient'/, dataModule(`
         export async function listStoragePosts() {
@@ -91,13 +97,14 @@ function compilePublicDataStore() {
   }
 }
 
-test('a new document revalidates posts, guestbook, and archive even when persisted caches look fresh', async () => {
+test('a new document revalidates posts, guestbook, archive, and things even when persisted caches look fresh', async () => {
   globalThis.__publicRevalidationCalls = {
     archiveManifest: 0,
     assetOverrides: 0,
     guestbook: 0,
     postsApi: 0,
-    postsStorage: 0
+    postsStorage: 0,
+    things: 0
   };
 
   try {
@@ -106,7 +113,8 @@ test('a new document revalidates posts, guestbook, and archive even when persist
     await Promise.all([
       store.refreshPosts(),
       store.refreshGuestbook(),
-      store.refreshArchive()
+      store.refreshArchive(),
+      store.refreshThings()
     ]);
 
     assert.deepEqual(globalThis.__publicRevalidationCalls, {
@@ -114,20 +122,23 @@ test('a new document revalidates posts, guestbook, and archive even when persist
       assetOverrides: 1,
       guestbook: 1,
       postsApi: 1,
-      postsStorage: 1
+      postsStorage: 1,
+      things: 1
     });
 
     await Promise.all([
       store.refreshPosts(),
       store.refreshGuestbook(),
-      store.refreshArchive()
+      store.refreshArchive(),
+      store.refreshThings()
     ]);
     assert.deepEqual(globalThis.__publicRevalidationCalls, {
       archiveManifest: 1,
       assetOverrides: 1,
       guestbook: 1,
       postsApi: 1,
-      postsStorage: 1
+      postsStorage: 1,
+      things: 1
     });
   } finally {
     delete globalThis.__publicRevalidationCalls;

@@ -7,6 +7,7 @@ import { HomePage } from './entries/home';
 import { PostsErrorBoundary, PostsPage } from './entries/posts';
 import { PrivacyPage } from './entries/privacy';
 import { SearchPage } from './entries/search';
+import { ThingsPage } from './entries/things';
 import { AppLayout } from './components/AppLayout';
 import { EmptyState } from './components/PageState';
 import { type TranslationKey, useI18n } from './i18n';
@@ -16,6 +17,7 @@ import './styles/global.css';
 
 const PAGE_TITLE_KEYS: Record<string, TranslationKey> = {
   '/posts/': 'nav.posts',
+  '/things/': 'nav.things',
   '/archive/': 'nav.archive',
   '/guestbook/': 'nav.guestbook',
   '/search/': 'nav.search',
@@ -38,6 +40,7 @@ function NotFoundPage() {
 function RouteView({ pathname, routeKey }: { pathname: string; routeKey: string }) {
   if (pathname === '/') return <HomePage key={routeKey} />;
   if (pathname === '/posts/') return <PostsErrorBoundary key={routeKey}><PostsPage /></PostsErrorBoundary>;
+  if (pathname === '/things/') return <ThingsPage key={routeKey} />;
   if (pathname === '/archive/') return <ArchivePage key={routeKey} />;
   if (pathname === '/guestbook/') return <GuestbookPage key={routeKey} />;
   if (pathname === '/search/') return <SearchPage key={routeKey} />;

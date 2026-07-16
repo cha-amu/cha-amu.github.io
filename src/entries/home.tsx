@@ -2,13 +2,14 @@ import { SearchForm } from '../components/SearchForm';
 import { SiteTools } from '../components/SiteTools';
 import { type TranslationKey, useI18n } from '../i18n';
 
-const canonicalRoutes = ['/posts', '/guestbook', '/archive', '/search', '/privacy', '/admin'];
+const canonicalRoutes = ['/posts', '/things', '/guestbook', '/archive', '/search', '/privacy', '/admin'];
 if (canonicalRoutes.includes(window.location.pathname)) {
   window.location.replace(`${window.location.pathname}/${window.location.search}${window.location.hash}`);
 }
 
 const menuItems = [
   { href: '/posts/', labelKey: 'nav.posts', icon: '/assets/ui/posts-icon.png' },
+  { href: '/things/', labelKey: 'nav.things', icon: 'https://cha-amu.github.io/storage/ui/things-icon.png' },
   { href: '/archive/', labelKey: 'nav.archive', icon: '/assets/ui/archive-icon.png' }
 ] satisfies Array<{ href: string; labelKey: TranslationKey; icon: string }>;
 

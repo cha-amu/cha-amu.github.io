@@ -5,6 +5,7 @@ import '../styles/global.css';
 
 const navItems = [
   { href: '/posts/', labelKey: 'nav.posts', icon: '/assets/ui/posts-icon.png' },
+  { href: '/things/', labelKey: 'nav.things', icon: 'https://cha-amu.github.io/storage/ui/things-icon.png' },
   { href: '/archive/', labelKey: 'nav.archive', icon: '/assets/ui/archive-icon.png' }
 ] satisfies Array<{ href: string; labelKey: TranslationKey; icon: string }>;
 
