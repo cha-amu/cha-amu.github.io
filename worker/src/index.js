@@ -313,23 +313,24 @@ function normalizeStorageAssetOverride(value) {
   return normalized;
 }
 
-function normalizeThingUrl(value) {
-  const raw = requireRequestString(value, 'url', MAX_THING_URL_LENGTH);
+function normalizeThingUrl(value, name = 'url', allowEmpty = false) {
+  if (allowEmpty && (value === undefined || value === null || (typeof value === 'string' && !value.trim()))) return '';
+  const raw = requireRequestString(value, name, MAX_THING_URL_LENGTH);
   if (/[\u0000-\u001f\u007f]/.test(raw)) {
-    throw new GatewayError(400, 'url 값이 올바르지 않습니다.');
+    throw new GatewayError(400, `${name} 값이 올바르지 않습니다.`);
   }
   let url;
   try {
     url = new URL(raw);
   } catch (_) {
-    throw new GatewayError(400, 'url 값이 올바르지 않습니다.');
+    throw new GatewayError(400, `${name} 값이 올바르지 않습니다.`);
   }
   if (!new Set(['http:', 'https:']).has(url.protocol) || !url.hostname || url.username || url.password) {
-    throw new GatewayError(400, 'url 값이 올바르지 않습니다.');
+    throw new GatewayError(400, `${name} 값이 올바르지 않습니다.`);
   }
   const canonical = url.href;
   if (canonical.length > MAX_THING_URL_LENGTH) {
-    throw new GatewayError(400, 'url 값이 올바르지 않습니다.');
+    throw new GatewayError(400, `${name} 값이 올바르지 않습니다.`);
   }
   return canonical;
 }
@@ -346,12 +347,13 @@ function normalizeThingSaveAction(body) {
   assertOnlyFields(body, ['action', 'token', 'thing']);
   const token = requireRequestString(body.token, 'token', MAX_TOKEN_LENGTH);
   const thing = requirePlainObject(body.thing, 'thing');
-  assertOnlyFields(thing, ['id', 'title', 'description', 'url', 'status', 'sortOrder']);
+  assertOnlyFields(thing, ['id', 'title', 'description', 'url', 'imageUrl', 'status', 'sortOrder']);
 
   const normalizedThing = {
     title: requireRequestString(thing.title, 'title', MAX_THING_TITLE_LENGTH),
     description: normalizeOptionalString(thing.description, 'description', MAX_THING_DESCRIPTION_LENGTH) || '',
     url: normalizeThingUrl(thing.url),
+    imageUrl: normalizeThingUrl(thing.imageUrl, 'imageUrl', true),
     status: requireRequestString(thing.status, 'status', 32)
   };
   if (!new Set(['visible', 'hidden']).has(normalizedThing.status)) {

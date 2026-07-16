@@ -24,7 +24,7 @@ const SHEET_COLUMNS = {
     'id', 'name', 'message', 'status', 'createdAt', 'passwordSalt',
     'passwordHash', 'passwordHashAlgorithm', 'passwordHashIterations', 'hiddenReason'
   ],
-  things: ['id', 'title', 'description', 'url', 'status', 'sortOrder', 'updatedAt'],
+  things: ['id', 'title', 'description', 'url', 'imageUrl', 'status', 'sortOrder', 'updatedAt'],
   assetOverrides: [
     'assetId', 'displayName', 'description', 'tags', 'sourceUrl',
     'status', 'sortOrder', 'updatedAt'
@@ -43,7 +43,7 @@ const PUBLIC_CACHE_TTL_SECONDS = Math.max(1, Number(getProperty_('PUBLIC_CACHE_T
 const PUBLIC_CACHE_KEYS = {
   posts: 'public:posts:v2',
   guestbook: 'public:guestbook:v1',
-  things: 'public:things:v1'
+  things: 'public:things:v2'
 };
 const RATE_LIMITS = {
   adminLoginEmergencyWindow: { key: 'admin-login-emergency-window', limit: 120, windowSeconds: 3600, message: '관리자 로그인 요청이 일시적으로 많습니다. 나중에 다시 시도하세요.' },
@@ -188,6 +188,7 @@ function listPublicThings_() {
           title: String(thing.title || ''),
           description: String(thing.description || ''),
           url: String(thing.url || ''),
+          imageUrl: String(thing.imageUrl || ''),
           status: 'visible',
           sortOrder: Number(thing.sortOrder || 0),
           updatedAt: String(thing.updatedAt || '')
@@ -376,8 +377,10 @@ function saveThing_(thing) {
   assert_(['visible', 'hidden'].indexOf(status) >= 0, 'Invalid thing status.');
   assert_(Number.isSafeInteger(sortOrder) && Math.abs(sortOrder) <= 1000000000, 'Invalid thing sort order.');
   const url = validateThingUrl_(thing.url);
+  const requestedImageUrl = String(thing.imageUrl || '').trim();
+  const imageUrl = requestedImageUrl ? validateThingUrl_(requestedImageUrl) : '';
   const updatedAt = new Date().toISOString();
-  const next = { id, title, description, url, status, sortOrder, updatedAt };
+  const next = { id, title, description, url, imageUrl, status, sortOrder, updatedAt };
   const stored = Object.assign({}, next, {
     title: literalSheetText_(title),
     description: literalSheetText_(description)

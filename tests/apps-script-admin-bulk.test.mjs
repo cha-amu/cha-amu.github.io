@@ -20,7 +20,7 @@ const COLUMNS = {
     'id', 'name', 'message', 'status', 'createdAt', 'passwordSalt',
     'passwordHash', 'passwordHashAlgorithm', 'passwordHashIterations', 'hiddenReason'
   ],
-  things: ['id', 'title', 'description', 'url', 'status', 'sortOrder', 'updatedAt'],
+  things: ['id', 'title', 'description', 'url', 'imageUrl', 'status', 'sortOrder', 'updatedAt'],
   assetOverrides: [
     'assetId', 'displayName', 'description', 'tags', 'sourceUrl',
     'status', 'sortOrder', 'updatedAt'
@@ -267,6 +267,7 @@ function thing(id, overrides = {}) {
     title: `title-${id}`,
     description: `description-${id}`,
     url: `https://example.test/${id}`,
+    imageUrl: '',
     status: 'visible',
     sortOrder: 100,
     updatedAt: '2026-07-10T00:00:00.000Z',
@@ -291,6 +292,11 @@ function assertSheetMutationLocked(app, sheetName, callback) {
 test('public post suppression uses the version 2 cache namespace', () => {
   assert.match(source, /posts:\s*'public:posts:v2'/);
   assert.doesNotMatch(source, /posts:\s*'public:posts:v1'/);
+});
+
+test('public things use the version 2 cache namespace after adding image URLs', () => {
+  assert.match(source, /things:\s*'public:things:v2'/);
+  assert.doesNotMatch(source, /things:\s*'public:things:v1'/);
 });
 
 test('bulk routes require gateway and admin authentication and reject unbounded or duplicate ids', () => {
@@ -626,7 +632,12 @@ test('things expose only visible projected rows and admin create, update, and de
     things: tableRows(thingColumns, [
       thing('visible-z', { title: 'Zulu', sortOrder: 20, internalNote: 'not public' }),
       thing('hidden', { status: 'hidden', sortOrder: 1, internalNote: 'private row' }),
-      thing('visible-a', { title: 'Alpha', sortOrder: 20, internalNote: 'not public either' })
+      thing('visible-a', {
+        title: 'Alpha',
+        imageUrl: 'https://images.example.test/alpha.png',
+        sortOrder: 20,
+        internalNote: 'not public either'
+      })
     ])
   });
 
@@ -642,8 +653,10 @@ test('things expose only visible projected rows and admin create, update, and de
   const initialPublic = app.publicCall('thing.listPublic');
   assert.deepEqual(initialPublic.map((entry) => entry.id), ['visible-a', 'visible-z']);
   assert.ok(initialPublic.every((entry) => (
-    Object.keys(entry).sort().join(',') === 'description,id,sortOrder,status,title,updatedAt,url'
+    Object.keys(entry).sort().join(',') === 'description,id,imageUrl,sortOrder,status,title,updatedAt,url'
   )));
+  assert.equal(initialPublic[0].imageUrl, 'https://images.example.test/alpha.png');
+  assert.equal(initialPublic[1].imageUrl, '');
   assert.equal(JSON.stringify(initialPublic).includes('internalNote'), false);
   assert.deepEqual(app.call('admin.thing.list').map((entry) => entry.id), ['visible-z', 'hidden', 'visible-a']);
 
@@ -652,6 +665,7 @@ test('things expose only visible projected rows and admin create, update, and de
       title: '  New thing  ',
       description: 'first description',
       url: ' https://example.test/new ',
+      imageUrl: ' https://images.example.test/new.png ',
       status: 'visible',
       sortOrder: 5
     }
@@ -659,7 +673,9 @@ test('things expose only visible projected rows and admin create, update, and de
   assert.equal(created.id, 'test-uuid-1');
   assert.equal(created.title, 'New thing');
   assert.equal(created.url, 'https://example.test/new');
+  assert.equal(created.imageUrl, 'https://images.example.test/new.png');
   assert.equal(app.publicCall('thing.listPublic')[0].id, created.id);
+  assert.equal(app.publicCall('thing.listPublic')[0].imageUrl, created.imageUrl);
 
   const updated = assertSheetMutationLocked(app, 'things', () => app.call('admin.thing.save', {
     thing: {
@@ -667,6 +683,7 @@ test('things expose only visible projected rows and admin create, update, and de
       title: 'Updated thing',
       description: 'updated description',
       url: 'https://example.test/updated',
+      imageUrl: '',
       status: 'visible',
       sortOrder: 30
     }
@@ -676,7 +693,9 @@ test('things expose only visible projected rows and admin create, update, and de
   const rowsAfterUpdate = sheetObjects(app.spreadsheet, 'things');
   assert.equal(rowsAfterUpdate.filter((entry) => entry.id === created.id).length, 1);
   assert.equal(rowsAfterUpdate.find((entry) => entry.id === created.id).description, 'updated description');
+  assert.equal(rowsAfterUpdate.find((entry) => entry.id === created.id).imageUrl, '');
   assert.equal(app.publicCall('thing.listPublic').find((entry) => entry.id === created.id).title, 'Updated thing');
+  assert.equal(app.publicCall('thing.listPublic').find((entry) => entry.id === created.id).imageUrl, '');
 
   const deleted = assertSheetMutationLocked(app, 'things', () => app.call('admin.thing.delete', {
     ids: [created.id, 'missing']
@@ -695,6 +714,7 @@ test('thing saves reject invalid URLs and malformed fields before mutating the s
     title: 'Valid thing',
     description: 'description',
     url: 'https://example.test/app',
+    imageUrl: '',
     status: 'visible',
     sortOrder: 10
   };
@@ -704,6 +724,10 @@ test('thing saves reject invalid URLs and malformed fields before mutating the s
     [{ ...valid, url: 'https://?missing-host' }, /valid hostname/i],
     [{ ...valid, url: 'http:///example.test' }, /valid hostname/i],
     [{ ...valid, url: 'https://example.test:99999/app' }, /valid hostname/i],
+    [{ ...valid, imageUrl: 'javascript:alert(1)' }, /absolute http or https url/i],
+    [{ ...valid, imageUrl: 'https://user:password@example.test/image.png' }, /credentials/i],
+    [{ ...valid, imageUrl: 'https://?missing-host' }, /valid hostname/i],
+    [{ ...valid, imageUrl: 'https://example.test:99999/image.png' }, /valid hostname/i],
     [{ ...valid, title: '' }, /invalid thing title/i],
     [{ ...valid, title: 'bad\nline' }, /invalid thing title/i],
     [{ ...valid, description: 'x'.repeat(2001) }, /description is too long/i],

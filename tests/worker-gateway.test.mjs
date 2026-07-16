@@ -784,6 +784,7 @@ test('thing save normalizes create and update payloads before forwarding them', 
     thing: {
       title: ' New thing ',
       url: ' HTTPS://Example.TEST/path with space ',
+      imageUrl: '   ',
       status: ' visible ',
       sortOrder: 10
     }
@@ -795,6 +796,7 @@ test('thing save normalizes create and update payloads before forwarding them', 
       title: 'Updated thing',
       description: ' keep surrounding spaces ',
       url: 'https://example.test/updated?from=admin',
+      imageUrl: ' HTTPS://Images.Example.TEST/preview with space.png ',
       status: 'hidden',
       sortOrder: -5
     }
@@ -810,6 +812,7 @@ test('thing save normalizes create and update payloads before forwarding them', 
         title: 'New thing',
         description: '',
         url: 'https://example.test/path%20with%20space',
+        imageUrl: '',
         status: 'visible',
         sortOrder: 10
       },
@@ -822,6 +825,7 @@ test('thing save normalizes create and update payloads before forwarding them', 
         title: 'Updated thing',
         description: ' keep surrounding spaces ',
         url: 'https://example.test/updated?from=admin',
+        imageUrl: 'https://images.example.test/preview%20with%20space.png',
         status: 'hidden',
         id: 'thing-1',
         sortOrder: -5
@@ -836,6 +840,7 @@ test('thing save rejects unsafe URLs, malformed fields, and unknown request data
     title: 'Valid thing',
     description: 'description',
     url: 'https://example.test/app',
+    imageUrl: '',
     status: 'visible',
     sortOrder: 10
   };
@@ -846,6 +851,12 @@ test('thing save rejects unsafe URLs, malformed fields, and unknown request data
     { token: 'token', thing: { ...validThing, url: 'https://user:password@example.test/app' } },
     { token: 'token', thing: { ...validThing, url: 'https://?missing-host' } },
     { token: 'token', thing: { ...validThing, url: 'https://example.test/path\nsegment' } },
+    { token: 'token', thing: { ...validThing, imageUrl: 'javascript:alert(1)' } },
+    { token: 'token', thing: { ...validThing, imageUrl: 'data:image/png;base64,unsafe' } },
+    { token: 'token', thing: { ...validThing, imageUrl: '/relative/image.png' } },
+    { token: 'token', thing: { ...validThing, imageUrl: 'https://user:password@example.test/image.png' } },
+    { token: 'token', thing: { ...validThing, imageUrl: 'https://?missing-host' } },
+    { token: 'token', thing: { ...validThing, imageUrl: 'https://example.test/image\nsegment.png' } },
     { token: 'token', thing: { ...validThing, title: '' } },
     { token: 'token', thing: { ...validThing, title: 'x'.repeat(161) } },
     { token: 'token', thing: { ...validThing, description: 'x'.repeat(2001) } },
