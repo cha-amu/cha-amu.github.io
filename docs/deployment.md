@@ -31,7 +31,7 @@ Google Sheets와 `cha-amu/storage` repo의 동기화는 storage repo 자신의 `
 - 트리거: `main` 브랜치에 push하거나 수동 실행
 - 결과: `https://cha-amu.github.io/` 갱신
 - 필요한 GitHub Actions Variables:
-  - `VITE_API_URL` (기본값: `https://cha-amu-gateway.yiyaaang.workers.dev/api`)
+  - `VITE_API_URL` (기본값: `https://cha-amu-gateway.cha-amu.workers.dev/api`)
   - `VITE_ARCHIVE_MANIFEST_URL`
   - `VITE_ADMIN_IDLE_TIMEOUT_MS`
   - `VITE_TURNSTILE_SITE_KEY` (공개 사이트 키)
@@ -94,7 +94,7 @@ GitHub repo → Settings → Secrets and variables → Actions → Variables 탭
 ### 현재 쓰는 Variables
 
 ```txt
-VITE_API_URL=https://cha-amu-gateway.yiyaaang.workers.dev/api
+VITE_API_URL=https://cha-amu-gateway.cha-amu.workers.dev/api
 VITE_STORAGE_BASE_URL=https://cha-amu.github.io/storage
 VITE_ARCHIVE_MANIFEST_URL=https://cha-amu.github.io/storage/manifests/assets.json
 VITE_STORAGE_POSTS_MANIFEST_URL=https://cha-amu.github.io/storage/manifests/posts.json
@@ -449,7 +449,7 @@ Apps Script health 확인:
 
 확인할 것:
 
-- `https://cha-amu-gateway.yiyaaang.workers.dev/health`가 200인지 확인
+- `https://cha-amu-gateway.cha-amu.workers.dev/health`가 200인지 확인
 - GitHub Variables의 `VITE_API_URL`이 Worker `/api` URL인지 확인
 - Variables 수정 후 `Deploy site to GitHub Pages` workflow를 다시 실행했는지 확인
 - Worker의 `APPS_SCRIPT_URL` secret과 D1 binding이 설정됐는지 확인

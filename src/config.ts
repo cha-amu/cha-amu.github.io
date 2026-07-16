@@ -1,4 +1,4 @@
-const DEFAULT_PRODUCTION_API_URL = 'https://cha-amu-gateway.yiyaaang.workers.dev/api';
+const DEFAULT_PRODUCTION_API_URL = 'https://cha-amu-gateway.cha-amu.workers.dev/api';
 const explicitApiUrl = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
 const gatewayBaseUrl = (import.meta.env.VITE_GATEWAY_URL || '').replace(/\/$/, '');
 const configuredGatewayUrl = explicitApiUrl || (gatewayBaseUrl

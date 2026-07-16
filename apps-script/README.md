@@ -97,7 +97,7 @@ Who has access: Anyone
 로컬 `.env` 또는 GitHub Pages Actions Variables에 설정한다.
 
 ```txt
-VITE_API_URL=https://cha-amu-gateway.yiyaaang.workers.dev/api
+VITE_API_URL=https://cha-amu-gateway.cha-amu.workers.dev/api
 VITE_TURNSTILE_SITE_KEY=0x4AAAAAADzr-jSxSMZf9xcv
 VITE_STORAGE_BASE_URL=https://cha-amu.github.io/storage
 VITE_ARCHIVE_MANIFEST_URL=https://cha-amu.github.io/storage/manifests/assets.json
@@ -110,7 +110,7 @@ VITE_ADMIN_IDLE_TIMEOUT_MS=60000
 브라우저에서 확인:
 
 ```txt
-https://cha-amu-gateway.yiyaaang.workers.dev/health
+https://cha-amu-gateway.cha-amu.workers.dev/health
 ```
 
 응답 예시:
