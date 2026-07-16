@@ -827,109 +827,6 @@ img {
   padding: 0.12rem 0.38rem;
 }
 
-.things-head {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  width: 100%;
-}
-
-.things-head > img {
-  width: 84px;
-  height: 84px;
-  flex: 0 0 auto;
-  object-fit: contain;
-}
-
-.things-head .lead {
-  margin: 0.45rem 0 0;
-}
-
-.things-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1rem;
-  width: 100%;
-}
-
-.thing-card {
-  min-width: 0;
-  min-height: 150px;
-  display: grid;
-  grid-template-columns: 88px minmax(0, 1fr);
-  gap: 1rem;
-  align-items: center;
-  border: 2px solid var(--color-ink);
-  border-radius: var(--radius-card);
-  background: var(--color-surface);
-  padding: 1rem;
-  color: var(--color-ink);
-  text-decoration: none;
-  box-shadow: 3px 4px 0 rgba(31, 31, 31, 0.12);
-}
-
-.thing-card:hover,
-.thing-card:focus-visible {
-  background: var(--color-soft-primary);
-  transform: translateY(-2px);
-}
-
-.thing-card:focus-visible {
-  outline: 3px solid var(--color-primary);
-  outline-offset: 3px;
-}
-
-.thing-card__icon {
-  width: 88px;
-  height: 88px;
-  display: grid;
-  place-items: center;
-  overflow: hidden;
-  border: 1.5px solid var(--color-ink);
-  border-radius: 18px;
-  background: var(--color-background);
-}
-
-.thing-card__icon img {
-  width: 78px;
-  height: 78px;
-  object-fit: contain;
-}
-
-.thing-card__body {
-  min-width: 0;
-  align-self: stretch;
-  display: flex;
-  flex-direction: column;
-  gap: 0.45rem;
-}
-
-.thing-card__body strong {
-  font-size: 1.35rem;
-  line-height: 1.15;
-  overflow-wrap: anywhere;
-}
-
-.thing-card__description {
-  color: var(--color-muted);
-  line-height: 1.45;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
-.thing-card__url {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  margin-top: auto;
-  color: var(--color-muted);
-  font-size: 0.9rem;
-  font-weight: 800;
-  overflow-wrap: anywhere;
-}
-
 .tabs {
   display: flex;
   gap: 0.5rem;
@@ -1607,6 +1504,20 @@ img {
   background: var(--color-surface);
 }
 
+.post-entry--link:hover,
+.post-entry--link:focus-within {
+  background: var(--color-soft-primary);
+}
+
+.post-entry--link:focus-within {
+  outline: 3px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.post-entry--link .post-entry__summary:focus-visible {
+  outline: 0;
+}
+
 .post-entry__summary {
   display: block;
   padding: 1.1rem;
@@ -1805,8 +1716,6 @@ img {
 .page__inner > .post-flow,
 .page__inner > .guestbook-flow,
 .page__inner > .archive-grid,
-.page__inner > .things-grid,
-.page__inner > .things-head,
 .page__inner > .tagged-layout,
 .page__inner > .content-filter-bar,
 .page__inner > .search-results,
@@ -2102,7 +2011,6 @@ img {
 .page__inner > .guestbook-flow,
 .page__inner > .post-flow,
 .page__inner > .archive-grid,
-.page__inner > .things-grid,
 .page__inner > .tagged-layout,
 .page__inner > .content-filter-bar {
   justify-self: stretch;
@@ -3141,19 +3049,6 @@ img {
 
 
 @media (max-width: 760px) {
-  .things-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .things-head > img {
-    width: 70px;
-    height: 70px;
-  }
-
-  .thing-card {
-    min-height: 132px;
-  }
-
   .admin-selection-toggle,
   .admin-bulk-bar__delete,
   .admin-editor__delete,

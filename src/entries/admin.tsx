@@ -18,7 +18,7 @@ import { postTimestamp } from '../utils/postTimestamp';
 import { clearAdminSession, loadAdminSession, refreshAdminSession, saveAdminSession } from '../utils/session';
 import { splitTags } from '../utils/strings';
 
-type Tab = 'posts' | 'things' | 'assets' | 'guestbook';
+type Tab = 'posts' | 'assets' | 'things' | 'guestbook';
 type GuestbookFilter = 'all' | GuestbookEntry['status'];
 type GuestbookAdminView = 'entries' | 'bans';
 type EditorView = 'edit' | 'preview';
@@ -26,8 +26,8 @@ type EditablePostStatus = Exclude<Post['status'], 'deleted'>;
 
 const TAB_LABEL_KEYS: Record<Tab, TranslationKey> = {
   posts: 'admin.tab.posts',
-  things: 'admin.tab.things',
   assets: 'admin.tab.assets',
+  things: 'admin.tab.things',
   guestbook: 'admin.tab.guestbook'
 };
 
@@ -1601,15 +1601,15 @@ export function AdminApp() {
       </section>
 
       <div className="tabs admin-tabs" role="tablist" aria-label={t('admin.menu')}>
-        {(['posts', 'things', 'assets', 'guestbook'] as Tab[]).map((item) => (
+        {(['posts', 'assets', 'things', 'guestbook'] as Tab[]).map((item) => (
           <button id={`admin-tab-${item}`} className={`button ${tab === item ? 'button--primary' : ''}`} type="button" role="tab" key={item} aria-selected={tab === item} aria-controls={`admin-panel-${item}`} onClick={() => setTab(item)}>{t(TAB_LABEL_KEYS[item])}</button>
         ))}
       </div>
 
       <div id={`admin-panel-${tab}`} className="admin-tab-panel" role="tabpanel" aria-labelledby={`admin-tab-${tab}`}>
         {tab === 'posts' ? <PostsAdmin token={session.token} onSessionExpired={handleSessionExpired} /> : null}
-        {tab === 'things' ? <ThingsAdmin token={session.token} onSessionExpired={handleSessionExpired} /> : null}
         {tab === 'assets' ? <AssetsAdmin token={session.token} onSessionExpired={handleSessionExpired} /> : null}
+        {tab === 'things' ? <ThingsAdmin token={session.token} onSessionExpired={handleSessionExpired} /> : null}
         {tab === 'guestbook' ? <GuestbookAdmin token={session.token} onSessionExpired={handleSessionExpired} /> : null}
       </div>
     </AppLayout>
