@@ -15,6 +15,7 @@ import { setPublicGuestbook, setPublicThings, syncPublicArchiveOverrides, syncPu
 import type { ArchiveAsset, AssetOverride, GuestbookAdminEntry, GuestbookEntry, GuestbookIpBan, Post, Thing } from '../types';
 import { formatDate } from '../utils/date';
 import { postTimestamp } from '../utils/postTimestamp';
+import { shouldRefreshAdminSession } from '../utils/adminSessionRefresh';
 import { clearAdminSession, getAdminSessionRemainingMs, loadAdminSession, refreshAdminSession, saveAdminSession } from '../utils/session';
 import { splitTags } from '../utils/strings';
 
@@ -1674,12 +1675,16 @@ export function AdminApp() {
     ) => {
       const now = Date.now();
       const remaining = getAdminSessionRemainingMs(current, now);
-      if (
-        !activitySinceServerRefresh.current
-        || refreshInFlight.current
-        || now - lastServerRefreshAt.current < ADMIN_SESSION_REFRESH_THROTTLE_MS
-        || (!refreshForActiveUse && remaining > ADMIN_SESSION_REFRESH_LEAD_MS)
-      ) return;
+      if (!shouldRefreshAdminSession({
+        hasActivity: activitySinceServerRefresh.current,
+        refreshInFlight: refreshInFlight.current,
+        refreshForActiveUse,
+        remainingMs: remaining,
+        now,
+        lastServerRefreshAt: lastServerRefreshAt.current,
+        refreshLeadMs: ADMIN_SESSION_REFRESH_LEAD_MS,
+        refreshThrottleMs: ADMIN_SESSION_REFRESH_THROTTLE_MS
+      })) return;
 
       refreshInFlight.current = true;
       lastServerRefreshAt.current = now;

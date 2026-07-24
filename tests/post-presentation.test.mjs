@@ -115,6 +115,28 @@ test('Markdown images can request a smaller presentation without changing their 
   assert.match(html, /src="https:\/\/cha-amu\.github\.io\/storage\/assets\/images\/calculation\.png#medium"/);
 });
 
+test('active editing refreshes an administrator session before the final two-minute window', async () => {
+  const source = compileSource('src/utils/adminSessionRefresh.ts', 'adminSessionRefresh.js');
+  const { shouldRefreshAdminSession } = await importSource(source);
+  const base = {
+    hasActivity: true,
+    refreshInFlight: false,
+    remainingMs: 9 * 60_000,
+    now: 60_000,
+    lastServerRefreshAt: 0,
+    refreshLeadMs: 2 * 60_000,
+    refreshThrottleMs: 30_000
+  };
+
+  assert.equal(shouldRefreshAdminSession({ ...base, refreshForActiveUse: true }), true);
+  assert.equal(shouldRefreshAdminSession({ ...base, refreshForActiveUse: false }), false);
+  assert.equal(shouldRefreshAdminSession({
+    ...base,
+    refreshForActiveUse: true,
+    lastServerRefreshAt: 45_000
+  }), false);
+});
+
 test('date-only metadata renders without inventing a clock time', async () => {
   const compiled = compileSource('src/utils/date.ts', 'utils/date.js');
   const source = compiled.replace(
