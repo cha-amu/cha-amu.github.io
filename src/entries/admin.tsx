@@ -9,6 +9,7 @@ import { EmptyState } from '../components/PageState';
 import { TagList } from '../components/TagList';
 import { CloseIcon, EyeOffIcon, LogOutIcon, RestoreIcon, ShieldBanIcon, ShieldCheckIcon, TrashIcon } from '../components/ToolIcons';
 import { TurnstileBox } from '../components/TurnstileBox';
+import { config } from '../config';
 import { useIncrementalItems } from '../hooks/useIncrementalItems';
 import { useI18n, type Translate, type TranslationKey, type TranslationParams } from '../i18n';
 import { setPublicGuestbook, setPublicThings, syncPublicArchiveOverrides, syncPublicPost, syncPublicThing } from '../stores/publicDataStore';
@@ -255,6 +256,28 @@ function sortPostsByNewest(posts: Post[]) {
   });
 }
 
+function postMarkdownContext(post: Partial<Post>) {
+  if (post.markdownBaseUrl) {
+    return {
+      baseUrl: post.markdownBaseUrl,
+      rootUrl: post.markdownRootUrl || config.storageBaseUrl
+    };
+  }
+  const candidate = post.bodyUrl || (post.storagePath
+    ? `${config.storageBaseUrl}/${post.storagePath.replace(/^\/+/, '')}`
+    : '');
+  try {
+    const url = new URL(candidate);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return {};
+    return {
+      baseUrl: new URL('.', url).href,
+      rootUrl: post.markdownRootUrl || config.storageBaseUrl
+    };
+  } catch (_) {
+    return {};
+  }
+}
+
 const blankThing = (): Partial<Thing> => ({
   title: '',
   description: '',
@@ -496,6 +519,7 @@ function PostsAdmin({ token, onSessionExpired }: { token: string; onSessionExpir
   const previewTags = splitTags(tagsText);
   const previewTitle = String(current.title || '').trim() || t('admin.posts.previewTitle');
   const previewExcerpt = String(current.excerpt || '').trim();
+  const previewMarkdownContext = postMarkdownContext(current);
 
   return (
     <section className="admin-posts" aria-label={t('admin.posts.manage')}>
@@ -622,8 +646,8 @@ function PostsAdmin({ token, onSessionExpired }: { token: string; onSessionExpir
               {current.body ? (
                 <MarkdownView
                   markdown={current.body}
-                  baseUrl={current.markdownBaseUrl}
-                  rootUrl={current.markdownRootUrl}
+                  baseUrl={previewMarkdownContext.baseUrl}
+                  rootUrl={previewMarkdownContext.rootUrl}
                 />
               ) : <p className="help-text">{t('admin.posts.previewEmpty')}</p>}
             </div>
