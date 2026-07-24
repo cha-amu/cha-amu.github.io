@@ -2105,6 +2105,35 @@ img {
   margin: 0;
 }
 
+.admin-session-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.7rem;
+}
+
+.admin-session-status {
+  display: grid;
+  gap: 0.08rem;
+  margin: 0;
+  padding: 0.52rem 0.72rem;
+  border: 1.5px solid var(--color-ink);
+  border-radius: 0.75rem;
+  background: var(--color-surface);
+  font-size: 0.78rem;
+  line-height: 1.2;
+  text-align: right;
+}
+
+.admin-session-status strong {
+  font-size: 0.88rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-session-status span {
+  color: var(--color-muted);
+}
+
 .admin-tab-panel {
   width: 100%;
   min-width: 0;
@@ -3175,7 +3204,7 @@ img {
 
   .admin-page-head {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: 1fr;
     align-items: start;
   }
 
@@ -3187,8 +3216,13 @@ img {
     margin-top: 0.6rem;
   }
 
-  .admin-logout {
-    justify-self: end;
+  .admin-session-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .admin-session-status {
+    text-align: left;
   }
 
   .admin-section-head,

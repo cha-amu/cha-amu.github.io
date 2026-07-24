@@ -15,7 +15,7 @@ import { setPublicGuestbook, setPublicThings, syncPublicArchiveOverrides, syncPu
 import type { ArchiveAsset, AssetOverride, GuestbookAdminEntry, GuestbookEntry, GuestbookIpBan, Post, Thing } from '../types';
 import { formatDate } from '../utils/date';
 import { postTimestamp } from '../utils/postTimestamp';
-import { clearAdminSession, loadAdminSession, refreshAdminSession, saveAdminSession } from '../utils/session';
+import { clearAdminSession, getAdminSessionRemainingMs, loadAdminSession, refreshAdminSession, saveAdminSession } from '../utils/session';
 import { splitTags } from '../utils/strings';
 
 type Tab = 'posts' | 'assets' | 'things' | 'guestbook';
@@ -42,6 +42,17 @@ const POST_STATUS_LABEL_KEYS: Record<Post['status'], TranslationKey> = {
   hidden: 'admin.status.hidden',
   deleted: 'admin.status.deleted'
 };
+
+const ADMIN_SESSION_REFRESH_LEAD_MS = 2 * 60_000;
+const ADMIN_SESSION_CLOCK_INTERVAL_MS = 1_000;
+const ADMIN_ACTIVITY_WRITE_INTERVAL_MS = 1_000;
+
+function formatSessionRemaining(remainingMs: number) {
+  const totalSeconds = Math.max(0, Math.ceil(remainingMs / 1_000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
 
 const GUESTBOOK_STATUS_LABEL_KEYS: Record<GuestbookEntry['status'], TranslationKey> = {
   visible: 'admin.status.visible',
@@ -1612,65 +1623,133 @@ export function AdminApp() {
   const [session, setSession] = useState(() => loadAdminSession());
   const [tab, setTab] = useState<Tab>('posts');
   const [sessionMessage, setSessionMessage] = useState<AdminMessage>(null);
+  const [sessionRemainingMs, setSessionRemainingMs] = useState(() =>
+    session ? getAdminSessionRemainingMs(session) : 0
+  );
   const lastServerRefreshAt = useRef(0);
+  const lastActivityWriteAt = useRef(0);
+  const activitySinceServerRefresh = useRef(false);
   const refreshInFlight = useRef(false);
+  const hasSession = Boolean(session);
 
   const expireSession = () => {
     clearAdminSession();
+    activitySinceServerRefresh.current = false;
     setSession(null);
+    setSessionRemainingMs(0);
     setSessionMessage(translatedMessage('admin.sessionExpired'));
   };
 
-  const touchSession = () => {
-    const current = refreshAdminSession();
-    if (!current) {
-      setSession(null);
-      return;
+  useEffect(() => {
+    if (!hasSession) {
+      activitySinceServerRefresh.current = false;
+      setSessionRemainingMs(0);
+      return undefined;
     }
 
-    const now = Date.now();
-    if (refreshInFlight.current || now - lastServerRefreshAt.current < 20_000) return;
+    let cancelled = false;
 
-    refreshInFlight.current = true;
-    lastServerRefreshAt.current = now;
-    const tokenBeforeRefresh = current.token;
-    adminRefreshSession(tokenBeforeRefresh)
-      .then((nextSession) => {
-        const latest = loadAdminSession();
-        if (!latest || latest.token !== tokenBeforeRefresh) return;
-        setSession(saveAdminSession(nextSession));
-        setSessionMessage(null);
-      })
-      .catch((err) => {
-        if (isAdminSessionError(err)) expireSession();
-      })
-      .finally(() => { refreshInFlight.current = false; });
-  };
-
-  useEffect(() => {
-    const checkSession = () => {
-      const current = loadAdminSession();
+    const applyCurrentSession = (current: NonNullable<ReturnType<typeof loadAdminSession>>) => {
+      const remaining = getAdminSessionRemainingMs(current);
+      setSessionRemainingMs(remaining);
       setSession((existing) => {
-        if (!current) return null;
-        if (!existing || current.token !== existing.token || current.expiresAt !== existing.expiresAt) return current;
+        if (!existing || current.token !== existing.token || current.expiresAt !== existing.expiresAt || current.lastActiveAt !== existing.lastActiveAt) {
+          return current;
+        }
         return existing;
       });
+      return remaining;
     };
-    const interval = window.setInterval(checkSession, 5_000);
-    window.addEventListener('click', touchSession);
-    window.addEventListener('keydown', touchSession);
-    window.addEventListener('input', touchSession);
+
+    const refreshServerIfNeeded = (current: NonNullable<ReturnType<typeof loadAdminSession>>) => {
+      const now = Date.now();
+      const remaining = getAdminSessionRemainingMs(current, now);
+      if (
+        !activitySinceServerRefresh.current
+        || remaining > ADMIN_SESSION_REFRESH_LEAD_MS
+        || refreshInFlight.current
+        || now - lastServerRefreshAt.current < 20_000
+      ) return;
+
+      refreshInFlight.current = true;
+      lastServerRefreshAt.current = now;
+      const tokenBeforeRefresh = current.token;
+      adminRefreshSession(tokenBeforeRefresh)
+        .then((nextSession) => {
+          if (cancelled) return;
+          const latest = loadAdminSession();
+          if (!latest || latest.token !== tokenBeforeRefresh) return;
+          const refreshed = saveAdminSession(nextSession, latest.lastActiveAt);
+          activitySinceServerRefresh.current = false;
+          applyCurrentSession(refreshed);
+          setSessionMessage(null);
+        })
+        .catch((err) => {
+          if (!cancelled && isAdminSessionError(err)) expireSession();
+        })
+        .finally(() => { refreshInFlight.current = false; });
+    };
+
+    const checkSession = () => {
+      const current = loadAdminSession();
+      if (!current) {
+        expireSession();
+        return;
+      }
+      applyCurrentSession(current);
+      if (document.visibilityState === 'visible') refreshServerIfNeeded(current);
+    };
+
+    const noteActivity = () => {
+      const now = Date.now();
+      if (now - lastActivityWriteAt.current < ADMIN_ACTIVITY_WRITE_INTERVAL_MS) return;
+      lastActivityWriteAt.current = now;
+      const current = refreshAdminSession();
+      if (!current) {
+        expireSession();
+        return;
+      }
+      activitySinceServerRefresh.current = true;
+      applyCurrentSession(current);
+      refreshServerIfNeeded(current);
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') noteActivity();
+    };
+
+    const interval = window.setInterval(checkSession, ADMIN_SESSION_CLOCK_INTERVAL_MS);
+    window.addEventListener('pointerdown', noteActivity);
+    window.addEventListener('pointermove', noteActivity, { passive: true });
+    window.addEventListener('keydown', noteActivity);
+    window.addEventListener('input', noteActivity);
+    window.addEventListener('scroll', noteActivity, { passive: true });
+    window.addEventListener('focus', noteActivity);
+    document.addEventListener('visibilitychange', handleVisibility);
+    checkSession();
+
     return () => {
+      cancelled = true;
       window.clearInterval(interval);
-      window.removeEventListener('click', touchSession);
-      window.removeEventListener('keydown', touchSession);
-      window.removeEventListener('input', touchSession);
+      window.removeEventListener('pointerdown', noteActivity);
+      window.removeEventListener('pointermove', noteActivity);
+      window.removeEventListener('keydown', noteActivity);
+      window.removeEventListener('input', noteActivity);
+      window.removeEventListener('scroll', noteActivity);
+      window.removeEventListener('focus', noteActivity);
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, []);
+  }, [hasSession]);
 
   if (!session) return <LoginPanel initialMessage={sessionMessage} onLogin={() => { setSessionMessage(null); setSession(loadAdminSession()); }} />;
 
-  const logout = () => { clearAdminSession(); setSession(null); setSessionMessage(null); };
+  const logout = () => {
+    clearAdminSession();
+    activitySinceServerRefresh.current = false;
+    setSession(null);
+    setSessionRemainingMs(0);
+    setSessionMessage(null);
+  };
   const handleSessionExpired = () => expireSession();
   return (
     <AppLayout>
@@ -1679,7 +1758,13 @@ export function AdminApp() {
           <h1 id="admin-title" className="page-title">{t('admin.title')}</h1>
           <p className="lead">{t('admin.lead')}</p>
         </div>
-        <button className="button admin-logout" type="button" onClick={logout}><LogOutIcon /> {t('admin.logout')}</button>
+        <div className="admin-session-actions">
+          <p className="admin-session-status">
+            <strong>{t('admin.session.remaining', { time: formatSessionRemaining(sessionRemainingMs) })}</strong>
+            <span>{t('admin.session.autoRefresh')}</span>
+          </p>
+          <button className="button admin-logout" type="button" onClick={logout}><LogOutIcon /> {t('admin.logout')}</button>
+        </div>
       </section>
 
       <div className="tabs admin-tabs" role="tablist" aria-label={t('admin.menu')}>

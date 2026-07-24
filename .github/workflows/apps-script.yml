@@ -61,7 +61,7 @@ jobs:
           GATEWAY_SHARED_SECRET: ${{ secrets.GATEWAY_SHARED_SECRET }}
           GUESTBOOK_PASSWORD_ITERATIONS: '1'
           GUESTBOOK_SERVER_PEPPER: ${{ secrets.GUESTBOOK_SERVER_PEPPER }}
-          ADMIN_SESSION_TTL_MS: ${{ vars.VITE_ADMIN_IDLE_TIMEOUT_MS || '60000' }}
+          ADMIN_SESSION_TTL_MS: ${{ vars.VITE_ADMIN_IDLE_TIMEOUT_MS || '600000' }}
           SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID }}
         run: |
           test -n "$ADMIN_PASSWORD" || { echo 'ADMIN_PASSWORD repository secret is required.'; exit 1; }

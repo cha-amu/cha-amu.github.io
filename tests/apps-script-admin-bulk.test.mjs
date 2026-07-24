@@ -208,6 +208,7 @@ function loadAppsScript(initial = {}) {
   });
   vm.runInContext(source, context);
   const route = vm.runInContext('route_', context);
+  const createAdminSession = vm.runInContext('createAdminSession_', context);
   return {
     spreadsheet,
     drainSheetEvents(sheetName) {
@@ -225,6 +226,9 @@ function loadAppsScript(initial = {}) {
     },
     rawCall(action, payload = {}) {
       return plain(route(action, payload));
+    },
+    createAdminSession() {
+      return plain(createAdminSession());
     }
   };
 }
@@ -297,6 +301,16 @@ test('public post suppression uses the version 2 cache namespace', () => {
 test('public things use the version 2 cache namespace after adding image URLs', () => {
   assert.match(source, /things:\s*'public:things:v2'/);
   assert.doesNotMatch(source, /things:\s*'public:things:v1'/);
+});
+
+test('administrator sessions default to ten minutes', () => {
+  const before = Date.now();
+  const session = loadAppsScript().createAdminSession();
+  const after = Date.now();
+  const expiresAt = Date.parse(session.expiresAt);
+
+  assert.ok(expiresAt >= before + 600_000);
+  assert.ok(expiresAt <= after + 600_000);
 });
 
 test('bulk routes require gateway and admin authentication and reject unbounded or duplicate ids', () => {

@@ -33,7 +33,7 @@ const SHEET_COLUMNS = {
   auditLog: ['id', 'action', 'targetType', 'targetId', 'createdAt']
 };
 
-const SESSION_TTL_MS = Number(getProperty_('ADMIN_SESSION_TTL_MS', '60000'));
+const SESSION_TTL_MS = Number(getProperty_('ADMIN_SESSION_TTL_MS', '600000'));
 const PASSWORD_ITERATIONS = Number(getProperty_('GUESTBOOK_PASSWORD_ITERATIONS', '1'));
 const GUESTBOOK_PASSWORD_HASH_ALGORITHM = 'SHA-256+salt+pepper';
 const DEFAULT_GUESTBOOK_NAME = 'ㅇㅁ';

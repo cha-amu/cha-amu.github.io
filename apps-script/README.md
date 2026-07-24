@@ -69,7 +69,7 @@ ADMIN_PASSWORD_PEPPER=<generated>
 ADMIN_SESSION_SECRET=<generated>
 GUESTBOOK_SERVER_PEPPER=<generated>
 GUESTBOOK_PASSWORD_ITERATIONS=1
-ADMIN_SESSION_TTL_MS=60000
+ADMIN_SESSION_TTL_MS=600000
 GATEWAY_SHARED_SECRET=<Worker와 동일한 32자 이상 비밀값>
 ```
 
@@ -102,7 +102,7 @@ VITE_TURNSTILE_SITE_KEY=0x4AAAAAADzr-jSxSMZf9xcv
 VITE_STORAGE_BASE_URL=https://cha-amu.github.io/storage
 VITE_ARCHIVE_MANIFEST_URL=https://cha-amu.github.io/storage/manifests/assets.json
 VITE_STORAGE_POSTS_MANIFEST_URL=https://cha-amu.github.io/storage/manifests/posts.json
-VITE_ADMIN_IDLE_TIMEOUT_MS=60000
+VITE_ADMIN_IDLE_TIMEOUT_MS=600000
 ```
 
 ## 6. 연결 확인

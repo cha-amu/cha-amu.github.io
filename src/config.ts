@@ -15,7 +15,7 @@ export const config = {
   storagePostsManifestUrl:
     import.meta.env.VITE_STORAGE_POSTS_MANIFEST_URL || 'https://cha-amu.github.io/storage/manifests/posts.json',
   turnstileSiteKey: import.meta.env.VITE_TURNSTILE_SITE_KEY || '',
-  adminIdleTimeoutMs: Number(import.meta.env.VITE_ADMIN_IDLE_TIMEOUT_MS || 60_000)
+  adminIdleTimeoutMs: Number(import.meta.env.VITE_ADMIN_IDLE_TIMEOUT_MS || 600_000)
 };
 
 export const isApiConfigured = Boolean(config.apiUrl);

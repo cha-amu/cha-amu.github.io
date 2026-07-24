@@ -12,7 +12,7 @@ export function loadAdminSession(): StoredAdminSession | null {
   if (!raw) return null;
   try {
     const session = JSON.parse(raw) as StoredAdminSession;
-    if (!session.token || isSessionIdle(session)) {
+    if (!session.token || getAdminSessionRemainingMs(session) <= 0) {
       clearAdminSession();
       return null;
     }
@@ -23,8 +23,8 @@ export function loadAdminSession(): StoredAdminSession | null {
   }
 }
 
-export function saveAdminSession(session: AdminSession): StoredAdminSession {
-  const stored = { ...session, lastActiveAt: Date.now() };
+export function saveAdminSession(session: AdminSession, lastActiveAt = Date.now()): StoredAdminSession {
+  const stored = { ...session, lastActiveAt };
   localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
   return stored;
 }
@@ -41,6 +41,14 @@ export function clearAdminSession(): void {
   localStorage.removeItem(STORAGE_KEY);
 }
 
-export function isSessionIdle(session: StoredAdminSession): boolean {
-  return Date.now() - session.lastActiveAt > config.adminIdleTimeoutMs;
+export function getAdminSessionRemainingMs(
+  session: Pick<StoredAdminSession, 'expiresAt' | 'lastActiveAt'>,
+  now = Date.now()
+): number {
+  const idleDeadline = session.lastActiveAt + config.adminIdleTimeoutMs;
+  const serverDeadline = Date.parse(session.expiresAt || '');
+  const deadline = Number.isFinite(serverDeadline)
+    ? Math.min(idleDeadline, serverDeadline)
+    : idleDeadline;
+  return Math.max(0, deadline - now);
 }

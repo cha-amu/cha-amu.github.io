@@ -98,7 +98,7 @@ VITE_API_URL=https://cha-amu-gateway.cha-amu.workers.dev/api
 VITE_STORAGE_BASE_URL=https://cha-amu.github.io/storage
 VITE_ARCHIVE_MANIFEST_URL=https://cha-amu.github.io/storage/manifests/assets.json
 VITE_STORAGE_POSTS_MANIFEST_URL=https://cha-amu.github.io/storage/manifests/posts.json
-VITE_ADMIN_IDLE_TIMEOUT_MS=60000
+VITE_ADMIN_IDLE_TIMEOUT_MS=600000
 VITE_TURNSTILE_SITE_KEY=0x4AAAAAADzr-jSxSMZf9xcv
 ```
 
