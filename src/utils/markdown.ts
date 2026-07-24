@@ -1,3 +1,5 @@
+import katex from 'katex';
+
 function escapeHtml(value: string): string {
   return value
     .replace(/&/g, '&amp;')
@@ -26,9 +28,39 @@ function resolveMarkdownUrl(value: string, options: MarkdownOptions): string {
   return trimmed;
 }
 
+const INLINE_TOKEN_OPEN = '\uE000';
+const INLINE_TOKEN_CLOSE = '\uE001';
+
+function renderMath(expression: string, displayMode: boolean): string {
+  const rendered = katex.renderToString(expression.trim(), {
+    displayMode,
+    throwOnError: false,
+    strict: 'ignore',
+    trust: false,
+    output: 'htmlAndMathml'
+  });
+  const mode = displayMode ? 'block' : 'inline';
+  const tag = displayMode ? 'div' : 'span';
+  return `<${tag} class="markdown-math markdown-math--${mode}">${rendered}</${tag}>`;
+}
+
 function inlineMarkdown(value: string, options: MarkdownOptions): string {
-  let output = escapeHtml(value);
-  output = output.replace(/`([^`]+)`/g, '<code>$1</code>');
+  const protectedTokens: string[] = [];
+  const protect = (html: string): string => {
+    const token = `${INLINE_TOKEN_OPEN}${protectedTokens.length}${INLINE_TOKEN_CLOSE}`;
+    protectedTokens.push(html);
+    return token;
+  };
+
+  let source = value.replace(/`([^`]+)`/g, (_match, code: string) =>
+    protect(`<code>${escapeHtml(code)}</code>`));
+  source = source.replace(/\\\$/g, () => protect('$'));
+  source = source.replace(/\\\((.+?)\\\)/g, (_match, expression: string) =>
+    protect(renderMath(expression, false)));
+  source = source.replace(/\$(?!\s)([^$\n]*?\S)\$/g, (_match, expression: string) =>
+    protect(renderMath(expression, false)));
+
+  let output = escapeHtml(source);
   output = output.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
   output = output.replace(/\*([^*]+)\*/g, '<em>$1</em>');
   output = output.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (_match, alt: string, url: string) => {
@@ -39,6 +71,10 @@ function inlineMarkdown(value: string, options: MarkdownOptions): string {
     const resolved = escapeHtml(resolveMarkdownUrl(url, options));
     return `<a href="${resolved}" target="_blank" rel="noreferrer">${label}</a>`;
   });
+  output = output.replace(
+    new RegExp(`${INLINE_TOKEN_OPEN}(\\d+)${INLINE_TOKEN_CLOSE}`, 'g'),
+    (_match, index: string) => protectedTokens[Number(index)] ?? ''
+  );
   return output;
 }
 
@@ -141,6 +177,36 @@ export function renderMarkdown(markdown: string, options: MarkdownOptions = {}):
       const languageClass = language ? ` class="language-${language}"` : '';
       html.push(`<pre><code${languageClass}>${escapeHtml(code.join('\n'))}</code></pre>`);
       continue;
+    }
+
+    const singleLineBlockMath = /^\s*(?:\$\$(.+)\$\$|\\\[(.+)\\\])\s*$/.exec(line);
+    if (singleLineBlockMath) {
+      closeList();
+      html.push(renderMath(singleLineBlockMath[1] ?? singleLineBlockMath[2], true));
+      continue;
+    }
+
+    const blockMathDelimiter = line.trim() === '$$'
+      ? '$$'
+      : line.trim() === '\\['
+        ? '\\]'
+        : null;
+    if (blockMathDelimiter) {
+      const expression: string[] = [];
+      let closingIndex = index + 1;
+      while (
+        closingIndex < lines.length &&
+        lines[closingIndex].trim() !== blockMathDelimiter
+      ) {
+        expression.push(lines[closingIndex]);
+        closingIndex += 1;
+      }
+      if (closingIndex < lines.length && expression.some((part) => part.trim())) {
+        closeList();
+        html.push(renderMath(expression.join('\n'), true));
+        index = closingIndex;
+        continue;
+      }
     }
 
     const alignments = index + 1 < lines.length ? tableAlignments(lines[index + 1]) : null;

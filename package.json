@@ -14,6 +14,7 @@
     "sync:apps-script-env": "node scripts/sync-apps-script-properties.mjs"
   },
   "dependencies": {
+    "katex": "^0.18.1",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
   },

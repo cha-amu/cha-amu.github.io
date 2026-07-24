@@ -1,3 +1,4 @@
+import 'katex/dist/katex.min.css';
 import { renderMarkdown } from '../utils/markdown';
 
 export function MarkdownView({
