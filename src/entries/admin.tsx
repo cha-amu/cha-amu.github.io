@@ -44,6 +44,7 @@ const POST_STATUS_LABEL_KEYS: Record<Post['status'], TranslationKey> = {
 };
 
 const ADMIN_SESSION_REFRESH_LEAD_MS = 2 * 60_000;
+const ADMIN_SESSION_REFRESH_THROTTLE_MS = 30_000;
 const ADMIN_SESSION_CLOCK_INTERVAL_MS = 1_000;
 const ADMIN_ACTIVITY_WRITE_INTERVAL_MS = 1_000;
 
@@ -617,7 +618,13 @@ function PostsAdmin({ token, onSessionExpired }: { token: string; onSessionExpir
               <p className="meta">{t('admin.posts.previewWidth')}</p>
             </div>
             <div className="post-entry__body">
-              {current.body ? <MarkdownView markdown={current.body} /> : <p className="help-text">{t('admin.posts.previewEmpty')}</p>}
+              {current.body ? (
+                <MarkdownView
+                  markdown={current.body}
+                  baseUrl={current.markdownBaseUrl}
+                  rootUrl={current.markdownRootUrl}
+                />
+              ) : <p className="help-text">{t('admin.posts.previewEmpty')}</p>}
             </div>
           </article>
         </section>
@@ -1661,14 +1668,17 @@ export function AdminApp() {
       return remaining;
     };
 
-    const refreshServerIfNeeded = (current: NonNullable<ReturnType<typeof loadAdminSession>>) => {
+    const refreshServerIfNeeded = (
+      current: NonNullable<ReturnType<typeof loadAdminSession>>,
+      refreshForActiveUse = false
+    ) => {
       const now = Date.now();
       const remaining = getAdminSessionRemainingMs(current, now);
       if (
         !activitySinceServerRefresh.current
-        || remaining > ADMIN_SESSION_REFRESH_LEAD_MS
         || refreshInFlight.current
-        || now - lastServerRefreshAt.current < 20_000
+        || now - lastServerRefreshAt.current < ADMIN_SESSION_REFRESH_THROTTLE_MS
+        || (!refreshForActiveUse && remaining > ADMIN_SESSION_REFRESH_LEAD_MS)
       ) return;
 
       refreshInFlight.current = true;
@@ -1700,43 +1710,47 @@ export function AdminApp() {
       if (document.visibilityState === 'visible') refreshServerIfNeeded(current);
     };
 
-    const noteActivity = () => {
+    const noteActivity = (refreshForActiveUse = false) => {
       const now = Date.now();
-      if (now - lastActivityWriteAt.current < ADMIN_ACTIVITY_WRITE_INTERVAL_MS) return;
-      lastActivityWriteAt.current = now;
-      const current = refreshAdminSession();
+      const shouldWriteActivity = now - lastActivityWriteAt.current >= ADMIN_ACTIVITY_WRITE_INTERVAL_MS;
+      if (shouldWriteActivity) lastActivityWriteAt.current = now;
+      const current = shouldWriteActivity ? refreshAdminSession() : loadAdminSession();
       if (!current) {
         expireSession();
         return;
       }
       activitySinceServerRefresh.current = true;
-      applyCurrentSession(current);
-      refreshServerIfNeeded(current);
+      if (shouldWriteActivity) applyCurrentSession(current);
+      refreshServerIfNeeded(current, refreshForActiveUse);
     };
 
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') noteActivity();
     };
+    const noteGeneralActivity = () => noteActivity(false);
+    const noteActiveUse = () => noteActivity(true);
 
     const interval = window.setInterval(checkSession, ADMIN_SESSION_CLOCK_INTERVAL_MS);
-    window.addEventListener('pointerdown', noteActivity);
-    window.addEventListener('pointermove', noteActivity, { passive: true });
-    window.addEventListener('keydown', noteActivity);
-    window.addEventListener('input', noteActivity);
-    window.addEventListener('scroll', noteActivity, { passive: true });
-    window.addEventListener('focus', noteActivity);
+    window.addEventListener('pointerdown', noteActiveUse);
+    window.addEventListener('pointermove', noteGeneralActivity, { passive: true });
+    window.addEventListener('keydown', noteActiveUse);
+    window.addEventListener('input', noteActiveUse);
+    window.addEventListener('change', noteActiveUse);
+    window.addEventListener('scroll', noteGeneralActivity, { passive: true });
+    window.addEventListener('focus', noteGeneralActivity);
     document.addEventListener('visibilitychange', handleVisibility);
     checkSession();
 
     return () => {
       cancelled = true;
       window.clearInterval(interval);
-      window.removeEventListener('pointerdown', noteActivity);
-      window.removeEventListener('pointermove', noteActivity);
-      window.removeEventListener('keydown', noteActivity);
-      window.removeEventListener('input', noteActivity);
-      window.removeEventListener('scroll', noteActivity);
-      window.removeEventListener('focus', noteActivity);
+      window.removeEventListener('pointerdown', noteActiveUse);
+      window.removeEventListener('pointermove', noteGeneralActivity);
+      window.removeEventListener('keydown', noteActiveUse);
+      window.removeEventListener('input', noteActiveUse);
+      window.removeEventListener('change', noteActiveUse);
+      window.removeEventListener('scroll', noteGeneralActivity);
+      window.removeEventListener('focus', noteGeneralActivity);
       document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, [hasSession]);

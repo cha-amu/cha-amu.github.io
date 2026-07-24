@@ -104,6 +104,17 @@ test('inline and display math render with KaTeX without changing code spans', as
   assert.doesNotMatch(html, /katex-error/);
 });
 
+test('Markdown images can request a smaller presentation without changing their file URL', async () => {
+  const { renderMarkdown } = await importCompiledSource('src/utils/markdown.ts', 'markdown.js');
+  const html = renderMarkdown(
+    '![계산 도식](../../assets/images/calculation.png#medium)',
+    { baseUrl: 'https://cha-amu.github.io/storage/posts/2026/' }
+  );
+
+  assert.match(html, /class="markdown-image markdown-image--medium"/);
+  assert.match(html, /src="https:\/\/cha-amu\.github\.io\/storage\/assets\/images\/calculation\.png#medium"/);
+});
+
 test('date-only metadata renders without inventing a clock time', async () => {
   const compiled = compileSource('src/utils/date.ts', 'utils/date.js');
   const source = compiled.replace(

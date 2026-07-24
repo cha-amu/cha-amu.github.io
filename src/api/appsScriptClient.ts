@@ -100,11 +100,28 @@ function normalizePostStatus(value: unknown): Post['status'] {
   return value === 'published' || value === 'hidden' || value === 'draft' || value === 'deleted' ? value : 'draft';
 }
 
+function markdownBaseUrl(bodyUrl: string, storagePath: string): string | undefined {
+  const candidate = bodyUrl || (storagePath
+    ? `${config.storageBaseUrl}/${storagePath.replace(/^\/+/, '')}`
+    : '');
+  if (!candidate) return undefined;
+  try {
+    const url = new URL(candidate);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return undefined;
+    return new URL('.', url).href;
+  } catch (_) {
+    return undefined;
+  }
+}
+
 export function normalizePost(value: unknown): Post | null {
   const record = asRecord(value);
   if (!record) return null;
   const id = asString(record.id || record.slug).trim();
   if (!id) return null;
+  const source = record.source === 'storage' ? 'storage' : 'sheets';
+  const storagePath = asString(record.storagePath).trim();
+  const bodyUrl = asString(record.bodyUrl).trim();
   return {
     id,
     slug: asString(record.slug).trim() || undefined,
@@ -116,9 +133,12 @@ export function normalizePost(value: unknown): Post | null {
     createdAt: asString(record.createdAt || record.updatedAt || new Date().toISOString()),
     updatedAt: asString(record.updatedAt).trim() || undefined,
     publishedAt: asString(record.publishedAt).trim() || undefined,
-    source: record.source === 'storage' ? 'storage' : 'sheets',
-    storagePath: asString(record.storagePath).trim() || undefined,
-    bodyUrl: asString(record.bodyUrl).trim() || undefined
+    source,
+    storagePath: storagePath || undefined,
+    bodyUrl: bodyUrl || undefined,
+    markdownBaseUrl: asString(record.markdownBaseUrl).trim() || markdownBaseUrl(bodyUrl, storagePath),
+    markdownRootUrl: asString(record.markdownRootUrl).trim()
+      || (storagePath || source === 'storage' ? config.storageBaseUrl : undefined)
   };
 }
 
@@ -346,11 +366,13 @@ export async function adminRefreshSession(token: string): Promise<AdminSession> 
 }
 
 export async function adminListPosts(token: string): Promise<Post[]> {
-  return requireArrayResponse<Post>(await request<unknown>('admin.post.list', { token }));
+  return normalizePosts(requireArrayResponse<unknown>(await request<unknown>('admin.post.list', { token })));
 }
 
 export async function adminSavePost(token: string, post: Partial<Post>): Promise<Post> {
-  return request<Post>('admin.post.save', { token, post });
+  const saved = normalizePost(await request<unknown>('admin.post.save', { token, post }));
+  if (!saved) throw new ApiRequestError(translate('errors.invalidApiResponse'), 502);
+  return saved;
 }
 
 export async function adminBulkUpdatePosts(token: string, ids: string[], status: Exclude<Post['status'], 'deleted'>): Promise<{ updatedIds: string[]; missingIds?: string[] }> {

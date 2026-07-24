@@ -65,7 +65,9 @@ function inlineMarkdown(value: string, options: MarkdownOptions): string {
   output = output.replace(/\*([^*]+)\*/g, '<em>$1</em>');
   output = output.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (_match, alt: string, url: string) => {
     const resolved = escapeHtml(resolveMarkdownUrl(url, options));
-    return `<img src="${resolved}" alt="${alt}" loading="lazy" />`;
+    const size = /#(small|medium|large)$/i.exec(url)?.[1]?.toLowerCase();
+    const sizeClass = size ? ` class="markdown-image markdown-image--${size}"` : '';
+    return `<img${sizeClass} src="${resolved}" alt="${alt}" loading="lazy" />`;
   });
   output = output.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_match, label: string, url: string) => {
     const resolved = escapeHtml(resolveMarkdownUrl(url, options));
