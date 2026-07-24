@@ -1892,6 +1892,19 @@ img {
   margin: 0;
 }
 
+.turnstile-box__error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.turnstile-box__error .button {
+  flex: 0 0 auto;
+  min-height: 2rem;
+  padding: 0.3rem 0.65rem;
+}
+
 .guestbook-entry {
   display: grid;
   gap: 0.8rem;

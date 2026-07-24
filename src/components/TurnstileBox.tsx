@@ -17,33 +17,62 @@ declare global {
 }
 
 let turnstileScriptPromise: Promise<TurnstileApi> | null = null;
+const TURNSTILE_SCRIPT_SELECTOR = 'script[data-cha-amu-turnstile]';
+const TURNSTILE_LOAD_TIMEOUT_MS = 12_000;
+
+function discardUninitializedTurnstileScript(): void {
+  if (window.turnstile) return;
+  document.querySelectorAll(TURNSTILE_SCRIPT_SELECTOR).forEach((script) => script.remove());
+  turnstileScriptPromise = null;
+}
 
 function loadTurnstileScript(): Promise<TurnstileApi> {
   if (window.turnstile) return Promise.resolve(window.turnstile);
   if (turnstileScriptPromise) return turnstileScriptPromise;
 
   const promise = new Promise<TurnstileApi>((resolve, reject) => {
-    const finish = () => window.turnstile
-      ? resolve(window.turnstile)
-      : reject(new Error('Turnstile API was not initialized.'));
-    const fail = () => reject(new Error('Turnstile script failed to load.'));
-    const existing = document.querySelector<HTMLScriptElement>('script[data-cha-amu-turnstile]');
+    const existing = document.querySelector<HTMLScriptElement>(TURNSTILE_SCRIPT_SELECTOR);
+    const script = existing ?? document.createElement('script');
+    let settled = false;
+    const cleanup = () => {
+      window.clearTimeout(timeoutId);
+      script.removeEventListener('load', finish);
+      script.removeEventListener('error', fail);
+    };
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      script.dataset.chaAmuTurnstileState = 'loaded';
+      if (window.turnstile) resolve(window.turnstile);
+      else {
+        script.remove();
+        reject(new Error('Turnstile API was not initialized.'));
+      }
+    };
+    const fail = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      script.dataset.chaAmuTurnstileState = 'failed';
+      script.remove();
+      reject(new Error('Turnstile script failed to load.'));
+    };
+    const timeoutId = window.setTimeout(fail, TURNSTILE_LOAD_TIMEOUT_MS);
 
-    if (existing) {
-      existing.addEventListener('load', finish, { once: true });
-      existing.addEventListener('error', fail, { once: true });
-      return;
-    }
-
-    const script = document.createElement('script');
-    script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
-    script.async = true;
-    script.defer = true;
-    script.dataset.chaAmuTurnstile = 'true';
     script.addEventListener('load', finish, { once: true });
     script.addEventListener('error', fail, { once: true });
-    document.head.append(script);
+
+    if (!existing) {
+      script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+      script.async = true;
+      script.defer = true;
+      script.dataset.chaAmuTurnstile = 'true';
+      script.dataset.chaAmuTurnstileState = 'loading';
+      document.head.append(script);
+    }
   }).catch((error) => {
+    discardUninitializedTurnstileScript();
     turnstileScriptPromise = null;
     throw error;
   });
@@ -66,6 +95,7 @@ export function TurnstileBox({
   const widgetIdRef = useRef<string | null>(null);
   const onTokenChangeRef = useRef(onTokenChange);
   const [error, setError] = useState('');
+  const [retryAttempt, setRetryAttempt] = useState(0);
 
   useEffect(() => {
     onTokenChangeRef.current = onTokenChange;
@@ -109,7 +139,7 @@ export function TurnstileBox({
       widgetIdRef.current = null;
       if (widgetId && window.turnstile) window.turnstile.remove(widgetId);
     };
-  }, [action, language, t]);
+  }, [action, language, retryAttempt, t]);
 
   useEffect(() => {
     setError('');
@@ -126,10 +156,24 @@ export function TurnstileBox({
     );
   }
 
+  const retry = () => {
+    setError('');
+    onTokenChangeRef.current('');
+    discardUninitializedTurnstileScript();
+    setRetryAttempt((attempt) => attempt + 1);
+  };
+
   return (
     <div className="turnstile-box">
       <div ref={containerRef} aria-label={t('turnstile.label')} />
-      {error ? <p className="status-message status-message--danger" role="status">{error}</p> : null}
+      {error ? (
+        <div className="turnstile-box__error">
+          <p className="status-message status-message--danger" role="status">{error}</p>
+          <button className="button button--ghost" type="button" onClick={retry}>
+            {t('common.retry')}
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }
