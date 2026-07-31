@@ -12,7 +12,7 @@ import { translate, useI18n } from '../i18n';
 import { refreshPosts, usePublicResource } from '../stores/publicDataStore';
 import { formatDate } from '../utils/date';
 import { postTimestamp } from '../utils/postTimestamp';
-import { readHashId } from '../utils/router';
+import { navigateTo, readHashId } from '../utils/router';
 import { excerpt, normalizeText } from '../utils/strings';
 
 const POSTS_BATCH_SIZE = 10;
@@ -49,6 +49,7 @@ export function PostsPage() {
   const posts = postsResource.items;
   const postsCount = useRef(posts.length);
   const [selectedId, setSelectedId] = useState(() => readHashId());
+  const initialSelectionApplied = useRef(Boolean(selectedId));
   const pendingPostScroll = useRef<PendingPostScroll | null>(selectedId ? { id: selectedId } : null);
   const [postScrollRequest, setPostScrollRequest] = useState(0);
   const [query, setQuery] = useState('');
@@ -91,8 +92,10 @@ export function PostsPage() {
   }, [requestPostScroll]);
 
   useEffect(() => {
-    if (!selectedId && posts[0]) setSelectedId(posts[0].id);
-  }, [posts, selectedId]);
+    if (initialSelectionApplied.current || !posts[0]) return;
+    initialSelectionApplied.current = true;
+    setSelectedId(posts[0].id);
+  }, [posts]);
 
   const tagOptions = useMemo(() => countTagOptions(posts, locale), [locale, posts]);
   const filteredPosts = useMemo(() => {
@@ -116,7 +119,7 @@ export function PostsPage() {
   const selectedIndex = useMemo(() => filteredPosts.findIndex((post) => post.id === selectedId), [filteredPosts, selectedId]);
 
   useEffect(() => {
-    if (!filteredPosts.length || filteredPosts.some((post) => post.id === selectedId)) return;
+    if (!selectedId || !filteredPosts.length || filteredPosts.some((post) => post.id === selectedId)) return;
 
     const pendingId = pendingPostScroll.current?.id;
     const awaitingPendingPost = pendingId === selectedId && !postsResource.loadedAt && !postsResource.error;
@@ -148,6 +151,12 @@ export function PostsPage() {
   const openPost = (id: string) => {
     setSelectedId(id);
     requestPostScroll(id);
+  };
+
+  const closePost = () => {
+    pendingPostScroll.current = null;
+    setSelectedId('');
+    navigateTo(`${window.location.pathname}${window.location.search}`);
   };
 
   const toggleTag = (tag: string) => {
@@ -195,6 +204,11 @@ export function PostsPage() {
                       href={`#${encodeURIComponent(post.id)}`}
                       onClick={(event) => {
                         if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+                        if (expanded) {
+                          event.preventDefault();
+                          closePost();
+                          return;
+                        }
                         openPost(post.id);
                       }}
                     >
