@@ -67,7 +67,7 @@ function youtubeEmbed(value: string): YouTubeEmbed | null {
 
 function renderYoutubeEmbed(embed: YouTubeEmbed): string {
   const title = escapeHtml(embed.title);
-  return `<div class="markdown-video"><iframe src="https://www.youtube-nocookie.com/embed/${embed.id}" title="${title}" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div>`;
+  return `<div class="markdown-video"><button type="button" class="markdown-video__trigger" data-youtube-id="${embed.id}" data-youtube-title="${title}" aria-label="YouTube 영상 재생: ${title}"><img class="markdown-video__thumbnail" src="https://i.ytimg.com/vi/${embed.id}/hqdefault.jpg" alt="" width="480" height="360" loading="eager" decoding="async" /><span class="markdown-video__play" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M9 7.5v9l7-4.5z" /></svg></span></button></div>`;
 }
 
 const INLINE_TOKEN_OPEN = '\uE000';

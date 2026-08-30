@@ -115,18 +115,23 @@ test('Markdown images can request a smaller presentation without changing their 
   assert.match(html, /src="https:\/\/cha-amu\.github\.io\/storage\/assets\/images\/calculation\.png#medium"/);
 });
 
-test('standalone YouTube links render as privacy-enhanced responsive video embeds', async () => {
+test('standalone YouTube links render a poster before loading the privacy-enhanced player', async () => {
   const { renderMarkdown } = await importCompiledSource('src/utils/markdown.ts', 'markdown.js');
   const linked = renderMarkdown('[222123 영상](https://youtu.be/kcu0r7O-TzY)');
   const plain = renderMarkdown('https://www.youtube.com/watch?v=kcu0r7O-TzY');
   const unsafe = renderMarkdown('[영상](https://example.com/watch?v=kcu0r7O-TzY)');
 
   assert.match(linked, /class="markdown-video"/);
-  assert.match(linked, /src="https:\/\/www\.youtube-nocookie\.com\/embed\/kcu0r7O-TzY"/);
-  assert.match(linked, /title="222123 영상"/);
-  assert.match(linked, /loading="lazy"/);
-  assert.match(plain, /youtube-nocookie\.com\/embed\/kcu0r7O-TzY/);
+  assert.match(linked, /class="markdown-video__trigger"/);
+  assert.match(linked, /data-youtube-id="kcu0r7O-TzY"/);
+  assert.match(linked, /data-youtube-title="222123 영상"/);
+  assert.match(linked, /aria-label="YouTube 영상 재생: 222123 영상"/);
+  assert.match(linked, /src="https:\/\/i\.ytimg\.com\/vi\/kcu0r7O-TzY\/hqdefault\.jpg"/);
+  assert.doesNotMatch(linked, /<iframe/);
+  assert.match(plain, /data-youtube-id="kcu0r7O-TzY"/);
+  assert.doesNotMatch(plain, /<iframe/);
   assert.doesNotMatch(unsafe, /<iframe/);
+  assert.doesNotMatch(unsafe, /markdown-video__trigger/);
   assert.match(unsafe, /<a href="https:\/\/example\.com\/watch\?v=kcu0r7O-TzY"/);
 });
 

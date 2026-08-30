@@ -792,7 +792,63 @@ img {
   overflow: hidden;
   border: 2px solid var(--color-ink);
   border-radius: 1rem;
-  background: #000;
+  background: var(--color-soft-primary);
+}
+
+.markdown-video__trigger {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  padding: 0;
+  overflow: hidden;
+  background: var(--color-soft-primary);
+  color: var(--color-ink);
+  cursor: pointer;
+}
+
+.markdown-video__trigger:focus-visible {
+  outline: 3px solid var(--color-primary);
+  outline-offset: -5px;
+}
+
+.markdown-video__thumbnail,
+.markdown-body .markdown-video__thumbnail {
+  display: block;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  object-fit: cover;
+  background: var(--color-soft-primary);
+}
+
+.markdown-video__play {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  width: clamp(3.25rem, 9vw, 4rem);
+  aspect-ratio: 1.35 / 1;
+  place-items: center;
+  border: 2px solid var(--color-ink);
+  border-radius: 0.9rem;
+  background: var(--color-primary);
+  box-shadow: 0 5px 16px rgba(31, 31, 31, 0.2);
+  transform: translate(-50%, -50%);
+}
+
+.markdown-video__trigger:hover .markdown-video__play,
+.markdown-video__trigger:focus-visible .markdown-video__play {
+  background: var(--color-surface);
+}
+
+.markdown-video__play svg {
+  width: 1.65rem;
+  height: 1.65rem;
+  fill: currentColor;
 }
 
 .markdown-video iframe {
