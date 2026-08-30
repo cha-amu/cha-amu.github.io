@@ -28,6 +28,48 @@ function resolveMarkdownUrl(value: string, options: MarkdownOptions): string {
   return trimmed;
 }
 
+interface YouTubeEmbed {
+  id: string;
+  title: string;
+}
+
+function youtubeVideoId(value: string): string | null {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') return null;
+
+    const host = url.hostname.toLowerCase().replace(/^www\./, '');
+    let id = '';
+    if (host === 'youtu.be') {
+      id = url.pathname.split('/').filter(Boolean)[0] || '';
+    } else if (host === 'youtube.com' || host === 'm.youtube.com' || host === 'music.youtube.com' || host === 'youtube-nocookie.com') {
+      if (url.pathname === '/watch') {
+        id = url.searchParams.get('v') || '';
+      } else {
+        const [kind, candidate] = url.pathname.split('/').filter(Boolean);
+        if (kind === 'embed' || kind === 'shorts' || kind === 'live') id = candidate || '';
+      }
+    }
+    return /^[A-Za-z0-9_-]{11}$/.test(id) ? id : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function youtubeEmbed(value: string): YouTubeEmbed | null {
+  const trimmed = value.trim();
+  const markdownLink = /^\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)$/.exec(trimmed);
+  const url = markdownLink?.[2] || trimmed;
+  const id = youtubeVideoId(url);
+  if (!id) return null;
+  return { id, title: markdownLink?.[1].trim() || 'YouTube video' };
+}
+
+function renderYoutubeEmbed(embed: YouTubeEmbed): string {
+  const title = escapeHtml(embed.title);
+  return `<div class="markdown-video"><iframe src="https://www.youtube-nocookie.com/embed/${embed.id}" title="${title}" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div>`;
+}
+
 const INLINE_TOKEN_OPEN = '\uE000';
 const INLINE_TOKEN_CLOSE = '\uE001';
 
@@ -209,6 +251,13 @@ export function renderMarkdown(markdown: string, options: MarkdownOptions = {}):
         index = closingIndex;
         continue;
       }
+    }
+
+    const video = youtubeEmbed(line);
+    if (video) {
+      closeList();
+      html.push(renderYoutubeEmbed(video));
+      continue;
     }
 
     const alignments = index + 1 < lines.length ? tableAlignments(lines[index + 1]) : null;

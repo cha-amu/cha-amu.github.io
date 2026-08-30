@@ -87,6 +87,20 @@ id         선택. 보통 쓰지 않는다. 없으면 posts/... 경로로 자동
 [외부 링크](https://example.com/file.pdf)
 ```
 
+## 유튜브 영상
+
+유튜브 링크를 별도 줄에 두면 포스트 안의 영상 플레이어로 표시된다. 영상 제목을 함께 적는 형식을 권장한다.
+
+```md
+[영상 제목](https://youtu.be/kcu0r7O-TzY)
+```
+
+주소만 한 줄에 적어도 플레이어로 표시된다.
+
+```md
+https://www.youtube.com/watch?v=kcu0r7O-TzY
+```
+
 ## 자료 파일 업로드
 
 이미지는 `assets/images/YYYY/` 아래에 둔다.

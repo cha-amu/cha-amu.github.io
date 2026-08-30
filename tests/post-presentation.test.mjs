@@ -115,6 +115,21 @@ test('Markdown images can request a smaller presentation without changing their 
   assert.match(html, /src="https:\/\/cha-amu\.github\.io\/storage\/assets\/images\/calculation\.png#medium"/);
 });
 
+test('standalone YouTube links render as privacy-enhanced responsive video embeds', async () => {
+  const { renderMarkdown } = await importCompiledSource('src/utils/markdown.ts', 'markdown.js');
+  const linked = renderMarkdown('[222123 영상](https://youtu.be/kcu0r7O-TzY)');
+  const plain = renderMarkdown('https://www.youtube.com/watch?v=kcu0r7O-TzY');
+  const unsafe = renderMarkdown('[영상](https://example.com/watch?v=kcu0r7O-TzY)');
+
+  assert.match(linked, /class="markdown-video"/);
+  assert.match(linked, /src="https:\/\/www\.youtube-nocookie\.com\/embed\/kcu0r7O-TzY"/);
+  assert.match(linked, /title="222123 영상"/);
+  assert.match(linked, /loading="lazy"/);
+  assert.match(plain, /youtube-nocookie\.com\/embed\/kcu0r7O-TzY/);
+  assert.doesNotMatch(unsafe, /<iframe/);
+  assert.match(unsafe, /<a href="https:\/\/example\.com\/watch\?v=kcu0r7O-TzY"/);
+});
+
 test('active editing refreshes an administrator session before the final two-minute window', async () => {
   const source = compileSource('src/utils/adminSessionRefresh.ts', 'adminSessionRefresh.js');
   const { shouldRefreshAdminSession } = await importSource(source);
