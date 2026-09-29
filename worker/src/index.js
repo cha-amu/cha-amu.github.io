@@ -579,20 +579,72 @@ function upstreamPayload(action, body, env, overrides = {}) {
   return payload;
 }
 
-async function callUpstream(action, body, env, fetchImpl, overrides) {
+function recordStorageUpstreamIssue(action, reason, startedAt, response, envelope, requestId) {
+  if (!STORAGE_SYNC_ACTIONS.has(action)) return;
+
+  // Never log URLs, headers, error messages, or request/response bodies: they can
+  // contain credentials, one-time redirect tokens, or unpublished post content.
+  let responseHost = 'unknown';
+  try {
+    const hostname = new URL(response.url).hostname;
+    responseHost = ['script.google.com', 'script.googleusercontent.com', 'accounts.google.com']
+      .includes(hostname) ? hostname : 'other';
+  } catch (_) {
+    // A failed fetch has no response URL.
+  }
+  const mediaType = response?.headers.get('Content-Type')?.split(';')[0].trim().toLowerCase();
+  const contentType = mediaType === 'application/json' ? 'json'
+    : mediaType === 'text/html' ? 'html' : mediaType ? 'other' : 'unknown';
+  const data = envelope?.data;
+
+  const diagnostic = envelope?._syncDiagnostic;
+  const entry = {
+    event: 'storage_sync_upstream',
+    request_id: requestId,
+    action,
+    reason,
+    status: response?.status ?? null,
+    duration_ms: Math.max(0, Date.now() - startedAt),
+    redirected: response?.redirected ?? false,
+    response_host: responseHost,
+    content_type: contentType,
+    upstream_ok: typeof envelope?.ok === 'boolean' ? envelope.ok : null,
+    data_type: Array.isArray(data) ? 'array' : data === null ? 'null' : typeof data,
+    health_response: data?.name === 'cha-amu-api',
+    apps_script_confirmed: diagnostic?.requestId === requestId && diagnostic?.method === 'POST',
+    apps_script_outcome: ['ok', 'error'].includes(diagnostic?.outcome) ? diagnostic.outcome : null,
+    apps_script_error: ['authentication', 'quota', 'permission', 'lock', 'configuration', 'validation', 'other']
+      .includes(diagnostic?.errorCategory) ? diagnostic.errorCategory : null,
+    apps_script_location: /^Code:\d+(?::\d+)?$/.test(diagnostic?.errorLocation || '') ? diagnostic.errorLocation : null
+  };
+  try {
+    const log = reason === 'ok' ? console.info : console.warn;
+    log(JSON.stringify(entry));
+  } catch (_) {
+    // Diagnostic failures must never fail an otherwise valid synchronization.
+  }
+}
+
+async function callUpstream(action, body, env, fetchImpl, overrides, requestId) {
   const url = requireString(env.APPS_SCRIPT_URL, 'APPS_SCRIPT_URL');
+  const startedAt = Date.now();
   let response;
   try {
     response = await fetchImpl(url, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(upstreamPayload(action, body, env, overrides))
+      body: JSON.stringify({
+        ...upstreamPayload(action, body, env, overrides),
+        ...(requestId ? { _syncRequestId: requestId } : {})
+      })
     });
   } catch (_) {
+    recordStorageUpstreamIssue(action, 'request_failed', startedAt, undefined, undefined, requestId);
     throw new GatewayError(502, '원본 API에 연결할 수 없습니다.');
   }
 
   if (!response.ok) {
+    recordStorageUpstreamIssue(action, 'http_error', startedAt, response, undefined, requestId);
     throw new GatewayError(502, '원본 API가 요청을 처리하지 못했습니다.');
   }
 
@@ -600,10 +652,25 @@ async function callUpstream(action, body, env, fetchImpl, overrides) {
   try {
     envelope = JSON.parse(await response.text());
   } catch (_) {
+    recordStorageUpstreamIssue(action, 'invalid_json', startedAt, response, undefined, requestId);
     throw new GatewayError(502, '원본 API 응답 형식이 올바르지 않습니다.');
   }
   if (!envelope || typeof envelope !== 'object' || typeof envelope.ok !== 'boolean') {
+    recordStorageUpstreamIssue(action, 'invalid_envelope', startedAt, response, undefined, requestId);
     throw new GatewayError(502, '원본 API 응답 형식이 올바르지 않습니다.');
+  }
+  if (!envelope.ok) {
+    recordStorageUpstreamIssue(action, 'upstream_rejected', startedAt, response, envelope, requestId);
+  } else if (envelope.data?.name === 'cha-amu-api') {
+    recordStorageUpstreamIssue(action, 'unexpected_health_response', startedAt, response, envelope, requestId);
+  } else if (action.endsWith('.list') && !Array.isArray(envelope.data)) {
+    recordStorageUpstreamIssue(action, 'unexpected_list_shape', startedAt, response, envelope, requestId);
+  } else {
+    recordStorageUpstreamIssue(action, 'ok', startedAt, response, envelope, requestId);
+  }
+  if (requestId) {
+    const { _syncDiagnostic, ...result } = envelope;
+    return result;
   }
   return envelope;
 }
@@ -712,7 +779,10 @@ async function handleThingSave(body, env, dependencies) {
 async function handleStorageSyncAction(action, body, request, env, dependencies) {
   requireTrustedStorageSync(request, env);
   const normalized = normalizeStorageSyncAction(action, body);
-  return callUpstream(action, normalized, env, dependencies.fetch);
+  const providedId = request.headers.get('X-Sync-Request-Id');
+  const requestId = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(providedId || '')
+    ? providedId : dependencies.randomUUID();
+  return callUpstream(action, normalized, env, dependencies.fetch, undefined, requestId);
 }
 
 async function isIpBanned(db, ipHash) {

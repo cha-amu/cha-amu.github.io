@@ -57,17 +57,59 @@ const RATE_LIMITS = {
 };
 
 function doPost(event) {
+  const startedAt = Date.now();
+  let diagnostic = null;
   try {
     const body = parseJson_(event && event.postData && event.postData.contents);
     const action = body.action;
+    if (/^storage\.sync\.(post\.(list|save)|postDeletion\.(list|finalize)|assetOverride\.(list|save|delete))$/.test(action || '') &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(body._syncRequestId || '')) {
+      diagnostic = { requestId: body._syncRequestId, method: 'POST', action };
+      logSyncDiagnostic_(diagnostic, 'received', startedAt);
+    }
     const data = route_(action, body);
-    return json_({ ok: true, data });
+    if (diagnostic) {
+      diagnostic.outcome = 'ok';
+      diagnostic.dataType = Array.isArray(data) ? 'array' : data === null ? 'null' : typeof data;
+      logSyncDiagnostic_(diagnostic, 'completed', startedAt);
+    }
+    return json_(Object.assign({ ok: true, data }, diagnostic ? { _syncDiagnostic: diagnostic } : {}));
   } catch (error) {
-    return json_({ ok: false, error: String(error && error.message ? error.message : error) });
+    if (diagnostic) {
+      diagnostic.outcome = 'error';
+      diagnostic.errorCategory = syncErrorCategory_(error);
+      const location = String(error && error.stack || '').match(/\bCode(?:\.gs|\.js)?:(\d+)(?::(\d+))?/);
+      diagnostic.errorLocation = location ? 'Code:' + location[1] + (location[2] ? ':' + location[2] : '') : null;
+      logSyncDiagnostic_(diagnostic, 'completed', startedAt);
+    }
+    return json_(Object.assign({ ok: false, error: String(error && error.message ? error.message : error) },
+      diagnostic ? { _syncDiagnostic: diagnostic } : {}));
   }
 }
 
+function logSyncDiagnostic_(diagnostic, stage, startedAt) {
+  try {
+    console.log(JSON.stringify(Object.assign({
+      event: 'storage_sync_apps_script', stage, duration_ms: Math.max(0, Date.now() - startedAt)
+    }, diagnostic)));
+  } catch (_) {
+    // Logging must never change a data operation or its response.
+  }
+}
+
+function syncErrorCategory_(error) {
+  const message = String(error && error.message || error || '');
+  if (/authentication|admin session/i.test(message)) return 'authentication';
+  if (/quota|too many|limit exceeded|invoked too/i.test(message)) return 'quota';
+  if (/permission|access denied|not have access|authorization/i.test(message)) return 'permission';
+  if (/lock|timed out/i.test(message)) return 'lock';
+  if (/config|not initialized/i.test(message)) return 'configuration';
+  if (/required|invalid|must |duplicate|permanently deleted/i.test(message)) return 'validation';
+  return 'other';
+}
+
 function doGet(event) {
+  logSyncDiagnostic_({ method: 'GET' }, 'received', Date.now());
   try {
     const action = event && event.parameter && event.parameter.action;
     if (action === 'health') return json_({ ok: true, data: health_() });

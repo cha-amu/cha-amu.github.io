@@ -977,7 +977,8 @@ test('storage sync actions require their bearer and forward no human credentials
     assert.deepEqual(appCalls[0].body, {
       action: testCase.action,
       ...testCase.expected,
-      gatewaySecret: env.GATEWAY_SHARED_SECRET
+      gatewaySecret: env.GATEWAY_SHARED_SECRET,
+      _syncRequestId: CREATED_ID
     });
     const upstream = JSON.stringify(appCalls[0]);
     assert.equal(upstream.includes(env.STORAGE_SYNC_SECRET), false, testCase.action);

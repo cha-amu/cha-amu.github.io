@@ -5,6 +5,21 @@
   "compatibility_date": "2026-07-11",
   "workers_dev": true,
   "preview_urls": false,
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "redact_query_string": true,
+    "logs": {
+      "enabled": true,
+      "invocation_logs": false,
+      "persist": true
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "persist": true
+    }
+  },
   "vars": {
     "ALLOWED_ORIGIN": "https://cha-amu.github.io",
     "TURNSTILE_EXPECTED_HOSTNAME": "cha-amu.github.io"
