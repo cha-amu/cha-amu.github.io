@@ -48,7 +48,7 @@ function SearchResultCard({ result, query, locale, typeLabel }: {
       : result.type === 'wiki' ? '/assets/ui/guestbook-icon.png' : '/assets/ui/archive-icon.png';
 
   return (
-    <a className="search-result" href={result.href} data-native-navigation={result.type === 'wiki' || undefined}>
+    <a className="search-result" href={result.href}>
       <span className={`search-result__thumb ${usesAssetImage ? '' : 'search-result__thumb--icon'}`}>
         <img src={thumbnail} alt="" loading="lazy" />
       </span>

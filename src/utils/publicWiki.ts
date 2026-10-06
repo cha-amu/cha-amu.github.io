@@ -24,7 +24,8 @@ export interface PublicWikiIndex {
   resources: PublicWikiResource[];
 }
 
-export const DEFAULT_WIKI_BASE_URL = 'https://cha-amu.github.io/amuwiki/';
+export const DEFAULT_WIKI_BASE_URL = 'https://cha-amu.github.io/wiki/';
+export const DEFAULT_WIKI_EMBED_URL = 'https://cha-amu.github.io/amuwiki/';
 export const DEFAULT_WIKI_INDEX_URL = 'https://cha-amu.github.io/amuwiki/wiki.json';
 const UNSAFE_TEXT = /[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/u;
 
@@ -74,12 +75,13 @@ export function wikiDocumentUrl(baseUrl: string, id: string): string {
   return `${wikiBaseUrl(baseUrl)}#${encodeURIComponent(id)}`;
 }
 
-export function wikiGraphUrl(baseUrl: string, kind: PublicWikiResource['kind'], id: string, scope: 'local' | 'all'): string {
-  if (!isWikiResourceId(id) || !['post', 'asset'].includes(kind)) return '';
+export function wikiGraphUrl(baseUrl: string, kind: 'doc' | 'post' | 'asset' | 'all', id: string, scope: 'local' | 'all'): string {
+  if (!['doc', 'post', 'asset', 'all'].includes(kind)) return '';
+  if (kind === 'doc' ? !isWikiDocumentId(id) : kind !== 'all' && !isWikiResourceId(id)) return '';
   const url = new URL(wikiBaseUrl(baseUrl));
   url.searchParams.set('embed', 'graph');
-  url.searchParams.set('focus', `${kind}:${id}`);
-  url.searchParams.set('scope', scope);
+  if (kind !== 'all') url.searchParams.set('focus', `${kind}:${id}`);
+  url.searchParams.set('scope', kind === 'all' ? 'all' : scope);
   return url.href;
 }
 

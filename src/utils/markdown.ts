@@ -9,9 +9,15 @@ function escapeHtml(value: string): string {
     .replace(/'/g, '&#39;');
 }
 
-interface MarkdownOptions {
+export interface MarkdownLink {
+  href: string;
+  target?: '_self' | '_blank';
+}
+
+export interface MarkdownOptions {
   baseUrl?: string;
   rootUrl?: string;
+  resolveLink?: (url: string) => MarkdownLink | null;
 }
 
 function resolveMarkdownUrl(value: string, options: MarkdownOptions): string {
@@ -112,6 +118,16 @@ function inlineMarkdown(value: string, options: MarkdownOptions): string {
     return `<img${sizeClass} src="${resolved}" alt="${alt}" loading="lazy" />`;
   });
   output = output.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_match, label: string, url: string) => {
+    if (options.resolveLink) {
+      // inlineMarkdown escaped the source once; restore only those attribute entities
+      // before resolving an actual link. Protected code tokens never enter this path.
+      const entities: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', '#39': "'" };
+      const raw = url.replace(/&(amp|lt|gt|quot|#39);/g, (_entity, name: string) => entities[name]);
+      const link = options.resolveLink(resolveMarkdownUrl(raw, options));
+      if (!link) return '';
+      const target = link.target === '_self' ? '' : ' target="_blank" rel="noreferrer"';
+      return `<a href="${escapeHtml(link.href)}"${target}>${label}</a>`;
+    }
     const resolved = escapeHtml(resolveMarkdownUrl(url, options));
     return `<a href="${resolved}" target="_blank" rel="noreferrer">${label}</a>`;
   });

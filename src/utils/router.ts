@@ -1,4 +1,4 @@
-const CANONICAL_ROUTES = new Set(['/posts', '/things', '/guestbook', '/archive', '/search', '/privacy', '/admin']);
+const CANONICAL_ROUTES = new Set(['/posts', '/things', '/guestbook', '/archive', '/wiki', '/search', '/privacy', '/admin']);
 
 export function isAppPath(pathname: string): boolean {
   return pathname === '/' || CANONICAL_ROUTES.has(pathname.replace(/\/$/, ''));

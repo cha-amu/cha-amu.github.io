@@ -141,13 +141,16 @@ test('iframe and document URLs encode punctuation, Unicode and existing kind pre
   assert.equal(wiki.wikiBaseUrl('javascript:alert(1)'), wiki.DEFAULT_WIKI_BASE_URL);
 });
 
-test('SPA navigation leaves wiki, download and explicit native links to the browser', () => {
+test('SPA navigation keeps wiki documents inside the blog and leaves only legacy/embed endpoints external', () => {
   const previous = globalThis.window;
   globalThis.window = { location: { href: 'https://cha-amu.github.io/posts/', origin: 'https://cha-amu.github.io' } };
   const event = { button: 0, defaultPrevented: false };
   const anchor = (href, attributes = []) => ({ href, target: '', hasAttribute: (key) => attributes.includes(key) });
   try {
     assert.equal(router.isPlainInternalNavigation(event, anchor('https://cha-amu.github.io/posts/#connected')), true);
+    assert.equal(router.isPlainInternalNavigation(event, anchor('https://cha-amu.github.io/wiki/#wiki-one')), true);
+    assert.equal(router.isPlainInternalNavigation(event, anchor('https://cha-amu.github.io/wiki?view=graph')), true);
+    assert.equal(router.canonicalizeUrl('/wiki', '?q=fixture', '#wiki-one'), '/wiki/?q=fixture#wiki-one');
     assert.equal(router.isPlainInternalNavigation(event, anchor('https://cha-amu.github.io/amuwiki/#wiki-one')), false);
     assert.equal(router.isPlainInternalNavigation(event, anchor('https://cha-amu.github.io/amuwiki?view=graph')), false);
     assert.equal(router.isPlainInternalNavigation(event, anchor('http://localhost:5186/amuwiki/')), false);
@@ -156,6 +159,17 @@ test('SPA navigation leaves wiki, download and explicit native links to the brow
     router.navigateTo('/amuwiki/#wiki-one');
     assert.equal(globalThis.window.location.href, 'https://cha-amu.github.io/amuwiki/#wiki-one');
   } finally { globalThis.window = previous; }
+});
+
+test('document and overview maps use the separate embed endpoint while reading links use the blog', () => {
+  const document = new URL(wiki.wikiGraphUrl(wiki.DEFAULT_WIKI_EMBED_URL, 'doc', 'wiki-one', 'local'));
+  assert.equal(document.pathname, '/amuwiki/');
+  assert.equal(document.searchParams.get('focus'), 'doc:wiki-one');
+  const overview = new URL(wiki.wikiGraphUrl(wiki.DEFAULT_WIKI_EMBED_URL, 'all', '', 'local'));
+  assert.equal(overview.searchParams.has('focus'), false);
+  assert.equal(overview.searchParams.get('scope'), 'all');
+  assert.equal(wiki.wikiDocumentUrl(wiki.DEFAULT_WIKI_BASE_URL, 'wiki-one'), 'https://cha-amu.github.io/wiki/#wiki-one');
+  assert.equal(wiki.wikiGraphUrl(wiki.DEFAULT_WIKI_EMBED_URL, 'doc', 'x'.repeat(81), 'local'), '');
 });
 
 test('concurrent consumers share one public fetch and a failed refresh clears previous data', async () => {
@@ -207,13 +221,14 @@ test('only the active iframe at the configured wiki origin can request Escape di
   assert.equal(wiki.isWikiEscapeMessage({ ...event, data: { type: 'other' } }, source, 'http://localhost:5187/amuwiki/'), false);
 });
 
-test('integrated search retains posts/assets and searches public wiki body/tags/sources with native URLs', () => {
+test('integrated search retains posts/assets and links wiki matches to the blog reading route', () => {
   const index = wiki.parsePublicWikiIndex(fixture);
   const posts = [{ id: 'post', title: 'Fixture post', body: 'body', tags: [], createdAt: '2026-10-07' }];
   const assets = [{ id: 'asset', title: 'Fixture asset', path: 'asset.png', fileName: 'asset.png', tags: [] }];
-  const results = search.buildSearchResults(posts, assets, 'fixture', index.documents, 'http://localhost:5186/amuwiki/');
+  const results = search.buildSearchResults(posts, assets, 'fixture', index.documents, 'http://localhost:5186/wiki/');
   assert.deepEqual(results.map((result) => result.type), ['post', 'asset', 'wiki', 'wiki']);
-  assert.equal(results[2].href, 'http://localhost:5186/amuwiki/#wiki-one');
+  assert.equal(results[2].href, 'http://localhost:5186/wiki/#wiki-one');
+  assert.equal(search.buildSearchResults([], [], 'needle', index.documents)[0].href, 'https://cha-amu.github.io/wiki/#wiki-one');
   assert.equal(search.buildSearchResults([], [], 'needle', index.documents).length, 1);
   assert.equal(search.buildSearchResults([], [], 'Fixture source', index.documents).length, 1);
   assert.equal(search.buildSearchResults(posts, assets, '', index.documents).length, 0);

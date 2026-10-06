@@ -1,4 +1,4 @@
-import { DEFAULT_WIKI_INDEX_URL, safeWikiUrl, wikiBaseUrl } from './utils/publicWiki';
+import { DEFAULT_WIKI_BASE_URL, DEFAULT_WIKI_EMBED_URL, DEFAULT_WIKI_INDEX_URL, safeWikiUrl, wikiBaseUrl } from './utils/publicWiki';
 
 const DEFAULT_PRODUCTION_API_URL = 'https://cha-amu-gateway.cha-amu.workers.dev/api';
 const explicitApiUrl = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
@@ -9,7 +9,8 @@ const configuredGatewayUrl = explicitApiUrl || (gatewayBaseUrl
 const gatewayUrl = configuredGatewayUrl || DEFAULT_PRODUCTION_API_URL;
 
 export const config = {
-  wikiBaseUrl: wikiBaseUrl(import.meta.env.VITE_WIKI_BASE_URL),
+  wikiBaseUrl: typeof window === 'undefined' ? DEFAULT_WIKI_BASE_URL : new URL('/wiki/', window.location.origin).href,
+  wikiEmbedUrl: wikiBaseUrl(import.meta.env.VITE_WIKI_EMBED_URL || DEFAULT_WIKI_EMBED_URL),
   wikiIndexUrl: safeWikiUrl(import.meta.env.VITE_WIKI_INDEX_URL) || DEFAULT_WIKI_INDEX_URL,
   apiUrl: gatewayUrl,
   gatewayUrl,

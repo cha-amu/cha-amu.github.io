@@ -1,0 +1,28 @@
+.native-wiki-relations {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1.5px solid var(--color-line);
+  overflow-wrap: anywhere;
+}
+
+.native-wiki-relations h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+}
+
+.native-wiki-relations ul {
+  margin: 0;
+  padding-inline-start: 1.25rem;
+}
+
+.native-wiki-relations li + li {
+  margin-top: 0.4rem;
+}
+
+.native-wiki-relations__meta {
+  margin-inline-start: 0.5rem;
+  color: var(--color-muted);
+  font-size: 0.85rem;
+}

@@ -12,7 +12,7 @@ Object.assign(process.env, {
   VITE_STORAGE_BASE_URL: blogOrigin,
   VITE_STORAGE_POSTS_MANIFEST_URL: `${blogOrigin}/__fixture__/posts.json`,
   VITE_ARCHIVE_MANIFEST_URL: `${blogOrigin}/__fixture__/assets.json`,
-  VITE_WIKI_BASE_URL: `${wikiOrigin}/amuwiki/`,
+  VITE_WIKI_EMBED_URL: `${wikiOrigin}/amuwiki/`,
   VITE_WIKI_INDEX_URL: `${blogOrigin}/__fixture__/wiki.json`
 });
 const posts = ['connected', 'unconnected', 'missing-document', 'missing-resource'].map((id, index) => ({
@@ -46,7 +46,7 @@ function middleware(req, res, next = () => { res.statusCode = 404; res.end(); })
   } else if (url.pathname === '/amuwiki/') {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     // A focus/navigation stub, deliberately not a second graph implementation.
-    res.end(`<!doctype html><html lang="en"><title>Wiki iframe test fixture</title><style>body{font:16px system-ui;background:#f0f7f1;padding:16px;margin:0}a,button{display:block;margin:12px 0}</style><p id="scope"></p><a href="${wikiOrigin}/amuwiki/#wiki-one" target="_top">Wiki fixture document</a><button>Iframe focus target</button><script>document.querySelector('#scope').textContent = new URLSearchParams(location.search).get('scope') || 'Standalone wiki fixture';document.addEventListener('keydown',event=>{if(event.key==='Escape'&&parent!==window)parent.postMessage({type:'amuwiki:escape'},'${blogOrigin}');});</script></html>`);
+    res.end(`<!doctype html><html lang="en"><title>Wiki iframe test fixture</title><style>body{font:16px system-ui;background:#f0f7f1;padding:16px;margin:0}a,button{display:block;margin:12px 0}</style><p id="scope"></p><a href="${blogOrigin}/wiki/#wiki-one" target="_top">Wiki fixture document</a><button>Iframe focus target</button><script>document.querySelector('#scope').textContent = new URLSearchParams(location.search).get('scope') || 'Graph fixture';document.addEventListener('keydown',event=>{if(event.key==='Escape'&&parent!==window)parent.postMessage({type:'amuwiki:escape'},'${blogOrigin}');});</script></html>`);
   } else next();
 }
 

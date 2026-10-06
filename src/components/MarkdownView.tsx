@@ -1,6 +1,6 @@
 import 'katex/dist/katex.min.css';
 import type { MouseEvent } from 'react';
-import { renderMarkdown } from '../utils/markdown';
+import { renderMarkdown, type MarkdownOptions } from '../utils/markdown';
 
 const YOUTUBE_ID = /^[A-Za-z0-9_-]{11}$/;
 
@@ -26,13 +26,15 @@ function activateYoutubeVideo(event: MouseEvent<HTMLDivElement>) {
 export function MarkdownView({
   markdown,
   baseUrl,
-  rootUrl
+  rootUrl,
+  resolveLink
 }: {
   markdown?: string | null;
   baseUrl?: string;
   rootUrl?: string;
+  resolveLink?: MarkdownOptions['resolveLink'];
 }) {
-  const html = renderMarkdown(markdown || '', { baseUrl, rootUrl });
+  const html = renderMarkdown(markdown || '', { baseUrl, rootUrl, resolveLink });
   const hasYoutubeVideo = html.includes('class="markdown-video__trigger"');
 
   return (

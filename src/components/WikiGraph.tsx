@@ -3,13 +3,14 @@ import { createPortal } from 'react-dom';
 import { config } from '../config';
 import { usePublicWiki } from '../hooks/usePublicWiki';
 import { useI18n } from '../i18n';
-import { connectedWikiResource, isWikiEscapeMessage, wikiGraphUrl, type PublicWikiResource } from '../utils/publicWiki';
+import { connectedWikiResource, isWikiEscapeMessage, wikiGraphUrl } from '../utils/publicWiki';
 import { CloseIcon } from './ToolIcons';
 
-type ResourceSelection = { kind: PublicWikiResource['kind']; id: string; title: string };
+type ResourceSelection = { kind: 'doc' | 'post' | 'asset'; id: string; title: string };
+type GraphSelection = ResourceSelection | { kind: 'all'; id: ''; title: string };
 
 function GraphFrame({ resource, scope, onError, onEscape }: {
-  resource: ResourceSelection;
+  resource: GraphSelection;
   scope: 'local' | 'all';
   onError: () => void;
   onEscape?: () => void;
@@ -27,7 +28,7 @@ function GraphFrame({ resource, scope, onError, onEscape }: {
       onEscape();
     };
     const onMessage = (event: MessageEvent) => {
-      if (isWikiEscapeMessage(event, frame.contentWindow, config.wikiBaseUrl)) onEscape();
+      if (isWikiEscapeMessage(event, frame.contentWindow, config.wikiEmbedUrl)) onEscape();
     };
     let frameDocument: Document | null = null;
     const attachFrameKeyDown = () => {
@@ -55,7 +56,7 @@ function GraphFrame({ resource, scope, onError, onEscape }: {
     <iframe
       ref={frameRef}
       className="wiki-graph__frame"
-      src={wikiGraphUrl(config.wikiBaseUrl, resource.kind, resource.id, scope)}
+      src={wikiGraphUrl(config.wikiEmbedUrl, resource.kind, resource.id, scope)}
       title={t(scope === 'local' ? 'wiki.localGraphTitle' : 'wiki.fullGraphTitle', { title: resource.title })}
       name={`amuwiki-${scope}-${frameId}`}
       sandbox="allow-scripts allow-same-origin allow-top-navigation-by-user-activation"
@@ -67,7 +68,7 @@ function GraphFrame({ resource, scope, onError, onEscape }: {
 }
 
 function GraphDialog({ resource, onClose, onError }: {
-  resource: ResourceSelection;
+  resource: GraphSelection;
   onClose: () => void;
   onError: () => void;
 }) {
@@ -118,7 +119,7 @@ function GraphDialog({ resource, onClose, onError }: {
   );
 }
 
-function ConnectedGraph({ resource, placement }: { resource: ResourceSelection; placement: 'sidebar' | 'detail' }) {
+function ConnectedGraph({ resource, placement }: { resource: GraphSelection; placement: 'sidebar' | 'detail' }) {
   const { t } = useI18n();
   const contentId = useId();
   const [expanded, setExpanded] = useState(() => window.matchMedia(`(min-width: ${placement === 'sidebar' ? 1400 : 761}px)`).matches);
@@ -150,12 +151,18 @@ function ConnectedGraph({ resource, placement }: { resource: ResourceSelection; 
   );
 }
 
-export function WikiGraph({ resource, placement = 'sidebar' }: {
+export function WikiGraph({ resource, placement = 'sidebar', showAll = false }: {
   resource: ResourceSelection | null;
   placement?: 'sidebar' | 'detail';
+  showAll?: boolean;
 }) {
-  const wiki = usePublicWiki(Boolean(resource));
-  if (!resource || wiki.status !== 'ready' || !connectedWikiResource(wiki.index, resource.kind, resource.id)) return null;
+  const { t } = useI18n();
+  const wiki = usePublicWiki(Boolean(resource) || showAll);
+  if (wiki.status !== 'ready' || !wiki.index) return null;
+  if (!resource) return showAll ? <ConnectedGraph key="all" resource={{ kind: 'all', id: '', title: t('nav.wiki') }} placement={placement} /> : null;
+  if (resource.kind === 'doc') {
+    if (!wiki.index.documents.some(document => document.id === resource.id)) return null;
+  } else if (!connectedWikiResource(wiki.index, resource.kind, resource.id)) return null;
   // Remount on selection changes: disclosure, frame errors and the dialog belong
   // to one resource and cannot flash the previous selection while data loads.
   return <ConnectedGraph key={`${resource.kind}:${resource.id}`} resource={resource} placement={placement} />;
