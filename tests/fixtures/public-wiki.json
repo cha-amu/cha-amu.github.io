@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "generatedAt": "2026-10-07T00:00:00Z",
+  "documents": [
+    { "id": "wiki-one", "title": "Fixture 연결 문서", "kind": "concept", "tags": ["fixture"], "body": "공개 문서 검색 본문 needle", "links": [{ "target": "wiki-two", "type": "related" }], "sources": [{ "label": "Fixture source", "url": "https://example.com/source" }], "updated": "2026-10-07" },
+    { "id": "wiki-two", "title": "Fixture 두 번째 문서", "kind": "question", "tags": ["fixture"], "body": "독립된 검색 문서", "links": [], "sources": [], "updated": "2026-10-07" }
+  ],
+  "resources": [
+    { "kind": "post", "id": "connected", "title": "Fixture 연결 글", "url": "https://cha-amu.github.io/posts/#connected", "documentIds": ["wiki-one"] },
+    { "kind": "post", "id": "unconnected", "title": "Fixture 미연결 글", "url": "https://cha-amu.github.io/posts/#unconnected", "documentIds": [] },
+    { "kind": "post", "id": "missing-document", "title": "Fixture 없는 문서 참조", "url": "https://cha-amu.github.io/posts/#missing-document", "documentIds": ["not-in-public-index"] },
+    { "kind": "asset", "id": "connected-asset", "title": "Fixture 연결 자료", "url": "https://cha-amu.github.io/archive/#connected-asset", "documentIds": ["wiki-one"] }
+  ]
+}

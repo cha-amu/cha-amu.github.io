@@ -5,6 +5,7 @@ import { IncrementalLoadMore } from '../components/IncrementalLoadMore';
 import { MarkdownView } from '../components/MarkdownView';
 import { EmptyState, ErrorState, LoadingState } from '../components/PageState';
 import { TagList } from '../components/TagList';
+import { WikiGraph } from '../components/WikiGraph';
 import { TagFilterPanel, countTagOptions } from '../components/TagFilterPanel';
 import { useIncrementalItems } from '../hooks/useIncrementalItems';
 import { useI18n } from '../i18n';
@@ -125,6 +126,8 @@ export function ArchivePage() {
 
     const frame = window.requestAnimationFrame(() => modalCloseRef.current?.focus());
     const onKeyDown = (event: KeyboardEvent) => {
+      // A native graph dialog sits above this modal. Let it own Tab/Escape.
+      if (event.defaultPrevented || document.querySelector('dialog[data-wiki-graph-dialog][open]')) return;
       if (event.key === 'Escape') {
         event.preventDefault();
         closeAsset();
@@ -133,8 +136,8 @@ export function ArchivePage() {
       if (event.key !== 'Tab') return;
 
       const focusable = Array.from(modalRef.current?.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-      ) || []).filter((element) => !element.hasAttribute('hidden'));
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), iframe, [tabindex]:not([tabindex="-1"])'
+      ) || []).filter((element) => !element.closest('[hidden]'));
       if (!focusable.length) return;
 
       const first = focusable[0];
@@ -238,6 +241,7 @@ export function ArchivePage() {
                 <img src={modalAsset.imageUrl} alt={modalAsset.title} />
               )}
               {modalAsset.description ? <MarkdownView markdown={modalAsset.description} baseUrl={modalAsset.markdownBaseUrl} rootUrl={modalAsset.markdownRootUrl} /> : null}
+              <WikiGraph resource={{ kind: 'asset', id: modalAsset.id, title: modalAsset.title }} placement="detail" />
               <TagList tags={modalAsset.tags} />
               {modalAsset.sourceUrl ? <p className="meta"><a href={modalAsset.sourceUrl} target="_blank" rel="noreferrer">{t('common.source')}</a></p> : null}
               <p className="meta">{modalAsset.path}</p>

@@ -11,6 +11,8 @@ import type { SearchResult } from '../types';
 import { formatDate } from '../utils/date';
 import { buildSearchResults } from '../utils/search';
 import { useI18n } from '../i18n';
+import { config } from '../config';
+import { refreshPublicWiki, usePublicWiki } from '../hooks/usePublicWiki';
 
 const POST_RESULTS_BATCH_SIZE = 10;
 const ARCHIVE_RESULTS_BATCH_SIZE = 24;
@@ -42,10 +44,11 @@ function SearchResultCard({ result, query, locale, typeLabel }: {
   const usesAssetImage = result.type === 'asset' && result.kind !== 'file' && result.imageUrl;
   const thumbnail = usesAssetImage
     ? result.imageUrl
-    : result.type === 'post' ? '/assets/ui/posts-icon.png' : '/assets/ui/archive-icon.png';
+    : result.type === 'post' ? '/assets/ui/posts-icon.png'
+      : result.type === 'wiki' ? '/assets/ui/guestbook-icon.png' : '/assets/ui/archive-icon.png';
 
   return (
-    <a className="search-result" href={result.href}>
+    <a className="search-result" href={result.href} data-native-navigation={result.type === 'wiki' || undefined}>
       <span className={`search-result__thumb ${usesAssetImage ? '' : 'search-result__thumb--icon'}`}>
         <img src={thumbnail} alt="" loading="lazy" />
       </span>
@@ -68,14 +71,16 @@ export function SearchPage() {
   const query = getQuery();
   const postsResource = usePublicResource('posts');
   const archiveResource = usePublicResource('archive');
-  const hasUsableData = postsResource.items.length > 0 || archiveResource.items.length > 0;
-  const isLoading = !hasUsableData && (postsResource.status === 'loading' || archiveResource.status === 'loading');
-  const error = !hasUsableData && (postsResource.error || archiveResource.error);
+  const wiki = usePublicWiki();
+  const isLoading = [postsResource.status, archiveResource.status, wiki.status]
+    .some((status) => status === 'loading' || status === 'idle') || postsResource.refreshing || archiveResource.refreshing;
+  const hasError = Boolean(postsResource.error || archiveResource.error || wiki.status === 'error');
 
   const load = () => {
     void Promise.all([
       refreshPosts({ force: true, silent: postsResource.items.length > 0 }),
-      refreshArchive({ force: true, silent: archiveResource.items.length > 0 })
+      refreshArchive({ force: true, silent: archiveResource.items.length > 0 }),
+      refreshPublicWiki(true)
     ]).catch(() => undefined);
   };
 
@@ -85,13 +90,15 @@ export function SearchPage() {
   }, []);
 
   const results: SearchResult[] = useMemo(
-    () => buildSearchResults(postsResource.items, archiveResource.items, query),
-    [postsResource.items, archiveResource.items, query]
+    () => buildSearchResults(postsResource.items, archiveResource.items, query, wiki.index?.documents, config.wikiBaseUrl),
+    [postsResource.items, archiveResource.items, query, wiki.index]
   );
   const postResults = useMemo(() => results.filter((result) => result.type === 'post'), [results]);
   const archiveResults = useMemo(() => results.filter((result) => result.type === 'asset'), [results]);
+  const wikiResults = useMemo(() => results.filter((result) => result.type === 'wiki'), [results]);
   const postsList = useIncrementalItems(postResults, POST_RESULTS_BATCH_SIZE);
   const archiveList = useIncrementalItems(archiveResults, ARCHIVE_RESULTS_BATCH_SIZE);
+  const wikiList = useIncrementalItems(wikiResults, POST_RESULTS_BATCH_SIZE);
 
   return (
     <AppLayout>
@@ -102,13 +109,14 @@ export function SearchPage() {
       {query ? (
         <div className="search-summary">
           <p className="meta">{t('search.queryLabel')} <strong>{query}</strong></p>
-          {!isLoading && !error ? <p className="result-count" aria-live="polite">{t('search.total', { count: results.length })}</p> : null}
+          <p className="result-count" aria-live="polite">{t(isLoading || hasError ? 'search.partialTotal' : 'search.total', { count: results.length })}</p>
         </div>
       ) : <p className="meta">{t('search.help')}</p>}
-      {postsResource.refreshing || archiveResource.refreshing ? <p className="meta">{t('search.refreshing')}</p> : null}
-      {isLoading ? <LoadingState /> : null}
-      {error ? <ErrorState message={error} onRetry={load} /> : null}
-      {!isLoading && !error && query && !results.length ? <EmptyState label={t('search.empty')} /> : null}
+      {isLoading ? <LoadingState label={t('search.refreshing')} /> : null}
+      {postsResource.error ? <ErrorState message={t('search.sourceFailed', { source: t('nav.posts') })} onRetry={load} /> : null}
+      {archiveResource.error ? <ErrorState message={t('search.sourceFailed', { source: t('nav.archive') })} onRetry={load} /> : null}
+      {wiki.status === 'error' ? <ErrorState message={t('search.sourceFailed', { source: t('nav.wiki') })} onRetry={() => { void refreshPublicWiki(true); }} /> : null}
+      {!isLoading && !hasError && query && !results.length ? <EmptyState label={t('search.empty')} /> : null}
       {results.length ? (
         <section className="search-results" aria-label={t('search.results')}>
           {postResults.length ? (
@@ -138,6 +146,21 @@ export function SearchPage() {
                 hasMore={archiveList.hasMore}
                 label={t('search.loadMoreArchive', { count: Math.min(ARCHIVE_RESULTS_BATCH_SIZE, archiveList.totalCount - archiveList.shownCount) })}
                 onLoadMore={archiveList.loadMore}
+              />
+            </section>
+          ) : null}
+          {wikiResults.length ? (
+            <section className="search-result-group" aria-labelledby="search-wiki-results">
+              <h2 id="search-wiki-results">{t('search.wikiGroup', { count: wikiResults.length })}</h2>
+              <div className="search-result-list">
+                {wikiList.visibleItems.map((result) => (
+                  <SearchResultCard result={result} query={query} locale={locale} typeLabel={t('nav.wiki')} key={result.id} />
+                ))}
+              </div>
+              <IncrementalLoadMore
+                hasMore={wikiList.hasMore}
+                label={t('search.loadMoreWiki', { count: Math.min(POST_RESULTS_BATCH_SIZE, wikiList.totalCount - wikiList.shownCount) })}
+                onLoadMore={wikiList.loadMore}
               />
             </section>
           ) : null}

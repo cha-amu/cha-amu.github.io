@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { useI18n } from '../i18n';
 
 export interface TagOption {
@@ -21,6 +21,7 @@ interface TagFilterPanelProps {
   selectedTags: string[];
   onToggleTag: (tag: string) => void;
   onClearTags: () => void;
+  before?: ReactNode;
 }
 
 const COLLAPSED_TAG_LIMIT = 12;
@@ -30,7 +31,8 @@ export function TagFilterPanel({
   tags,
   selectedTags,
   onToggleTag,
-  onClearTags
+  onClearTags,
+  before
 }: TagFilterPanelProps) {
   const { t } = useI18n();
   const [expanded, setExpanded] = useState(false);
@@ -43,6 +45,7 @@ export function TagFilterPanel({
 
   return (
     <aside className="tag-panel" aria-label={t('tags.filter', { label })}>
+      {before}
       <div className="tag-panel__head">
         <h2>{t('tags.label')}</h2>
         <span>{t('common.count', { count: tags.length })}</span>

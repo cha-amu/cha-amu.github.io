@@ -1,6 +1,6 @@
 import { useCallback, useSyncExternalStore } from 'react';
 
-export type LanguagePreference = 'auto' | 'ko' | 'en';
+export type LanguagePreference = 'auto' | 'ko' | 'en' | 'ja';
 export type AppLanguage = Exclude<LanguagePreference, 'auto'>;
 
 const STORAGE_KEY = 'cha-amu:language-preference:v1';
@@ -12,6 +12,13 @@ const ko = {
   'nav.things': '아무거',
   'nav.archive': '자료',
   'nav.guestbook': '방명록',
+  'nav.wiki': '아무위키',
+  'wiki.related': '연결 지도',
+  'wiki.expand': '확대',
+  'wiki.closeGraph': '연결 지도 닫기',
+  'wiki.graphFor': '{title} · 전체 연결 지도',
+  'wiki.localGraphTitle': '{title}의 위키 연결 지도',
+  'wiki.fullGraphTitle': '{title}에서 이어지는 전체 위키 지도',
   'nav.search': '검색',
   'nav.settings': '설정',
   'nav.privacy': '개인정보처리방침',
@@ -48,6 +55,7 @@ const ko = {
   'settings.auto': '자동',
   'settings.korean': '한국어',
   'settings.english': 'English',
+  'settings.japanese': '日本語',
   'tags.label': '태그',
   'tags.filter': '{label} 태그 필터',
   'tags.collapse': '태그 접기',
@@ -86,7 +94,11 @@ const ko = {
   'things.open': '{title} 새 창에서 열기',
   'search.pageTitle': '통합 검색',
   'search.queryLabel': '검색어:',
-  'search.help': '아무 글과 자료를 검색합니다. 방명록은 제외합니다.',
+  'search.help': '아무 글, 자료, 공개 위키 문서를 검색합니다. 방명록은 제외합니다.',
+  'search.partialTotal': '현재 확인된 결과 {count}개',
+  'search.sourceFailed': '{source} 검색 데이터를 불러오지 못했습니다.',
+  'search.wikiGroup': '아무위키 {count}개',
+  'search.loadMoreWiki': '위키 문서 {count}개 더보기',
   'search.refreshing': '최신 검색 데이터 확인 중',
   'search.empty': '검색 결과가 없습니다.',
   'search.results': '검색 결과',
@@ -331,6 +343,13 @@ const en: Record<TranslationKey, string> = {
   'nav.things': 'Things',
   'nav.archive': 'Archive',
   'nav.guestbook': 'Guestbook',
+  'nav.wiki': 'Wiki',
+  'wiki.related': 'Connections',
+  'wiki.expand': 'Expand',
+  'wiki.closeGraph': 'Close connection map',
+  'wiki.graphFor': '{title} · Full connection map',
+  'wiki.localGraphTitle': 'Wiki connections for {title}',
+  'wiki.fullGraphTitle': 'Full wiki map focused on {title}',
   'nav.search': 'Search',
   'nav.settings': 'Settings',
   'nav.privacy': 'Privacy policy',
@@ -367,6 +386,7 @@ const en: Record<TranslationKey, string> = {
   'settings.auto': 'Auto',
   'settings.korean': '한국어',
   'settings.english': 'English',
+  'settings.japanese': '日本語',
   'tags.label': 'Tags',
   'tags.filter': '{label} tag filters',
   'tags.collapse': 'Show fewer tags',
@@ -405,7 +425,11 @@ const en: Record<TranslationKey, string> = {
   'things.open': 'Open {title} in a new tab',
   'search.pageTitle': 'Site search',
   'search.queryLabel': 'Query:',
-  'search.help': 'Searches posts and the archive. Guestbook entries are excluded.',
+  'search.help': 'Search posts, the archive, and public wiki documents. Guestbook entries are excluded.',
+  'search.partialTotal': '{count} results found so far',
+  'search.sourceFailed': 'Could not load search data for {source}.',
+  'search.wikiGroup': 'Wiki ({count})',
+  'search.loadMoreWiki': 'Load more wiki documents ({count})',
   'search.refreshing': 'Checking for updated search data',
   'search.empty': 'No search results.',
   'search.results': 'Search results',
@@ -639,13 +663,31 @@ const en: Record<TranslationKey, string> = {
   'admin.hide.processing': 'Working'
 };
 
+// Existing untranslated screens retain their English fallback.
+const ja: Record<TranslationKey, string> = {
+  ...en,
+  'nav.wiki': 'Wiki',
+  'wiki.related': 'つながりマップ',
+  'wiki.expand': '拡大',
+  'wiki.closeGraph': 'つながりマップを閉じる',
+  'wiki.graphFor': '{title} · 全体のつながりマップ',
+  'wiki.localGraphTitle': '{title}のWikiつながりマップ',
+  'wiki.fullGraphTitle': '{title}を中心としたWiki全体マップ',
+  'search.help': '記事、資料、公開Wiki文書を検索します。ゲストブックは対象外です。',
+  'search.partialTotal': '確認できた検索結果 {count}件',
+  'search.sourceFailed': '{source}の検索データを読み込めませんでした。',
+  'search.wikiGroup': 'Wiki（{count}件）',
+  'search.loadMoreWiki': 'Wiki文書をさらに{count}件表示',
+  'settings.japanese': '日本語'
+};
+
 type LanguageSnapshot = {
   preference: LanguagePreference;
   language: AppLanguage;
 };
 
 function isLanguagePreference(value: unknown): value is LanguagePreference {
-  return value === 'auto' || value === 'ko' || value === 'en';
+  return value === 'auto' || value === 'ko' || value === 'en' || value === 'ja';
 }
 
 function readPreference(): LanguagePreference {
@@ -665,6 +707,7 @@ function detectBrowserLanguage(): AppLanguage {
     const language = String(value || '').toLowerCase();
     if (language === 'ko' || language.startsWith('ko-')) return 'ko';
     if (language === 'en' || language.startsWith('en-')) return 'en';
+    if (language === 'ja' || language.startsWith('ja-')) return 'ja';
   }
   return 'en';
 }
@@ -719,7 +762,7 @@ function interpolate(template: string, params: TranslationParams = {}) {
 }
 
 export function translateFor(language: AppLanguage, key: TranslationKey, params?: TranslationParams) {
-  return interpolate((language === 'ko' ? ko : en)[key], params);
+  return interpolate((language === 'ko' ? ko : language === 'ja' ? ja : en)[key], params);
 }
 
 export function translate(key: TranslationKey, params?: TranslationParams) {
@@ -741,7 +784,7 @@ export function getResolvedLanguage() {
 }
 
 export function getLanguageLocale(language: AppLanguage = snapshot.language) {
-  return language === 'ko' ? 'ko-KR' : 'en-US';
+  return language === 'ko' ? 'ko-KR' : language === 'ja' ? 'ja-JP' : 'en-US';
 }
 
 export function formatLocalizedNumber(value: number, language: AppLanguage = snapshot.language) {

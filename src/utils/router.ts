@@ -1,5 +1,9 @@
 const CANONICAL_ROUTES = new Set(['/posts', '/things', '/guestbook', '/archive', '/search', '/privacy', '/admin']);
 
+export function isAppPath(pathname: string): boolean {
+  return pathname === '/' || CANONICAL_ROUTES.has(pathname.replace(/\/$/, ''));
+}
+
 export interface AppLocation {
   pathname: string;
   search: string;
@@ -46,7 +50,7 @@ export function notifyRouteChange() {
 
 export function navigateTo(url: string, options: { replace?: boolean } = {}) {
   const target = new URL(url, window.location.href);
-  if (target.origin !== window.location.origin) {
+  if (target.origin !== window.location.origin || !isAppPath(target.pathname)) {
     window.location.href = target.href;
     return;
   }
@@ -65,6 +69,7 @@ export function isPlainInternalNavigation(event: MouseEvent, anchor: HTMLAnchorE
   if (event.button !== 0) return false;
   if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return false;
   if (anchor.target && anchor.target !== '_self') return false;
+  if (anchor.hasAttribute('download') || anchor.hasAttribute('data-native-navigation')) return false;
   const url = new URL(anchor.href, window.location.href);
-  return url.origin === window.location.origin;
+  return url.origin === window.location.origin && isAppPath(url.pathname);
 }

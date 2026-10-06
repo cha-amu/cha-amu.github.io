@@ -1,6 +1,7 @@
 import type { ArchiveAsset, Post, SearchResult } from '../types';
 import { postTimestamp } from './postTimestamp';
 import { normalizeText } from './strings';
+import { DEFAULT_WIKI_BASE_URL, wikiDocumentUrl, type PublicWikiDocument } from './publicWiki';
 
 const SEARCH_SNIPPET_LENGTH = 180;
 
@@ -34,7 +35,7 @@ function matchedSnippet(values: unknown[], query: string, fallbackValues: unknow
   return fallbackSnippet(fallbackValues);
 }
 
-export function buildSearchResults(posts: Post[], assets: ArchiveAsset[], query: string): SearchResult[] {
+export function buildSearchResults(posts: Post[], assets: ArchiveAsset[], query: string, documents: PublicWikiDocument[] = [], wikiBaseUrl = DEFAULT_WIKI_BASE_URL): SearchResult[] {
   const q = normalizeText(query);
   if (!q) return [];
 
@@ -74,5 +75,17 @@ export function buildSearchResults(posts: Post[], assets: ArchiveAsset[], query:
     }
   }
 
+  for (const document of documents) {
+    if (!matches([document.title, document.body, ...document.tags, ...document.sources.map((source) => source.label)])) continue;
+    results.push({
+      id: document.id,
+      type: 'wiki',
+      title: document.title,
+      excerpt: matchedSnippet([document.body], q, [document.body]),
+      tags: document.tags,
+      href: wikiDocumentUrl(wikiBaseUrl, document.id),
+      date: document.updated || undefined
+    });
+  }
   return results;
 }

@@ -96,7 +96,7 @@ export interface AssetOverride {
 
 export interface SearchResult {
   id: string;
-  type: 'post' | 'asset';
+  type: 'post' | 'asset' | 'wiki';
   title: string;
   excerpt: string;
   tags: string[];

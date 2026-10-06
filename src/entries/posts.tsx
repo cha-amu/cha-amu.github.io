@@ -6,6 +6,7 @@ import { ErrorState, LoadingState, EmptyState } from '../components/PageState';
 import { IncrementalLoadMore } from '../components/IncrementalLoadMore';
 import { MarkdownView } from '../components/MarkdownView';
 import { TagList } from '../components/TagList';
+import { WikiGraph } from '../components/WikiGraph';
 import { TagFilterPanel, countTagOptions } from '../components/TagFilterPanel';
 import { useIncrementalItems } from '../hooks/useIncrementalItems';
 import { translate, useI18n } from '../i18n';
@@ -233,6 +234,7 @@ export function PostsPage() {
               />
             </section>
             <TagFilterPanel
+              before={<WikiGraph resource={selectedPost ? { kind: 'post', id: selectedPost.id, title: selectedPost.title } : null} />}
               label={t('posts.title')}
               tags={tagOptions}
               selectedTags={selectedTags}

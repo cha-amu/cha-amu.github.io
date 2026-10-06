@@ -1,13 +1,8 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
-import { type TranslationKey, useI18n } from '../i18n';
+import { useI18n } from '../i18n';
 import { SiteTools } from './SiteTools';
+import { mainMenuItems } from './mainMenu';
 import '../styles/global.css';
-
-const navItems = [
-  { href: '/posts/', labelKey: 'nav.posts', icon: '/assets/ui/posts-icon.png' },
-  { href: '/archive/', labelKey: 'nav.archive', icon: '/assets/ui/archive-icon.png' },
-  { href: '/things/', labelKey: 'nav.things', icon: 'https://cha-amu.github.io/storage/assets/images/2026/아무거--아이콘+사이트+앱--파스텔_돌_캐릭터.png' }
-] satisfies Array<{ href: string; labelKey: TranslationKey; icon: string }>;
 
 const HEADER_COMPACT_DISTANCE = 112;
 
@@ -20,8 +15,8 @@ function MainNav({ className = '', label }: { className?: string; label?: string
   const path = currentPath();
   return (
     <nav className={`main-nav ${className}`.trim()} aria-label={label || t('aria.mainMenu')}>
-      {navItems.map((item) => (
-        <a key={item.href} href={item.href} aria-label={t(item.labelKey)} aria-current={path === item.href ? 'page' : undefined}>
+      {mainMenuItems.map((item) => (
+        <a key={item.href} href={item.href} data-native-navigation={item.native || undefined} aria-label={t(item.labelKey)} aria-current={path === item.href ? 'page' : undefined}>
           <img src={item.icon} alt="" />
           <span>{t(item.labelKey)}</span>
         </a>

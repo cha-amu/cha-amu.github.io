@@ -33,6 +33,16 @@ Copy `.env.example` to `.env` for local configuration.
 
 Only public frontend values go into Vite env files. Secrets belong in GitHub Actions Secrets and Apps Script Properties.
 
+## Public wiki integration
+
+`VITE_WIKI_BASE_URL` defaults to `https://cha-amu.github.io/amuwiki/` and `VITE_WIKI_INDEX_URL` to `https://cha-amu.github.io/amuwiki/wiki.json`. Override both with absolute HTTP(S) URLs when previewing the independent wiki locally. Wiki links use native navigation, including when the blog and wiki share an origin.
+
+Only the version 1 public index is fetched, without credentials or persisted caching. A post/asset graph appears only when its exact `kind` and `id` match a resource whose `documentIds` contain an existing public document. Tags never create relationships. Invalid entries are excluded; failed or invalid index requests hide graphs and report a partial search result. Graph rendering belongs to the wiki iframe; this repo does not contain a graph implementation or publish wiki documents.
+
+The iframe receives `?embed=graph&focus=post:<id>&scope=local` (or `asset:<id>`); the overlay uses `scope=all`. Document links in the wiki embed must target `_top`. For Escape while focused inside a cross-origin iframe, the wiki embed must send `parent.postMessage({ type: 'amuwiki:escape' }, '<blog origin>')` on `keydown` with `key === 'Escape'`. The blog accepts this only from the active iframe and the configured wiki origin. Same-origin embeds also have a direct Escape listener.
+
+Run `npm test` and `npm run build` for validation. `node tests/wiki-preview.mjs` serves disposable blog/index/iframe fixtures at `http://localhost:5186/`, with no production data or writes. `WIKI_FIXTURE_CROSS_ORIGIN=1` serves the iframe on port 5187; `WIKI_FIXTURE_MODE=empty` or `error` checks empty/failed indexes. The iframe fixture is a focus/navigation stub, so actual graph rendering must be checked against the independent wiki app during integration. Check `/posts/#connected`, `#unconnected`, `#missing-document`, `#missing-resource`, `/archive/#connected-asset`, and `/search/?q=fixture`; verify modal Tab/Escape, focus return, unchanged scroll, and native wiki navigation.
+
 
 ## Deployment / 운영
 
