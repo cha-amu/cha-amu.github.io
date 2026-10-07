@@ -184,8 +184,10 @@ img {
 .main-nav--compact {
   position: absolute;
   top: 0;
+  /* Span the logo row, so the tiles share its centre line with the logo and
+     the tool buttons at every width (the row is shorter than 42px on phones). */
+  bottom: 0;
   left: calc(40px + 0.55rem);
-  height: var(--site-tools-row-height);
   gap: 0.4rem;
   opacity: var(--header-compact-nav-opacity);
   pointer-events: none;
