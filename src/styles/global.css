@@ -672,16 +672,20 @@ img {
   height: var(--control-height);
   border: 2px solid var(--color-ink);
   border-radius: var(--radius-control);
-  background: var(--color-surface);
+  /* Safari keeps its square native popup unless the default look is removed;
+     the chevron is Lucide chevron-down, like the rest of the blog's icons. */
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--color-surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231f1f1f' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 0.75rem center / 16px 16px;
   color: var(--color-ink);
-  padding: 0.5rem 0.75rem;
+  padding: 0 2.25rem 0 0.9rem;
   font-weight: 800;
   cursor: pointer;
 }
 
 .archive-sort select:hover,
 .archive-sort select:focus-visible {
-  background: var(--color-soft-primary);
+  background-color: var(--color-soft-primary);
 }
 
 .filter-reset,
