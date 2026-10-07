@@ -180,6 +180,7 @@ export function ArchivePage() {
         shownCount={shownCount}
         totalCount={totalCount}
         filtered={Boolean(query.trim() || selectedTags.length)}
+        ready={archiveResource.status === 'ready'}
         onQueryChange={setQuery}
         onReset={resetFilters}
       >

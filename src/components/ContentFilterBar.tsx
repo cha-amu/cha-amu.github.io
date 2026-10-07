@@ -18,6 +18,7 @@ export function ContentFilterBar({
   shownCount,
   totalCount,
   filtered,
+  ready = true,
   onQueryChange,
   onReset,
   children
@@ -29,6 +30,8 @@ export function ContentFilterBar({
   shownCount: number;
   totalCount: number;
   filtered: boolean;
+  /** False while the list is still loading, so no count of 0 is announced. */
+  ready?: boolean;
   onQueryChange: (value: string) => void;
   onReset: () => void;
   children?: ReactNode;
@@ -41,7 +44,7 @@ export function ContentFilterBar({
       {children}
       <div className="content-filter-bar__status">
         <span className="result-count" aria-live="polite">
-          {shownCount === totalCount ? t('common.showing', { count: totalCount }) : t('common.showingOf', { total: totalCount, shown: shownCount })}
+          {!ready ? '' : shownCount === totalCount ? t('common.showing', { count: totalCount }) : t('common.showingOf', { total: totalCount, shown: shownCount })}
         </span>
         {filtered ? <button className="filter-reset" type="button" onClick={onReset}>{t('common.reset')}</button> : null}
         {trimmed ? <a className="filter-link" href={siteSearchHref(trimmed)}>{t('search.everywhere')}</a> : null}
