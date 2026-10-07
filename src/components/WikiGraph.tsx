@@ -13,7 +13,7 @@ import {
 } from '../utils/publicWiki';
 import { isAppPath, navigateTo } from '../utils/router';
 import { nativeWikiDocumentUrl } from '../utils/wikiContent';
-import { CloseIcon } from './ToolIcons';
+import { ChevronDownIcon, CloseIcon, MaximizeIcon } from './ToolIcons';
 import '../styles/wiki.css';
 
 type ResourceSelection = { kind: 'doc' | 'post' | 'asset'; id: string; title: string };
@@ -228,6 +228,8 @@ function ConnectedGraph({ resource, placement, allowedKeys }: {
 }) {
   const { t } = useI18n();
   const contentId = useId();
+  const headingId = useId();
+  const Heading = placement === 'detail' ? 'h3' : 'h2';
   const [expanded, setExpanded] = useState(() => window.matchMedia(`(min-width: ${placement === 'sidebar' ? 1400 : 761}px)`).matches);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -235,22 +237,26 @@ function ConnectedGraph({ resource, placement, allowedKeys }: {
   if (failed) return null;
 
   return (
-    <section className="wiki-graph" aria-label={t('wiki.related')}>
+    <section className="wiki-graph" aria-labelledby={headingId}>
       <div className="wiki-graph__head">
-        <button
-          className="wiki-graph__toggle"
-          type="button"
-          aria-expanded={expanded}
-          aria-controls={contentId}
-          onClick={() => setExpanded((current) => !current)}
-        >
-          <span aria-hidden="true">{expanded ? '−' : '+'}</span> {t('wiki.related')}
-        </button>
+        <Heading className="wiki-graph__heading" id={headingId}>
+          <button
+            className="wiki-graph__toggle"
+            type="button"
+            aria-expanded={expanded}
+            aria-controls={contentId}
+            onClick={() => setExpanded((current) => !current)}
+          >
+            <ChevronDownIcon className="wiki-graph__chevron" />
+            {t('wiki.related')}
+          </button>
+        </Heading>
         <button className="wiki-graph__expand" type="button" aria-haspopup="dialog" onClick={() => setDialogOpen(true)}>
+          <MaximizeIcon className="wiki-graph__expand-icon" />
           {t('wiki.expand')}
         </button>
       </div>
-      <div id={contentId} hidden={!expanded}>
+      <div id={contentId} className="wiki-graph__body" hidden={!expanded}>
         {expanded ? <GraphFrame resource={resource} scope="local" compact allowedKeys={allowedKeys} onError={() => setFailed(true)} /> : null}
       </div>
       {dialogOpen ? <GraphDialog resource={resource} allowedKeys={allowedKeys} onClose={closeDialog} onError={() => setFailed(true)} /> : null}

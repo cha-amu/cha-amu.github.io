@@ -4,7 +4,7 @@ type IconProps = {
 
 // Icon paths are from Lucide Static v1.23.0 (ISC License):
 // search, book-open-text, sliders-horizontal, x, arrow-up, chevron-down, trash-2,
-// log-out, eye-off, rotate-ccw, shield-ban, shield-check.
+// log-out, eye-off, rotate-ccw, shield-ban, shield-check, maximize-2.
 const iconProps = {
   viewBox: '0 0 24 24',
   fill: 'none',
@@ -76,6 +76,17 @@ export function ChevronDownIcon({ className = 'tool-icon-svg' }: IconProps) {
   return (
     <svg className={className} {...iconProps}>
       <path d="m6 9 6 6 6-6" />
+    </svg>
+  );
+}
+
+export function MaximizeIcon({ className = 'tool-icon-svg' }: IconProps) {
+  return (
+    <svg className={className} {...iconProps}>
+      <path d="M15 3h6v6" />
+      <path d="m21 3-7 7" />
+      <path d="m3 21 7-7" />
+      <path d="M9 21H3v-6" />
     </svg>
   );
 }

@@ -2,6 +2,7 @@ import { Component, ReactNode, useCallback, useEffect, useLayoutEffect, useMemo,
 import { writeCachedPosts } from '../api/appsScriptClient';
 import { AppLayout } from '../components/AppLayout';
 import { BackToTopButton } from '../components/BackToTopButton';
+import { ContentFilterBar, SiteSearchLink } from '../components/ContentFilterBar';
 import { ErrorState, LoadingState, EmptyState } from '../components/PageState';
 import { IncrementalLoadMore } from '../components/IncrementalLoadMore';
 import { MarkdownView } from '../components/MarkdownView';
@@ -177,13 +178,17 @@ export function PostsPage() {
       {postsResource.status === 'ready' && !posts.length ? <EmptyState label={t('posts.empty')} /> : null}
       {postsResource.status === 'ready' && posts.length ? (
         <>
-          <section className="content-filter-bar" aria-label={t('posts.search')}>
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('posts.searchPlaceholder')} aria-label={t('posts.searchQuery')} />
-            <span className="result-count" aria-live="polite">
-              {shownCount === totalCount ? t('common.showing', { count: totalCount }) : t('common.showingOf', { total: totalCount, shown: shownCount })}
-            </span>
-            {query.trim() || selectedTags.length ? <button className="filter-reset" type="button" onClick={resetFilters}>{t('common.reset')}</button> : null}
-          </section>
+          <ContentFilterBar
+            label={t('posts.search')}
+            query={query}
+            placeholder={t('posts.searchPlaceholder')}
+            queryLabel={t('posts.searchQuery')}
+            shownCount={shownCount}
+            totalCount={totalCount}
+            filtered={Boolean(query.trim() || selectedTags.length)}
+            onQueryChange={setQuery}
+            onReset={resetFilters}
+          />
           <div className="tagged-layout">
             <section className="post-flow tagged-main" aria-label={t('posts.list')}>
               {visiblePosts.map((post) => {
@@ -227,7 +232,7 @@ export function PostsPage() {
                   </article>
                 );
               })}
-              {filteredPosts.length === 0 ? <EmptyState label={t('posts.noTagMatch')} /> : null}
+              {filteredPosts.length === 0 ? <EmptyState label={t('posts.noTagMatch')} action={query.trim() ? <SiteSearchLink query={query} /> : undefined} /> : null}
               <IncrementalLoadMore
                 hasMore={hasMore}
                 label={t('posts.loadMore', { count: Math.min(POSTS_BATCH_SIZE, totalCount - shownCount) })}

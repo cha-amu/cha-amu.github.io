@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { useI18n } from '../i18n';
 
 export function LoadingState({ label }: { label?: string }) {
@@ -5,8 +6,14 @@ export function LoadingState({ label }: { label?: string }) {
   return <div className="state-box" role="status">{label || t('common.loading')}</div>;
 }
 
-export function EmptyState({ label }: { label: string }) {
-  return <div className="state-box">{label}</div>;
+export function EmptyState({ label, action }: { label: string; action?: ReactNode }) {
+  if (!action) return <div className="state-box">{label}</div>;
+  return (
+    <div className="state-box state-box--action">
+      <p>{label}</p>
+      {action}
+    </div>
+  );
 }
 
 export function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void }) {

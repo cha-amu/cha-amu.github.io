@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AppLayout } from '../components/AppLayout';
 import { BackToTopButton } from '../components/BackToTopButton';
+import { ContentFilterBar, SiteSearchLink } from '../components/ContentFilterBar';
 import { IncrementalLoadMore } from '../components/IncrementalLoadMore';
 import { MarkdownView } from '../components/MarkdownView';
 import { EmptyState, ErrorState, LoadingState } from '../components/PageState';
@@ -171,8 +172,17 @@ export function ArchivePage() {
   return (
     <AppLayout>
       <h1 className="sr-only">{t('archive.title')}</h1>
-      <section className="content-filter-bar archive-filter-bar" aria-label={t('archive.controls')}>
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('archive.search')} aria-label={t('archive.searchQuery')} />
+      <ContentFilterBar
+        label={t('archive.controls')}
+        query={query}
+        placeholder={t('archive.search')}
+        queryLabel={t('archive.searchQuery')}
+        shownCount={shownCount}
+        totalCount={totalCount}
+        filtered={Boolean(query.trim() || selectedTags.length)}
+        onQueryChange={setQuery}
+        onReset={resetFilters}
+      >
         <label className="archive-sort">
           <span className="sr-only">{t('archive.sort')}</span>
           <select value={sortMode} onChange={(event) => setSortMode(event.target.value as ArchiveSortMode)} aria-label={t('archive.sort')}>
@@ -181,17 +191,13 @@ export function ArchivePage() {
             <option value="name">{t('archive.sortName')}</option>
           </select>
         </label>
-        <span className="result-count" aria-live="polite">
-          {shownCount === totalCount ? t('common.showing', { count: totalCount }) : t('common.showingOf', { total: totalCount, shown: shownCount })}
-        </span>
-        {query.trim() || selectedTags.length ? <button className="filter-reset" type="button" onClick={resetFilters}>{t('common.reset')}</button> : null}
-      </section>
+      </ContentFilterBar>
       <div className="tagged-layout">
         <main className="tagged-main">
           {archiveResource.refreshing ? <p className="meta">{t('archive.refreshing')}</p> : null}
           {archiveResource.status === 'loading' ? <LoadingState /> : null}
           {archiveResource.status === 'error' ? <ErrorState message={archiveResource.error} onRetry={load} /> : null}
-          {archiveResource.status === 'ready' && !filtered.length ? <EmptyState label={t('archive.empty')} /> : null}
+          {archiveResource.status === 'ready' && !filtered.length ? <EmptyState label={t('archive.empty')} action={query.trim() ? <SiteSearchLink query={query} /> : undefined} /> : null}
           <section className="archive-grid" aria-label={t('archive.list')}>
             {visibleAssets.map((asset) => (
               <article className={`asset-card ${selectedId === asset.id ? 'list-item--active' : ''}`} id={asset.id} key={asset.id}>

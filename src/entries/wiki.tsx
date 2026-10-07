@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AppLayout } from '../components/AppLayout';
 import { BackToTopButton } from '../components/BackToTopButton';
+import { ContentFilterBar, SiteSearchLink } from '../components/ContentFilterBar';
 import { IncrementalLoadMore } from '../components/IncrementalLoadMore';
 import { MarkdownView } from '../components/MarkdownView';
 import { EmptyState, ErrorState, LoadingState } from '../components/PageState';
@@ -217,13 +218,17 @@ export function WikiPage() {
       {wiki.status === 'error' ? <ErrorState message={t('nativewiki.failed')} onRetry={() => { void refreshPublicWiki(true); }} /> : null}
       {wiki.status === 'ready' && wiki.index ? (
         <>
-          <section className="content-filter-bar" aria-label={t('nativewiki.search')}>
-            <input value={query} onChange={(event) => updateFilters(event.target.value, selectedTags)} placeholder={t('nativewiki.searchPlaceholder')} aria-label={t('nativewiki.searchQuery')} />
-            <span className="result-count" aria-live="polite">
-              {shownCount === totalCount ? t('common.showing', { count: totalCount }) : t('common.showingOf', { total: totalCount, shown: shownCount })}
-            </span>
-            {query.trim() || selectedTags.length ? <button className="filter-reset" type="button" onClick={() => updateFilters('', [])}>{t('common.reset')}</button> : null}
-          </section>
+          <ContentFilterBar
+            label={t('nativewiki.search')}
+            query={query}
+            placeholder={t('nativewiki.searchPlaceholder')}
+            queryLabel={t('nativewiki.searchQuery')}
+            shownCount={shownCount}
+            totalCount={totalCount}
+            filtered={Boolean(query.trim() || selectedTags.length)}
+            onQueryChange={(value) => updateFilters(value, selectedTags)}
+            onReset={() => updateFilters('', [])}
+          />
           <div className="tagged-layout">
             <section className="post-flow tagged-main" aria-label={t('nativewiki.list')}>
               {selectedHash.length > 1 && !requestedDoc && documents.length ? (
@@ -272,7 +277,7 @@ export function WikiPage() {
                   </article>
                 );
               })}
-              {!filteredDocuments.length ? <EmptyState label={t(documents.length ? 'nativewiki.noMatch' : 'nativewiki.empty')} /> : null}
+              {!filteredDocuments.length ? <EmptyState label={t(documents.length ? 'nativewiki.noMatch' : 'nativewiki.empty')} action={documents.length && query.trim() ? <SiteSearchLink query={query} /> : undefined} /> : null}
               <IncrementalLoadMore
                 hasMore={hasMore}
                 label={t('nativewiki.loadMore', { count: Math.min(WIKI_BATCH_SIZE, totalCount - shownCount) })}
