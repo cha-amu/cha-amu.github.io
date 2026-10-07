@@ -1,3 +1,5 @@
+import { contentAction } from './content-api.js';
+
 const PUBLIC_ACTIONS = new Set([
   'post.listPublic',
   'guestbook.listPublic',
@@ -5,9 +7,10 @@ const PUBLIC_ACTIONS = new Set([
   'thing.listPublic'
 ]);
 
-const PROXIED_ACTIONS = new Set([
+const CONTENT_ACTIONS = new Set([
   ...PUBLIC_ACTIONS,
   'guestbook.hideByPassword',
+  'admin.session.verify',
   'admin.session.refresh',
   'admin.post.list',
   'admin.post.save',
@@ -38,14 +41,7 @@ const STORAGE_SYNC_ACTIONS = new Set([
   'storage.sync.assetOverride.delete'
 ]);
 
-const DELETE_RESULT_ACTIONS = new Set([
-  'admin.post.bulkDelete',
-  'admin.guestbook.bulkDelete',
-  'admin.assetOverride.delete',
-  'admin.thing.delete'
-]);
-
-const UPSTREAM_FIELDS = new Map([
+const ACTION_FIELDS = new Map([
   ['post.listPublic', []],
   ['guestbook.listPublic', []],
   ['assetOverride.listPublic', []],
@@ -98,18 +94,13 @@ const MAX_STORAGE_TEXT_LENGTH = 5_000;
 const MAX_STORAGE_URL_LENGTH = 2_048;
 const MAX_STORAGE_TAGS = 100;
 const MAX_STORAGE_TAG_LENGTH = 100;
-const D1_MUTATION_BATCH_SIZE = 100;
 const encoder = new TextEncoder();
 
 class GatewayError extends Error {
-  constructor(status, message, options = {}) {
+  constructor(status, message) {
     super(message);
     this.name = 'GatewayError';
     this.status = status;
-    // Safe to run again for read-only actions: the upstream result never arrived.
-    this.retryable = Boolean(options.retryable);
-    // Apps Script ran the action, but its one-time result was lost on the way back.
-    this.lost = Boolean(options.lost);
   }
 }
 
@@ -571,253 +562,27 @@ async function verifyTurnstile(body, request, env, expectedAction, fetchImpl) {
   }
 }
 
-function upstreamPayload(action, body, env, overrides = {}) {
-  const fields = UPSTREAM_FIELDS.get(action);
-  if (!fields) throw new GatewayError(500, '원본 API 요청 계약이 없습니다.');
-  const payload = { action };
+function callContent(action, body, env, dependencies, context) {
+  const fields = ACTION_FIELDS.get(action);
+  const payload = {};
   for (const field of fields) {
     if (Object.prototype.hasOwnProperty.call(body, field)) payload[field] = body[field];
   }
-  Object.assign(payload, overrides);
-  payload.gatewaySecret = requireString(env.GATEWAY_SHARED_SECRET, 'GATEWAY_SHARED_SECRET', 32);
-  return payload;
-}
-
-// Apps Script answers a web app POST with a redirect to a one-time echo URL on this host.
-// The first GET there returns the result; any later GET redirects back to /exec.
-const APPS_SCRIPT_ECHO_HOST = 'script.googleusercontent.com';
-
-// Read-only actions that may run again when their result is lost. Between Cloudflare's
-// Tokyo/Hong Kong egress and Google the echo request is often slow or answered with 404,
-// while the same calls from a browser succeed. Writes never run twice, because Apps Script
-// may already have committed them.
-const REPEATABLE_UPSTREAM_ACTIONS = new Set([
-  ...PUBLIC_ACTIONS,
-  'admin.session.verify',
-  'admin.post.list',
-  'admin.guestbook.list',
-  'admin.assetOverride.list',
-  'admin.thing.list',
-  'storage.sync.post.list',
-  'storage.sync.postDeletion.list',
-  'storage.sync.assetOverride.list'
-]);
-const UPSTREAM_READ_ATTEMPTS = 3;
-const UPSTREAM_READ_BUDGET_MS = 30_000;
-const UPSTREAM_EXEC_TIMEOUT_MS = 15_000;
-const UPSTREAM_ECHO_TIMEOUT_MS = 8_000;
-const LOST_RESULT_MESSAGE = '원본 API 처리 결과를 받지 못했습니다.';
-const LOST_WRITE_MESSAGE = '원본 API 처리 결과를 받지 못했습니다. 이미 반영됐을 수 있으니 목록을 새로 고쳐 확인한 뒤 다시 시도하세요.';
-
-function deadlineSignal(deadline, limitMs) {
-  if (!deadline) return undefined;
-  return AbortSignal.timeout(Math.max(1, Math.min(limitMs, deadline - Date.now())));
-}
-
-function appsScriptEchoUrl(location, base) {
-  if (!location) return null;
-  try {
-    const url = new URL(location, base);
-    return url.protocol === 'https:' && url.hostname === APPS_SCRIPT_ECHO_HOST ? url.href : null;
-  } catch (_) {
-    return null;
-  }
-}
-
-async function discardBody(response) {
-  try {
-    await response.body?.cancel();
-  } catch (_) {
-    // Nothing left to release.
-  }
-}
-
-function lostUpstreamResult() {
-  return new GatewayError(502, LOST_RESULT_MESSAGE, { retryable: true, lost: true });
-}
-
-async function fetchUpstreamOnce(url, payloadText, fetchImpl, deadline) {
-  let response;
-  try {
-    response = await fetchImpl(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: payloadText,
-      redirect: 'manual',
-      signal: deadlineSignal(deadline, UPSTREAM_EXEC_TIMEOUT_MS)
-    });
-  } catch (_) {
-    throw new GatewayError(502, '원본 API에 연결할 수 없습니다.', { retryable: true });
-  }
-
-  if (response.status >= 300 && response.status < 400) {
-    const echoUrl = appsScriptEchoUrl(response.headers.get('Location'), url);
-    await discardBody(response);
-    if (!echoUrl) throw lostUpstreamResult();
-    try {
-      response = await fetchImpl(echoUrl, {
-        method: 'GET',
-        redirect: 'manual',
-        signal: deadlineSignal(deadline, UPSTREAM_ECHO_TIMEOUT_MS)
-      });
-    } catch (_) {
-      throw lostUpstreamResult();
-    }
-    // A used or missing echo answers 404 or redirects back to /exec. Following that
-    // redirect as a GET would run doGet and return its health payload as this result.
-    if (!response.ok) {
-      await discardBody(response);
-      throw lostUpstreamResult();
-    }
-  } else if (!response.ok) {
-    await discardBody(response);
-    throw new GatewayError(502, '원본 API가 요청을 처리하지 못했습니다.', { retryable: true });
-  }
-
-  let envelope;
-  try {
-    envelope = JSON.parse(await response.text());
-  } catch (_) {
-    throw new GatewayError(502, '원본 API 응답 형식이 올바르지 않습니다.', { retryable: true });
-  }
-  if (!envelope || typeof envelope !== 'object' || typeof envelope.ok !== 'boolean') {
-    throw new GatewayError(502, '원본 API 응답 형식이 올바르지 않습니다.', { retryable: true });
-  }
-  return envelope;
-}
-
-async function callUpstream(action, body, env, fetchImpl, overrides) {
-  const url = requireString(env.APPS_SCRIPT_URL, 'APPS_SCRIPT_URL');
-  const payloadText = JSON.stringify(upstreamPayload(action, body, env, overrides));
-
-  if (!REPEATABLE_UPSTREAM_ACTIONS.has(action)) {
-    try {
-      return await fetchUpstreamOnce(url, payloadText, fetchImpl, null);
-    } catch (error) {
-      if (error instanceof GatewayError && error.lost) throw new GatewayError(502, LOST_WRITE_MESSAGE, { lost: true });
-      throw error;
-    }
-  }
-
-  const deadline = Date.now() + UPSTREAM_READ_BUDGET_MS;
-  let lastError = null;
-  for (let attempt = 1; attempt <= UPSTREAM_READ_ATTEMPTS && deadline - Date.now() > 1_000; attempt += 1) {
-    try {
-      return await fetchUpstreamOnce(url, payloadText, fetchImpl, deadline);
-    } catch (error) {
-      if (!(error instanceof GatewayError) || !error.retryable) throw error;
-      lastError = error;
-      console.warn(JSON.stringify({ event: 'apps_script_retry', action, attempt, error: error.message }));
-    }
-  }
-  throw lastError || lostUpstreamResult();
-}
-
-function validateUpstreamResultIds(value, field, requestedIds, maxIdLength, optional = false) {
-  if (value === undefined && optional) return [];
-  if (!Array.isArray(value)) {
-    throw new GatewayError(502, `원본 API의 ${field} 응답이 올바르지 않습니다.`);
-  }
-  const ids = [];
-  const seen = new Set();
-  for (const item of value) {
-    if (
-      typeof item !== 'string' ||
-      !item ||
-      item !== item.trim() ||
-      item.length > maxIdLength ||
-      !requestedIds.has(item) ||
-      seen.has(item)
-    ) {
-      throw new GatewayError(502, `원본 API의 ${field} 응답이 올바르지 않습니다.`);
-    }
-    seen.add(item);
-    ids.push(item);
-  }
-  return ids;
-}
-
-function confirmedBulkDeleteIds(action, envelope, requestedIds) {
-  if (!envelope.ok) return [];
-  if (!envelope.data || typeof envelope.data !== 'object' || Array.isArray(envelope.data)) {
-    throw new GatewayError(502, '원본 API의 삭제 응답이 올바르지 않습니다.');
-  }
-  const requested = new Set(requestedIds);
-  const maxIdLength = action === 'admin.guestbook.bulkDelete'
-    ? MAX_GUESTBOOK_ID_LENGTH
-    : action === 'admin.thing.delete'
-      ? MAX_THING_ID_LENGTH
-      : MAX_POST_OR_ASSET_ID_LENGTH;
-  const deletedIds = validateUpstreamResultIds(
-    envelope.data.deletedIds,
-    'deletedIds',
-    requested,
-    maxIdLength
-  );
-  const alreadyMissingIds = validateUpstreamResultIds(
-    envelope.data.alreadyMissingIds,
-    'alreadyMissingIds',
-    requested,
-    maxIdLength,
-    true
-  );
-  const confirmed = new Set(deletedIds);
-  for (const id of alreadyMissingIds) {
-    if (confirmed.has(id)) {
-      throw new GatewayError(502, '원본 API의 삭제 응답에 중복된 id가 있습니다.');
-    }
-    confirmed.add(id);
-  }
-  return Array.from(confirmed);
-}
-
-async function cleanupGuestbookMappings(env, entryIds) {
-  if (!entryIds.length) return;
-  const db = env.SECURITY_DB;
-  if (!db || typeof db.prepare !== 'function') return;
-
-  const statement = (entryId) => db.prepare(
-    'DELETE FROM guestbook_entry_ips WHERE entry_id = ?'
-  ).bind(entryId);
-  if (typeof db.batch === 'function') {
-    try {
-      const results = await db.batch(entryIds.map(statement));
-      if (Array.isArray(results) && results.every((result) => result?.success !== false)) return;
-    } catch (_) {
-      // The upstream deletion is already committed. Retry each mapping independently below.
-    }
-  }
-
-  for (const entryId of entryIds) {
-    try {
-      await statement(entryId).run();
-    } catch (_) {
-      // Mapping cleanup is intentionally best-effort after the authoritative deletion commits.
-    }
-  }
+  if (!action.startsWith('admin.session.')) requireDatabase(env);
+  return contentAction(action, payload, env, dependencies, context);
 }
 
 async function handleValidatedAdminAction(action, body, env, dependencies) {
-  const normalized = normalizeAdminAction(action, body);
-  const envelope = await callUpstream(action, normalized, env, dependencies.fetch);
-  if (!DELETE_RESULT_ACTIONS.has(action)) return envelope;
-
-  const confirmedIds = confirmedBulkDeleteIds(action, envelope, normalized.ids);
-  if (action === 'admin.guestbook.bulkDelete' && envelope.ok) {
-    await cleanupGuestbookMappings(env, confirmedIds);
-  }
-  return envelope;
+  return callContent(action, normalizeAdminAction(action, body), env, dependencies);
 }
 
 async function handleThingSave(body, env, dependencies) {
-  const normalized = normalizeThingSaveAction(body);
-  return callUpstream('admin.thing.save', normalized, env, dependencies.fetch);
+  return callContent('admin.thing.save', normalizeThingSaveAction(body), env, dependencies);
 }
 
 async function handleStorageSyncAction(action, body, request, env, dependencies) {
   requireTrustedStorageSync(request, env);
-  const normalized = normalizeStorageSyncAction(action, body);
-  return callUpstream(action, normalized, env, dependencies.fetch);
+  return callContent(action, normalizeStorageSyncAction(action, body), env, dependencies);
 }
 
 async function isIpBanned(db, ipHash) {
@@ -830,43 +595,6 @@ async function isIpBanned(db, ipHash) {
   return Boolean(row);
 }
 
-async function insertPendingMapping(db, entryId, ipHash, now) {
-  await db.prepare(
-    `INSERT INTO guestbook_entry_ips
-      (entry_id, ip_hash, hash_version, state, created_at, updated_at)
-     VALUES (?, ?, 'v1', 'pending', ?, ?)`
-  ).bind(entryId, ipHash, now, now).run();
-}
-
-async function tryActivateMapping(db, entryId, now) {
-  try {
-    const result = await db.prepare(
-      `UPDATE guestbook_entry_ips
-          SET state = 'active', updated_at = ?
-        WHERE entry_id = ? AND state = 'pending'`
-    ).bind(now, entryId).run();
-    return Boolean(result?.success && Number(result.meta?.changes || 0) === 1);
-  } catch (_) {
-    return false;
-  }
-}
-
-async function removePendingMapping(db, entryId) {
-  await db.prepare(
-    `DELETE FROM guestbook_entry_ips WHERE entry_id = ? AND state = 'pending'`
-  ).bind(entryId).run();
-}
-
-async function findCommittedGuestbookEntry(entryId, env, fetchImpl) {
-  try {
-    const listed = await callUpstream('guestbook.listPublic', {}, env, fetchImpl);
-    if (!listed.ok || !Array.isArray(listed.data)) return null;
-    return listed.data.find((entry) => entry && String(entry.id) === entryId) || null;
-  } catch (_) {
-    return null;
-  }
-}
-
 async function handleGuestbookCreate(body, request, env, dependencies) {
   const db = requireDatabase(env);
   const ipHash = await hashClientIp(request, env, dependencies.subtle);
@@ -876,60 +604,30 @@ async function handleGuestbookCreate(body, request, env, dependencies) {
   }
   await verifyTurnstile(body, request, env, 'guestbook_create', dependencies.fetch);
 
-  const entryId = dependencies.randomUUID();
-  const createdAt = dependencies.nowIso();
-  await insertPendingMapping(db, entryId, ipHash, createdAt);
-
-  let envelope;
-  try {
-    envelope = await callUpstream('guestbook.create', body, env, dependencies.fetch, {
-      gatewayEntryId: entryId
-    });
-  } catch (error) {
-    // The call broke off or its one-time result was lost, possibly after Apps Script
-    // committed the entry. The gateway chose the id, so the public list settles it
-    // without writing twice. If it is not there, leave the pending row for reconciliation.
-    const committed = error instanceof GatewayError && error.status === 502
-      ? await findCommittedGuestbookEntry(entryId, env, dependencies.fetch)
-      : null;
-    if (!committed) throw error;
-    envelope = { ok: true, data: committed };
-  }
-
-  if (!envelope.ok) {
-    await removePendingMapping(db, entryId);
-    return envelope;
-  }
-  if (!envelope.data || String(envelope.data.id) !== entryId) {
-    throw new GatewayError(502, '원본 API가 생성 식별자를 확인하지 못했습니다.');
-  }
-
-  // Apps Script has already committed the row. Return success even if this best-effort
-  // activation fails so a browser retry cannot create a duplicate entry. Admin list
-  // reconciliation promotes the durable pending mapping later.
-  await tryActivateMapping(db, entryId, dependencies.nowIso());
-  return envelope;
+  return callContent('guestbook.create', body, env, dependencies, {
+    entryId: dependencies.randomUUID(), ipHash
+  });
 }
 
 async function handleGuestbookDelete(body, request, env, dependencies) {
   const ipHash = await hashClientIp(request, env, dependencies.subtle);
   const entryId = typeof body.id === 'string' ? body.id.slice(0, 128) : '';
   await enforceRateLimit(env, 'GUESTBOOK_DELETE_RATE_LIMITER', `${ipHash}:${entryId}`);
-  return callUpstream('guestbook.hideByPassword', body, env, dependencies.fetch);
+  return callContent('guestbook.hideByPassword', body, env, dependencies);
 }
 
 async function handleAdminLogin(body, request, env, dependencies) {
   const ipHash = await hashClientIp(request, env, dependencies.subtle);
   await enforceRateLimit(env, 'ADMIN_LOGIN_RATE_LIMITER', ipHash);
   await verifyTurnstile(body, request, env, 'admin_login', dependencies.fetch);
-  return callUpstream('admin.login', body, env, dependencies.fetch);
+  return callContent('admin.login', body, env, dependencies);
 }
 
-async function requireAdminSession(body, env, fetchImpl) {
+async function requireAdminSession(body, env, dependencies) {
   if (typeof body.token !== 'string' || !body.token) {
     throw new GatewayError(401, '관리자 로그인이 필요합니다.');
   }
-  const envelope = await callUpstream('admin.session.verify', { token: body.token }, env, fetchImpl);
+  const envelope = await callContent('admin.session.verify', { token: body.token }, env, dependencies);
   if (!envelope.ok) throw new GatewayError(401, '관리자 로그인이 만료되었습니다.');
 }
 
@@ -939,54 +637,22 @@ async function listIpSecurity(db) {
             CASE WHEN b.ip_hash IS NULL THEN 0 ELSE 1 END AS ip_blocked,
             (SELECT COUNT(*)
                FROM guestbook_entry_ips related
-              WHERE related.ip_hash = m.ip_hash AND related.state = 'active') AS related_entry_count
+              WHERE related.ip_hash = m.ip_hash AND related.state IN ('active', 'pending')
+                AND EXISTS (SELECT 1 FROM guestbook_entries e WHERE e.id = related.entry_id)) AS related_entry_count
        FROM guestbook_entry_ips m
        LEFT JOIN ip_bans b
          ON b.scope = ? AND b.ip_hash = m.ip_hash AND b.revoked_at IS NULL
-      WHERE m.state = 'active'`
+      WHERE m.state IN ('active', 'pending')
+        AND EXISTS (SELECT 1 FROM guestbook_entries e WHERE e.id = m.entry_id)`
   ).bind(IP_BAN_SCOPE).all();
   return new Map((result?.results || []).map((row) => [String(row.entry_id), row]));
 }
 
-async function reconcileGuestbookMappings(db, entries, now) {
-  const mappings = await db.prepare(
-    `SELECT entry_id, state
-       FROM guestbook_entry_ips
-      ORDER BY created_at`
-  ).all();
-  const upstreamIds = new Set(entries.map((entry) => String(entry.id)));
-  const statements = [];
-  for (const row of mappings?.results || []) {
-    const entryId = String(row.entry_id || '');
-    if (!entryId) continue;
-    if (!upstreamIds.has(entryId)) {
-      statements.push(db.prepare(
-        'DELETE FROM guestbook_entry_ips WHERE entry_id = ?'
-      ).bind(entryId));
-    } else if (row.state === 'pending') {
-      statements.push(db.prepare(
-        `UPDATE guestbook_entry_ips
-            SET state = 'active', updated_at = ?
-          WHERE entry_id = ? AND state = 'pending'`
-      ).bind(now, entryId));
-    }
-  }
-  if (!statements.length) return;
-  for (let index = 0; index < statements.length; index += D1_MUTATION_BATCH_SIZE) {
-    try {
-      await db.batch(statements.slice(index, index + D1_MUTATION_BATCH_SIZE));
-    } catch (_) {
-      // The next successful admin list retries both pending activation and orphan cleanup.
-    }
-  }
-}
-
 async function handleAdminGuestbookList(body, env, dependencies) {
-  const envelope = await callUpstream('admin.guestbook.list', body, env, dependencies.fetch);
+  const envelope = await callContent('admin.guestbook.list', body, env, dependencies);
   if (!envelope.ok || !Array.isArray(envelope.data)) return envelope;
 
   const db = requireDatabase(env);
-  await reconcileGuestbookMappings(db, envelope.data, dependencies.nowIso());
   const security = await listIpSecurity(db);
   return {
     ...envelope,
@@ -1004,7 +670,8 @@ async function handleAdminGuestbookList(body, env, dependencies) {
 
 async function getActiveMapping(db, entryId) {
   return db.prepare(
-    `SELECT ip_hash FROM guestbook_entry_ips WHERE entry_id = ? AND state = 'active' LIMIT 1`
+    `SELECT ip_hash FROM guestbook_entry_ips WHERE entry_id = ? AND state IN ('active', 'pending')
+       AND EXISTS (SELECT 1 FROM guestbook_entries e WHERE e.id = guestbook_entry_ips.entry_id) LIMIT 1`
   ).bind(entryId).first();
 }
 
@@ -1012,7 +679,8 @@ async function countRelatedEntries(db, ipHash) {
   const row = await db.prepare(
     `SELECT COUNT(*) AS count
        FROM guestbook_entry_ips
-      WHERE ip_hash = ? AND state = 'active'`
+      WHERE ip_hash = ? AND state IN ('active', 'pending')
+        AND EXISTS (SELECT 1 FROM guestbook_entries e WHERE e.id = guestbook_entry_ips.entry_id)`
   ).bind(ipHash).first();
   return Number(row?.count || 0);
 }
@@ -1027,7 +695,7 @@ async function getActiveBanBySourceEntry(db, entryId) {
 }
 
 async function handleIpBanList(body, env, dependencies) {
-  await requireAdminSession(body, env, dependencies.fetch);
+  await requireAdminSession(body, env, dependencies);
   const db = requireDatabase(env);
   const result = await db.prepare(
     `SELECT b.ip_hash,
@@ -1037,7 +705,8 @@ async function handleIpBanList(body, env, dependencies) {
             related.entry_id AS related_entry_id
        FROM ip_bans b
        LEFT JOIN guestbook_entry_ips related
-         ON related.ip_hash = b.ip_hash AND related.state = 'active'
+         ON related.ip_hash = b.ip_hash AND related.state IN ('active', 'pending')
+                AND EXISTS (SELECT 1 FROM guestbook_entries e WHERE e.id = related.entry_id)
       WHERE b.scope = ? AND b.revoked_at IS NULL
       ORDER BY b.banned_at DESC, related.created_at, related.entry_id`
   ).bind(IP_BAN_SCOPE).all();
@@ -1071,7 +740,7 @@ async function handleIpBanList(body, env, dependencies) {
 }
 
 async function handleIpBan(body, env, dependencies, blocked) {
-  await requireAdminSession(body, env, dependencies.fetch);
+  await requireAdminSession(body, env, dependencies);
   const db = requireDatabase(env);
   const requestedEntryId = body.entryId ?? body.id;
   const entryId = typeof requestedEntryId === 'string' ? requestedEntryId.trim() : '';
@@ -1158,8 +827,8 @@ async function routeApi(body, request, env, dependencies) {
   if (VALIDATED_ADMIN_ACTIONS.has(action)) {
     return handleValidatedAdminAction(action, body, env, dependencies);
   }
-  if (PROXIED_ACTIONS.has(action)) {
-    return callUpstream(action, body, env, dependencies.fetch);
+  if (CONTENT_ACTIONS.has(action)) {
+    return callContent(action, body, env, dependencies);
   }
   throw new GatewayError(400, '지원하지 않는 action입니다.');
 }

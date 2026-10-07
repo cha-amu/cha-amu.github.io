@@ -7,7 +7,9 @@
   "preview_urls": false,
   "vars": {
     "ALLOWED_ORIGIN": "https://cha-amu.github.io",
-    "TURNSTILE_EXPECTED_HOSTNAME": "cha-amu.github.io"
+    "TURNSTILE_EXPECTED_HOSTNAME": "cha-amu.github.io",
+    "ADMIN_SESSION_TTL_MS": "600000",
+    "GUESTBOOK_PASSWORD_ITERATIONS": "1"
   },
   "d1_databases": [
     {
