@@ -14,6 +14,7 @@ import { useI18n } from '../i18n';
 import { formatDate } from '../utils/date';
 import { wikiResourceKey, type PublicWikiDocument, type PublicWikiIndex } from '../utils/publicWiki';
 import { navigateTo } from '../utils/router';
+import { scrollToEntry } from '../utils/scrollToEntry';
 import {
   createWikiLinkResolver,
   filterWikiDocuments,
@@ -123,6 +124,7 @@ export function WikiPage() {
   const initialSelectionApplied = useRef(Boolean(selectedHash));
   const selectedId = wikiDocumentIdFromHash(selectedHash);
   const pendingScroll = useRef(selectedId);
+  const stopEntryScroll = useRef<(() => void) | null>(null);
   const [scrollRequest, setScrollRequest] = useState(0);
   const [query, setQuery] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
@@ -189,14 +191,16 @@ export function WikiPage() {
     const target = window.document.getElementById(entryId(id));
     if (!target) return;
     pendingScroll.current = '';
-    const margin = Number.parseFloat(window.getComputedStyle(target).scrollMarginTop) || 0;
-    const top = window.scrollY + target.getBoundingClientRect().top - margin;
     target.focus({ preventScroll: true });
-    window.scrollTo({ behavior: 'auto', top: Math.max(0, top) });
+    stopEntryScroll.current?.();
+    stopEntryScroll.current = scrollToEntry(target);
   }, [scrollRequest, selectedDoc, visibleDocuments]);
+
+  useEffect(() => () => stopEntryScroll.current?.(), []);
 
   const closeDocument = () => {
     pendingScroll.current = '';
+    stopEntryScroll.current?.();
     setSelectedHash('');
     navigateTo(`${NATIVE_WIKI_PATH}${window.location.search}`);
   };

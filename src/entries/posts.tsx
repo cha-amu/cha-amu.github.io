@@ -14,6 +14,7 @@ import { translate, useI18n } from '../i18n';
 import { refreshPosts, usePublicResource } from '../stores/publicDataStore';
 import { formatDate } from '../utils/date';
 import { postTimestamp } from '../utils/postTimestamp';
+import { scrollToEntry } from '../utils/scrollToEntry';
 import { navigateTo, readHashId } from '../utils/router';
 import { excerpt, normalizeText } from '../utils/strings';
 
@@ -53,6 +54,7 @@ export function PostsPage() {
   const [selectedId, setSelectedId] = useState(() => readHashId());
   const initialSelectionApplied = useRef(Boolean(selectedId));
   const pendingPostScroll = useRef<PendingPostScroll | null>(selectedId ? { id: selectedId } : null);
+  const stopEntryScroll = useRef<(() => void) | null>(null);
   const [postScrollRequest, setPostScrollRequest] = useState(0);
   const [query, setQuery] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
@@ -144,11 +146,12 @@ export function PostsPage() {
     if (!target) return;
 
     pendingPostScroll.current = null;
-    const scrollMarginTop = Number.parseFloat(window.getComputedStyle(target).scrollMarginTop) || 0;
-    const scrollTop = window.scrollY + target.getBoundingClientRect().top - scrollMarginTop;
     target.focus({ preventScroll: true });
-    window.scrollTo({ behavior: 'auto', top: Math.max(0, scrollTop) });
+    stopEntryScroll.current?.();
+    stopEntryScroll.current = scrollToEntry(target);
   }, [postScrollRequest, selectedId, visiblePosts]);
+
+  useEffect(() => () => stopEntryScroll.current?.(), []);
 
   const openPost = (id: string) => {
     setSelectedId(id);
@@ -157,6 +160,7 @@ export function PostsPage() {
 
   const closePost = () => {
     pendingPostScroll.current = null;
+    stopEntryScroll.current?.();
     setSelectedId('');
     navigateTo(`${window.location.pathname}${window.location.search}`);
   };
