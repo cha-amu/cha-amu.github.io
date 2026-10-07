@@ -1,21 +1,5 @@
 import { translate } from '../i18n';
-import type { ArchiveAsset, GuestbookEntry, Post } from '../types';
-
-export function getMockPosts(): Post[] {
-  return [
-    {
-      id: 'welcome',
-      slug: 'welcome',
-      title: translate('mock.post.title'),
-      excerpt: translate('mock.post.excerpt'),
-      body: translate('mock.post.body'),
-      tags: [translate('mock.tag.notice'), translate('mock.tag.example')],
-      status: 'published',
-      createdAt: '2026-07-09T00:00:00.000Z',
-      publishedAt: '2026-07-09T00:00:00.000Z'
-    }
-  ];
-}
+import type { ArchiveAsset, GuestbookEntry } from '../types';
 
 export function getMockGuestbook(): GuestbookEntry[] {
   return [

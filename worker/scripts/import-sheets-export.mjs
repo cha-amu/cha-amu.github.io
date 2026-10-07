@@ -31,11 +31,12 @@ function textChunks(value) {
 
 export function generateImport(exported) {
   if (!exported || !exported.sheets || typeof exported.sheets !== 'object') {
-    throw new Error('Expected { exportedAt, sheets: { posts, postDeletions, guestbook, things, assetOverrides, auditLog } }.');
+    throw new Error('Expected { exportedAt, sheets: { guestbook, things, assetOverrides, auditLog } }.');
   }
   const statements = [];
   const counts = {};
   const records = new Map();
+  // Only the remaining content sheets are imported; other sheets are ignored.
   // Validate the complete input before writing any output. Missing columns are
   // blank cells; a missing sheet is an incomplete export, not permission to erase it.
   for (const [name, definition] of Object.entries(CONTENT_TABLES)) {
@@ -69,7 +70,7 @@ export function generateImport(exported) {
       const size = byteLength(tuple);
       if (byteLength(prefix) + size + 1 > MAX_STATEMENT_BYTES) {
         flush();
-        // A single large markdown row can exceed the SQL statement limit. Assemble
+        // A single large text row can exceed the SQL statement limit. Assemble
         // its text cells from small chunks, then insert the complete row with SELECT.
         // This also keeps JSON CHECK constraints valid for tags/extra at every step.
         if (!staged) {

@@ -43,7 +43,6 @@ function compilePublicDataStore() {
       `)],
       [/'\.\.\/api\/appsScriptClient'/, dataModule(`
         const cachedAt = '2999-01-01T00:00:00.000Z';
-        const cachedPost = { id: 'cached-post', title: 'Cached', body: '', tags: [], status: 'published', createdAt: cachedAt };
         export async function listAssetOverrides() {
           globalThis.__publicRevalidationCalls.assetOverrides += 1;
           return [];
@@ -52,23 +51,14 @@ function compilePublicDataStore() {
           globalThis.__publicRevalidationCalls.guestbook += 1;
           return [{ id: 'fresh-guestbook', name: 'Fresh', message: 'Fresh', status: 'visible', createdAt: cachedAt }];
         }
-        export async function listPosts() {
-          globalThis.__publicRevalidationCalls.postsApi += 1;
-          return [{ ...cachedPost, id: 'fresh-api-post' }];
-        }
         export async function listThings() {
           globalThis.__publicRevalidationCalls.things += 1;
           return [{ id: 'fresh-thing', title: 'Fresh thing', description: '', url: 'https://example.com/', status: 'visible', sortOrder: 0, updatedAt: cachedAt }];
         }
         export const readCachedAssetOverridesPayload = () => ({ savedAt: cachedAt, data: [] });
         export const readCachedGuestbookPayload = () => ({ savedAt: cachedAt, data: [{ id: 'cached-guestbook', name: 'Cached', message: 'Cached', status: 'visible', createdAt: cachedAt }] });
-        export const readCachedPostControls = () => [];
-        export const readCachedPostControlsPayload = () => ({ savedAt: cachedAt, data: [] });
-        export const readCachedPostsPayload = () => ({ savedAt: cachedAt, data: [cachedPost] });
         export const readCachedThingsPayload = () => ({ savedAt: cachedAt, data: [{ id: 'cached-thing', title: 'Cached thing', description: '', url: 'https://example.com/', status: 'visible', sortOrder: 0, updatedAt: cachedAt }] });
         export const writeCachedGuestbook = () => undefined;
-        export const writeCachedPostControls = () => undefined;
-        export const writeCachedPosts = () => undefined;
         export const writeCachedThings = () => undefined;
       `)],
       [/'\.\.\/api\/storageClient'/, dataModule(`
@@ -76,13 +66,12 @@ function compilePublicDataStore() {
           globalThis.__publicRevalidationCalls.postsStorage += 1;
           return [];
         }
+        export const normalizePostList = (posts) => posts.filter((post) => post.status === 'published');
+        export const readCachedPostsPayload = () => ({ savedAt: '2999-01-01', data: [{ id: 'cached-post', status: 'published', source: 'storage' }] });
+        export const writeCachedPosts = () => undefined;
       `)],
       [/'\.\/controlSnapshot'/, dataModule(`
         export const resolveControlSnapshot = (result, fallback) => result.status === 'fulfilled' ? result.value : fallback;
-      `)],
-      [/'\.\/postMerge'/, dataModule(`
-        export const mergePosts = (storagePosts, sheetPosts) => [...storagePosts, ...sheetPosts];
-        export const normalizePostList = (posts) => posts.filter((post) => post.status === 'published');
       `)]
     ];
 
@@ -102,7 +91,6 @@ test('a new document revalidates posts, guestbook, archive, and things even when
     archiveManifest: 0,
     assetOverrides: 0,
     guestbook: 0,
-    postsApi: 0,
     postsStorage: 0,
     things: 0
   };
@@ -121,7 +109,6 @@ test('a new document revalidates posts, guestbook, archive, and things even when
       archiveManifest: 1,
       assetOverrides: 1,
       guestbook: 1,
-      postsApi: 1,
       postsStorage: 1,
       things: 1
     });
@@ -136,7 +123,6 @@ test('a new document revalidates posts, guestbook, archive, and things even when
       archiveManifest: 1,
       assetOverrides: 1,
       guestbook: 1,
-      postsApi: 1,
       postsStorage: 1,
       things: 1
     });

@@ -23,9 +23,9 @@ https://cha-amu.github.io/
 worker/                     → 게이트웨이 Worker(cha-amu-gateway)와 D1(cha-amu-security)
 ```
 
-방명록, 관리자 로그인, 글 상태(숨김·초안·삭제 기록), 아무거, 자료 덮어쓰기 데이터와 IP 차단 기록은 모두 D1 `cha-amu-security` 하나에 있다. 글 본문과 자료 파일의 원본은 `cha-amu/storage` repo다.
+방명록, 아무거, 자료 표시 설정, 감사 로그, 요청 제한과 IP 차단 기록은 D1 `cha-amu-security` 하나에 있다. 관리자 로그인은 Worker에서 처리한다. 글은 `cha-amu/storage` repo의 Markdown 파일만을 원본으로 사용한다. frontmatter의 `status: published`만 사이트에 표시하며 `draft`와 `hidden`도 storage repo에서는 공개 파일이다. 글 삭제는 해당 파일을 삭제해 처리한다. 관리자 화면은 자료 탭부터 열리며 자료 표시 설정·아무거·방명록·IP 차단을 관리한다.
 
-`cha-amu/storage`와 D1의 동기화는 storage repo 자신의 `Sync storage repo` workflow가 게이트웨이를 거쳐 실행한다. storage repo에 직접 push하면 즉시 D1에 본문까지 반영하고, 주기적 실행은 D1의 최신 수정본을 storage Markdown으로 되돌려 맞춘다. 규칙은 [storage 작성 문서](storage-authoring.md)를 따른다.
+`cha-amu/storage`의 `Sync storage repo` workflow는 manifest를 다시 생성하고, 게이트웨이를 통해 D1의 자료 표시 설정만 동기화한다. 규칙은 [storage 작성 문서](storage-authoring.md)를 따른다.
 
 Google Apps Script와 Google Sheets는 2026-10-07 이전 데이터의 백업으로만 남아 있다. 사이트는 더 이상 부르지 않으며, `Deploy Apps Script` workflow는 수동으로만 실행된다. 자세한 내용은 `apps-script/README.md`에 있다.
 
@@ -44,6 +44,7 @@ Google Apps Script와 Google Sheets는 2026-10-07 이전 데이터의 백업으�
 - Worker: `cha-amu-gateway`, D1: `cha-amu-security`
 - 배포: `worker/`에서 `npm ci` 후 `npx wrangler deploy`
 - D1 구조 변경: `worker/migrations/`에 SQL 파일을 추가하고 `npm run migrate:remote`
+- `0003_drop_post_tables.sql`은 `post_deletions`와 `posts`만 삭제한다. 기존 `0001`, `0002`는 유지한다. 게시글 API를 호출하지 않는 사이트·storage sync·카탈로그와 Worker를 준비한 뒤 운영자가 적용 순서를 정한다.
 - 자세한 데이터 구조와 이전 기록: `worker/README.md`
 
 ## 2. GitHub 메뉴에서 Secrets/Variables 들어가는 법
@@ -170,16 +171,20 @@ https://cha-amu.github.io/admin/
 https://cha-amu-gateway.cha-amu.workers.dev/health
 ```
 
+글은 storage manifest의 공개 항목과 비교하고, 관리자 화면에 자료·아무거·방명록 탭이 표시되는지 확인한다.
+
 D1 데이터 개수:
 
 ```sh
 cd worker
-npx wrangler d1 execute cha-amu-security --remote --command="SELECT COUNT(*) FROM posts; SELECT COUNT(*) FROM guestbook_entries;"
+npx wrangler d1 execute cha-amu-security --remote --command="SELECT COUNT(*) FROM guestbook_entries; SELECT COUNT(*) FROM things; SELECT COUNT(*) FROM asset_overrides;"
 ```
 
 ## 9. 자주 생기는 문제
 
 ### 사이트는 배포됐는데 목록이 안 뜸
+
+- 글은 storage의 `manifests/posts.json`과 Markdown 파일, frontmatter의 `status: published`를 확인
 
 - `https://cha-amu-gateway.cha-amu.workers.dev/health`가 200인지 확인
 - GitHub Variables의 `VITE_API_URL`이 Worker `/api` URL인지 확인

@@ -1,33 +1,28 @@
 import { FormEvent, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { loadArchiveManifest, mergeAssetOverrides } from '../api/archiveManifestClient';
-import { adminBanGuestbookIp, adminBulkDeleteGuestbook, adminBulkDeletePosts, adminBulkUpdateAssetOverrides, adminBulkUpdateGuestbook, adminBulkUpdatePosts, adminDeleteThings, adminHideGuestbook, adminListAssetOverrides, adminListGuestbook, adminListGuestbookIpBans, adminListPosts, adminListThings, adminLogin, adminRefreshSession, adminRestoreGuestbook, adminSaveAssetOverride, adminSavePost, adminSaveThing, adminUnbanGuestbookIp, listGuestbook } from '../api/appsScriptClient';
+import { adminBanGuestbookIp, adminBulkDeleteGuestbook, adminBulkUpdateAssetOverrides, adminBulkUpdateGuestbook, adminDeleteThings, adminHideGuestbook, adminListAssetOverrides, adminListGuestbook, adminListGuestbookIpBans, adminListThings, adminLogin, adminRefreshSession, adminRestoreGuestbook, adminSaveAssetOverride, adminSaveThing, adminUnbanGuestbookIp, listGuestbook } from '../api/appsScriptClient';
 import { AppLayout } from '../components/AppLayout';
 import { BackToTopButton } from '../components/BackToTopButton';
 import { IncrementalLoadMore } from '../components/IncrementalLoadMore';
-import { MarkdownView } from '../components/MarkdownView';
-import { EmptyState } from '../components/PageState';
 import { TagList } from '../components/TagList';
+import { EmptyState } from '../components/PageState';
 import { CloseIcon, EyeOffIcon, LogOutIcon, RestoreIcon, ShieldBanIcon, ShieldCheckIcon, TrashIcon } from '../components/ToolIcons';
 import { TurnstileBox } from '../components/TurnstileBox';
 import { config } from '../config';
 import { useIncrementalItems } from '../hooks/useIncrementalItems';
 import { useI18n, type Translate, type TranslationKey, type TranslationParams } from '../i18n';
-import { setPublicGuestbook, setPublicThings, syncPublicArchiveOverrides, syncPublicPost, syncPublicThing } from '../stores/publicDataStore';
-import type { ArchiveAsset, AssetOverride, GuestbookAdminEntry, GuestbookEntry, GuestbookIpBan, Post, Thing } from '../types';
+import { setPublicGuestbook, setPublicThings, syncPublicArchiveOverrides, syncPublicThing } from '../stores/publicDataStore';
+import type { ArchiveAsset, AssetOverride, GuestbookAdminEntry, GuestbookEntry, GuestbookIpBan, Thing } from '../types';
 import { formatDate } from '../utils/date';
-import { postTimestamp } from '../utils/postTimestamp';
 import { shouldRefreshAdminSession } from '../utils/adminSessionRefresh';
 import { clearAdminSession, getAdminSessionRemainingMs, loadAdminSession, refreshAdminSession, saveAdminSession } from '../utils/session';
 import { splitTags } from '../utils/strings';
 
-type Tab = 'posts' | 'assets' | 'things' | 'guestbook';
+type Tab = 'assets' | 'things' | 'guestbook';
 type GuestbookFilter = 'all' | GuestbookEntry['status'];
 type GuestbookAdminView = 'entries' | 'bans';
-type EditorView = 'edit' | 'preview';
-type EditablePostStatus = Exclude<Post['status'], 'deleted'>;
 
 const TAB_LABEL_KEYS: Record<Tab, TranslationKey> = {
-  posts: 'admin.tab.posts',
   assets: 'admin.tab.assets',
   things: 'admin.tab.things',
   guestbook: 'admin.tab.guestbook'
@@ -36,13 +31,6 @@ const TAB_LABEL_KEYS: Record<Tab, TranslationKey> = {
 const THING_STATUS_LABEL_KEYS: Record<Thing['status'], TranslationKey> = {
   visible: 'admin.status.visible',
   hidden: 'admin.status.hidden'
-};
-
-const POST_STATUS_LABEL_KEYS: Record<Post['status'], TranslationKey> = {
-  published: 'admin.status.published',
-  draft: 'admin.status.draft',
-  hidden: 'admin.status.hidden',
-  deleted: 'admin.status.deleted'
 };
 
 const ADMIN_SESSION_REFRESH_LEAD_MS = 2 * 60_000;
@@ -220,64 +208,6 @@ function renderAdminMessage(message: AdminMessage, t: Translate) {
 }
 
 
-const ADMIN_POST_DRAFT_KEY = 'cha-amu:admin-post-draft:v1';
-
-function readAdminPostDraft(): { current: Partial<Post>; tagsText: string } | null {
-  try {
-    const raw = window.localStorage.getItem(ADMIN_POST_DRAFT_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw) as { current: Partial<Post>; tagsText: string };
-  } catch (_) {
-    return null;
-  }
-}
-
-function writeAdminPostDraft(current: Partial<Post>, tagsText: string) {
-  try {
-    window.localStorage.setItem(ADMIN_POST_DRAFT_KEY, JSON.stringify({ current, tagsText, savedAt: new Date().toISOString() }));
-  } catch (_) {
-    // Draft persistence must not break writing.
-  }
-}
-
-const blankPost = (): Partial<Post> => ({
-  title: '',
-  excerpt: '',
-  body: '',
-  tags: [],
-  status: 'published'
-});
-
-function sortPostsByNewest(posts: Post[]) {
-  return [...posts].sort((a, b) => {
-    const left = postTimestamp(a);
-    const right = postTimestamp(b);
-    return right.localeCompare(left);
-  });
-}
-
-function postMarkdownContext(post: Partial<Post>) {
-  if (post.markdownBaseUrl) {
-    return {
-      baseUrl: post.markdownBaseUrl,
-      rootUrl: post.markdownRootUrl || config.storageBaseUrl
-    };
-  }
-  const candidate = post.bodyUrl || (post.storagePath
-    ? `${config.storageBaseUrl}/${post.storagePath.replace(/^\/+/, '')}`
-    : '');
-  try {
-    const url = new URL(candidate);
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') return {};
-    return {
-      baseUrl: new URL('.', url).href,
-      rootUrl: post.markdownRootUrl || config.storageBaseUrl
-    };
-  } catch (_) {
-    return {};
-  }
-}
-
 const blankThing = (): Partial<Thing> => ({
   title: '',
   description: '',
@@ -357,306 +287,6 @@ function isAdminSessionError(error: unknown) {
     || message.includes('Admin session is required')
     || message.includes('관리자 로그인이 필요합니다')
     || message.includes('관리자 로그인이 만료되었습니다');
-}
-
-function PostsAdmin({ token, onSessionExpired }: { token: string; onSessionExpired: () => void }) {
-  const { t } = useI18n();
-  const restoredDraft = useMemo(() => readAdminPostDraft(), []);
-  const [posts, setPosts] = useState<Post[]>([]);
-  const [current, setCurrent] = useState<Partial<Post>>(() => restoredDraft?.current || blankPost());
-  const [tagsText, setTagsText] = useState(restoredDraft?.tagsText || '');
-  const [editorView, setEditorView] = useState<EditorView>('edit');
-  const [message, setMessage] = useState<AdminMessage>(null);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [bulkStatus, setBulkStatus] = useState<EditablePostStatus>('published');
-  const [bulkSaving, setBulkSaving] = useState(false);
-  const editorRef = useRef<HTMLFormElement>(null);
-  const postIds = useMemo(() => posts.map((post) => post.id), [posts]);
-  const selection = useAdminSelection(postIds);
-
-  const moveToEditorOnMobile = () => {
-    if (!window.matchMedia('(max-width: 760px)').matches) return;
-    window.requestAnimationFrame(() => editorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
-  };
-
-  const selectPost = (post: Post) => {
-    setCurrent(post);
-    setTagsText((post.tags || []).join(', '));
-    setEditorView('edit');
-    setMessage(null);
-    moveToEditorOnMobile();
-  };
-
-  const startNewPost = () => {
-    setCurrent(blankPost());
-    setTagsText('');
-    setEditorView('edit');
-    setMessage(translatedMessage('admin.posts.newMessage'));
-    moveToEditorOnMobile();
-  };
-
-  const load = () => {
-    setLoading(true);
-    return adminListPosts(token)
-      .then((items) => setPosts(sortPostsByNewest(items)))
-      .catch((err) => {
-        if (isAdminSessionError(err)) { onSessionExpired(); return; }
-        setMessage(backendErrorMessage(err, 'admin.posts.loadFailed'));
-      })
-      .finally(() => setLoading(false));
-  };
-
-  useEffect(() => { void load(); }, [token]);
-  useEffect(() => { writeAdminPostDraft(current, tagsText); }, [current, tagsText]);
-
-  const updateCurrent = <K extends keyof Post>(key: K, value: Post[K]) => {
-    setCurrent((post) => ({ ...post, [key]: value }));
-  };
-
-  const save = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (bulkSaving) return;
-    const post: Partial<Post> = {
-      ...current,
-      title: String(current.title || '').trim(),
-      excerpt: String(current.excerpt || '').trim(),
-      body: String(current.body || ''),
-      tags: splitTags(tagsText),
-      status: (current.status || 'published') as Post['status']
-    };
-
-    if (!post.body?.trim()) {
-      setEditorView('edit');
-      setMessage(translatedMessage('admin.posts.bodyRequired'));
-      window.requestAnimationFrame(() => document.getElementById('post-body')?.focus());
-      return;
-    }
-
-    setSaving(true);
-    setMessage(translatedMessage('admin.posts.savingMessage'));
-    try {
-      const saved = await adminSavePost(token, post);
-      setPosts((items) => sortPostsByNewest([saved, ...items.filter((item) => item.id !== saved.id)]));
-      setCurrent(saved);
-      setTagsText((saved.tags || []).join(', '));
-      syncPublicPost(saved);
-      setMessage(saved.status === 'published'
-        ? translatedMessage('admin.posts.savedPublished')
-        : translatedMessage('admin.posts.savedStatus', undefined, { status: { key: POST_STATUS_LABEL_KEYS[saved.status] } }));
-    } catch (err) {
-      if (isAdminSessionError(err)) { onSessionExpired(); return; }
-      setMessage(backendErrorMessage(err, 'admin.posts.saveFailed'));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const applyBulkStatus = async () => {
-    if (saving || !selection.selectedIds.length) return;
-    const requestedIds = [...selection.selectedIds];
-    const updated = new Set<string>();
-    const updatedAt = new Date().toISOString();
-    const reflectUpdatedPosts = () => {
-      if (!updated.size) return;
-      setPosts((items) => sortPostsByNewest(items.map((post) => updated.has(post.id) ? { ...post, status: bulkStatus, updatedAt } : post)));
-      posts.filter((post) => updated.has(post.id)).forEach((post) => syncPublicPost({ ...post, status: bulkStatus, updatedAt }));
-      setCurrent((post) => post.id && updated.has(post.id) ? { ...post, status: bulkStatus, updatedAt } : post);
-    };
-    setBulkSaving(true);
-    setMessage(null);
-    try {
-      for (const ids of mutationBatches(requestedIds)) {
-        const result = await adminBulkUpdatePosts(token, ids, bulkStatus);
-        (result.updatedIds || []).forEach((id) => updated.add(id));
-      }
-      reflectUpdatedPosts();
-      setMessage(translatedMessage('admin.posts.bulkUpdated', { count: updated.size }, { status: { key: POST_STATUS_LABEL_KEYS[bulkStatus] } }));
-      selection.clear();
-    } catch (err) {
-      reflectUpdatedPosts();
-      void load();
-      if (isAdminSessionError(err)) { onSessionExpired(); return; }
-      setMessage(backendErrorMessage(err, 'admin.posts.bulkUpdateFailed'));
-    } finally {
-      setBulkSaving(false);
-    }
-  };
-
-  const deletePosts = async (ids: string[]) => {
-    if (!ids.length || !window.confirm(t('admin.posts.deleteConfirm', { count: ids.length }))) return;
-    const deleted = new Set<string>();
-    const reflectDeletedPosts = () => {
-      if (!deleted.size) return;
-      posts.filter((post) => deleted.has(post.id)).forEach((post) => syncPublicPost({ ...post, status: 'deleted', updatedAt: new Date().toISOString() }));
-      setPosts((items) => items.filter((post) => !deleted.has(post.id)));
-      if (current.id && deleted.has(current.id)) {
-        setCurrent(blankPost());
-        setTagsText('');
-        setEditorView('edit');
-      }
-    };
-    setBulkSaving(true);
-    setMessage(null);
-    try {
-      for (const batch of mutationBatches(ids)) {
-        const result = await adminBulkDeletePosts(token, batch);
-        [...(result.deletedIds || []), ...(result.alreadyMissingIds || [])].forEach((id) => deleted.add(id));
-      }
-      reflectDeletedPosts();
-      setMessage(translatedMessage('admin.posts.deleted', { count: deleted.size }));
-      selection.clear();
-    } catch (err) {
-      reflectDeletedPosts();
-      void load();
-      if (isAdminSessionError(err)) { onSessionExpired(); return; }
-      setMessage(backendErrorMessage(err, 'admin.posts.deleteFailed'));
-    } finally {
-      setBulkSaving(false);
-    }
-  };
-
-  const previewTags = splitTags(tagsText);
-  const previewTitle = String(current.title || '').trim() || t('admin.posts.previewTitle');
-  const previewExcerpt = String(current.excerpt || '').trim();
-  const previewMarkdownContext = postMarkdownContext(current);
-
-  return (
-    <section className="admin-posts" aria-label={t('admin.posts.manage')}>
-      <header className="panel admin-section-head">
-        <div>
-          <h2>{t('admin.posts.manage')}</h2>
-          <p className="help-text">{t('admin.posts.help')}</p>
-        </div>
-        <div className="admin-section-head__actions">
-          <div className="admin-view-switch" role="tablist" aria-label={t('admin.posts.editorTabs')}>
-            <button id="admin-edit-tab" className={editorView === 'edit' ? 'admin-view-switch__active' : ''} type="button" role="tab" aria-selected={editorView === 'edit'} aria-controls="admin-edit-panel" onClick={() => setEditorView('edit')}>{t('admin.posts.edit')}</button>
-            <button id="admin-preview-tab" className={editorView === 'preview' ? 'admin-view-switch__active' : ''} type="button" role="tab" aria-selected={editorView === 'preview'} aria-controls="admin-preview-panel" onClick={() => setEditorView('preview')}>{t('admin.posts.preview')}</button>
-          </div>
-          <button className="button button--primary" type="button" onClick={startNewPost}>{t('admin.posts.new')}</button>
-        </div>
-      </header>
-
-      {editorView === 'edit' ? (
-        <div id="admin-edit-panel" className="admin-post-layout" role="tabpanel" aria-labelledby="admin-edit-tab">
-          <aside className="panel admin-list-panel" aria-label={t('admin.posts.list')}>
-            <div className="admin-list-panel__top">
-              <strong>{t('admin.posts.list')}</strong>
-              <span>{loading && !posts.length ? t('admin.posts.loading') : t('common.count', { count: posts.length })}</span>
-            </div>
-            <AdminBulkBar
-              scopeIds={postIds}
-              selection={selection}
-              status={bulkStatus}
-              statusOptions={([
-                ['published', POST_STATUS_LABEL_KEYS.published],
-                ['draft', POST_STATUS_LABEL_KEYS.draft],
-                ['hidden', POST_STATUS_LABEL_KEYS.hidden]
-              ] as Array<[EditablePostStatus, TranslationKey]>).map(([value, key]) => ({ value, label: t(key) }))}
-              busy={bulkSaving}
-              disabled={saving}
-              onStatusChange={(status) => setBulkStatus(status as EditablePostStatus)}
-              onApply={() => { void applyBulkStatus(); }}
-              onDelete={() => { void deletePosts(selection.selectedIds); }}
-            />
-            {loading && !posts.length ? <p className="status-message">{t('admin.posts.loadingList')}</p> : null}
-            {!loading && !posts.length ? <p className="admin-empty-note">{t('admin.posts.empty')}</p> : null}
-            <div className="admin-list">
-              {posts.map((post) => (
-                <div className={`admin-list-card ${current.id === post.id ? 'admin-list-card--active' : ''}`} key={post.id}>
-                  <label className="admin-row-selection">
-                    <input
-                      type="checkbox"
-                      checked={selection.selectedSet.has(post.id)}
-                      onChange={(event) => selection.toggle(post.id, event.target.checked)}
-                      disabled={saving || bulkSaving}
-                      aria-label={t('admin.bulk.selectItem', { name: post.title || t('common.untitled') })}
-                    />
-                  </label>
-                  <button className="admin-list-card__content" type="button" onClick={() => selectPost(post)} disabled={saving || bulkSaving} aria-pressed={current.id === post.id}>
-                    <span className={`status-chip status-chip--${post.status}`}>{t(POST_STATUS_LABEL_KEYS[post.status])}</span>
-                    <strong>{post.title || t('common.untitled')}</strong>
-                    <small>{formatDate(post.updatedAt || post.createdAt) || t('common.noDate')}</small>
-                  </button>
-                </div>
-              ))}
-            </div>
-          </aside>
-
-          <form className="panel admin-editor" onSubmit={save} ref={editorRef}>
-            <div className="admin-editor__bar">
-              <h3>{current.id ? t('admin.posts.editTitle') : t('admin.posts.new')}</h3>
-              <div className="admin-editor__actions">
-                {current.id ? (
-                  <button className="admin-editor__delete" type="button" onClick={() => { void deletePosts([current.id as string]); }} disabled={saving || bulkSaving} aria-label={t('admin.posts.deleteOne')} title={t('admin.posts.deleteOne')}>
-                    <TrashIcon />
-                  </button>
-                ) : null}
-                <button className="button button--primary" type="submit" disabled={saving || bulkSaving}>{saving ? t('common.saving') : t('common.save')}</button>
-              </div>
-            </div>
-
-            <div className="admin-form-grid">
-              <div className="field admin-field--wide">
-                <label htmlFor="post-title">{t('admin.posts.titleField')}</label>
-                <input id="post-title" name="title" value={current.title || ''} onChange={(event) => updateCurrent('title', event.target.value)} required />
-              </div>
-              <div className="field admin-post-status" role="radiogroup" aria-labelledby="post-status-label">
-                <span id="post-status-label" className="admin-post-status__label">{t('admin.posts.statusField')}</span>
-                <div className="admin-post-status__options">
-                  {([
-                    ['published', POST_STATUS_LABEL_KEYS.published],
-                    ['draft', POST_STATUS_LABEL_KEYS.draft],
-                    ['hidden', POST_STATUS_LABEL_KEYS.hidden]
-                  ] as Array<[EditablePostStatus, TranslationKey]>).map(([value, labelKey]) => (
-                    <label key={value}>
-                      <input type="radio" name="status" value={value} checked={(current.status || 'published') === value} onChange={() => updateCurrent('status', value)} />
-                      <span>{t(labelKey)}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-              <div className="field">
-                <label htmlFor="post-tags">{t('admin.posts.tagsField')}</label>
-                <input id="post-tags" name="tags" value={tagsText} onChange={(event) => setTagsText(event.target.value)} placeholder={t('admin.posts.tagsPlaceholder')} />
-              </div>
-              <div className="field admin-field--wide">
-                <label htmlFor="post-excerpt">{t('admin.posts.excerptField')}</label>
-                <input id="post-excerpt" name="excerpt" value={current.excerpt || ''} onChange={(event) => updateCurrent('excerpt', event.target.value)} />
-              </div>
-            </div>
-
-            <div className="field admin-writing-rail">
-              <label htmlFor="post-body">{t('admin.posts.bodyField')}</label>
-              <textarea className="admin-markdown-input" id="post-body" name="body" value={current.body || ''} onChange={(event) => updateCurrent('body', event.target.value)} required />
-              <span className="help-text">{t('admin.posts.draftHelp')}</span>
-            </div>
-          </form>
-        </div>
-      ) : (
-        <section id="admin-preview-panel" className="admin-live-preview" role="tabpanel" aria-labelledby="admin-preview-tab">
-          <article className="post-entry post-entry--active">
-            <div className="post-entry__summary">
-              <h2>{previewTitle}</h2>
-              {previewExcerpt ? <p>{previewExcerpt}</p> : null}
-              {previewTags.length ? <TagList tags={previewTags} /> : null}
-              <p className="meta">{t('admin.posts.previewWidth')}</p>
-            </div>
-            <div className="post-entry__body">
-              {current.body ? (
-                <MarkdownView
-                  markdown={current.body}
-                  baseUrl={previewMarkdownContext.baseUrl}
-                  rootUrl={previewMarkdownContext.rootUrl}
-                />
-              ) : <p className="help-text">{t('admin.posts.previewEmpty')}</p>}
-            </div>
-          </article>
-        </section>
-      )}
-      {message ? <p className="status-message" role="status">{renderAdminMessage(message, t)}</p> : null}
-    </section>
-  );
 }
 
 function ThingsAdmin({ token, onSessionExpired }: { token: string; onSessionExpired: () => void }) {
@@ -811,7 +441,7 @@ function ThingsAdmin({ token, onSessionExpired }: { token: string; onSessionExpi
   };
 
   return (
-    <section className="admin-posts" aria-label={t('admin.things.manage')}>
+    <section className="admin-content" aria-label={t('admin.things.manage')}>
       <header className="panel admin-section-head">
         <div>
           <h2>{t('admin.things.manage')}</h2>
@@ -822,7 +452,7 @@ function ThingsAdmin({ token, onSessionExpired }: { token: string; onSessionExpi
         </div>
       </header>
 
-      <div className="admin-post-layout">
+      <div className="admin-content-layout">
         <aside className="panel admin-list-panel admin-things-list-panel" aria-label={t('admin.things.list')}>
           <div className="admin-list-panel__top">
             <strong>{t('admin.things.list')}</strong>
@@ -911,9 +541,9 @@ function ThingsAdmin({ token, onSessionExpired }: { token: string; onSessionExpi
               <label htmlFor="thing-description">{t('admin.things.descriptionField')}</label>
               <textarea id="thing-description" value={current.description || ''} maxLength={2000} onChange={(event) => updateCurrent('description', event.target.value)} />
             </div>
-            <div className="field admin-post-status" role="radiogroup" aria-labelledby="thing-status-label">
-              <span id="thing-status-label" className="admin-post-status__label">{t('admin.things.statusField')}</span>
-              <div className="admin-post-status__options admin-thing-status__options">
+            <div className="field admin-thing-status" role="radiogroup" aria-labelledby="thing-status-label">
+              <span id="thing-status-label" className="admin-thing-status__label">{t('admin.things.statusField')}</span>
+              <div className="admin-thing-status__options">
                 {(['visible', 'hidden'] as Thing['status'][]).map((status) => (
                   <label key={status}>
                     <input type="radio" name="thing-status" value={status} checked={(current.status || 'visible') === status} onChange={() => updateCurrent('status', status)} />
@@ -1653,7 +1283,7 @@ function GuestbookAdmin({ token, onSessionExpired }: { token: string; onSessionE
 export function AdminApp() {
   const { t } = useI18n();
   const [session, setSession] = useState(() => loadAdminSession());
-  const [tab, setTab] = useState<Tab>('posts');
+  const [tab, setTab] = useState<Tab>('assets');
   const [sessionMessage, setSessionMessage] = useState<AdminMessage>(null);
   const [sessionRemainingMs, setSessionRemainingMs] = useState(() =>
     session ? getAdminSessionRemainingMs(session) : 0
@@ -1811,13 +1441,12 @@ export function AdminApp() {
       </section>
 
       <div className="tabs admin-tabs" role="tablist" aria-label={t('admin.menu')}>
-        {(['posts', 'assets', 'things', 'guestbook'] as Tab[]).map((item) => (
+        {(['assets', 'things', 'guestbook'] as Tab[]).map((item) => (
           <button id={`admin-tab-${item}`} className={`button ${tab === item ? 'button--primary' : ''}`} type="button" role="tab" key={item} aria-selected={tab === item} aria-controls={`admin-panel-${item}`} onClick={() => setTab(item)}>{t(TAB_LABEL_KEYS[item])}</button>
         ))}
       </div>
 
       <div id={`admin-panel-${tab}`} className="admin-tab-panel" role="tabpanel" aria-labelledby={`admin-tab-${tab}`}>
-        {tab === 'posts' ? <PostsAdmin token={session.token} onSessionExpired={handleSessionExpired} /> : null}
         {tab === 'assets' ? <AssetsAdmin token={session.token} onSessionExpired={handleSessionExpired} /> : null}
         {tab === 'things' ? <ThingsAdmin token={session.token} onSessionExpired={handleSessionExpired} /> : null}
         {tab === 'guestbook' ? <GuestbookAdmin token={session.token} onSessionExpired={handleSessionExpired} /> : null}

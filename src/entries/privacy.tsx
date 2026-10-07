@@ -42,7 +42,7 @@ export function PrivacyPage() {
           '삭제 인증: 비밀번호 원문이 아닌 salt와 hash 정보',
           '남용 방지: 접속 IP로 만든 HMAC 해시, 요청 횟수, 차단 상태·사유·시각, Turnstile 검증 정보',
           '브라우저 저장소: 임의의 방명록 클라이언트 식별자, 표시 언어, 공개 콘텐츠 캐시',
-          '관리자 전용: 세션 정보와 작성 중인 게시물 초안'
+          '관리자 전용: 세션 정보'
         ]
       },
       {
@@ -50,7 +50,7 @@ export function PrivacyPage() {
         items: [
           '방명록 작성·표시·삭제와 운영 관리',
           '도배, 자동화 요청, 비정상 접근 방지와 IP 차단',
-          '관리자 인증 및 게시물·자료 관리',
+          '관리자 인증 및 자료 표시 설정·아무거 링크 관리',
           '표시 언어 유지와 콘텐츠 로딩 개선'
         ]
       },
@@ -114,7 +114,7 @@ export function PrivacyPage() {
           'Deletion authentication: salted password hash information, never the plain-text password',
           'Abuse prevention: an HMAC hash derived from the IP address, request counts, block status and history, and Turnstile verification data',
           'Browser storage: a random guestbook client ID, language preference, and public content cache',
-          'Admin only: session information and in-progress post drafts'
+          'Admin only: session information'
         ]
       },
       {
@@ -122,7 +122,7 @@ export function PrivacyPage() {
         items: [
           'Creating, displaying, deleting, and moderating guestbook messages',
           'Preventing spam, automated requests, and unauthorized access',
-          'Authenticating administrators and managing posts and archive items',
+          'Authenticating administrators and managing archive display settings and Things links',
           'Remembering the display language and improving content loading'
         ]
       },

@@ -1,7 +1,7 @@
 import { config, isApiConfigured } from '../config';
-import { getMockGuestbook, getMockPosts } from '../data/mockData';
+import { getMockGuestbook } from '../data/mockData';
 import { translate } from '../i18n';
-import type { AdminSession, ApiEnvelope, AssetOverride, GuestbookAdminEntry, GuestbookEntry, GuestbookIpBan, Post, Thing } from '../types';
+import type { AdminSession, ApiEnvelope, AssetOverride, GuestbookAdminEntry, GuestbookEntry, GuestbookIpBan, Thing } from '../types';
 import { readCache, readCachePayload, writeCache, type CachePayload } from '../utils/localCache';
 
 export class ApiNotConfiguredError extends Error {
@@ -53,8 +53,6 @@ function requireArrayResponse<T>(value: unknown): T[] {
   return value as T[];
 }
 
-const POSTS_CACHE_KEY = 'posts:v1';
-const POST_CONTROLS_CACHE_KEY = 'posts-control:v1';
 const ASSET_OVERRIDES_CACHE_KEY = 'asset-overrides:v1';
 const GUESTBOOK_CACHE_KEY = 'guestbook:v1';
 const THINGS_CACHE_KEY = 'things:v1';
@@ -94,57 +92,6 @@ function normalizeTags(value: unknown): string[] {
     try { return normalizeTags(JSON.parse(text)); } catch (_) { /* fall through */ }
   }
   return text.split(',').map((tag) => tag.trim()).filter(Boolean);
-}
-
-function normalizePostStatus(value: unknown): Post['status'] {
-  return value === 'published' || value === 'hidden' || value === 'draft' || value === 'deleted' ? value : 'draft';
-}
-
-function markdownBaseUrl(bodyUrl: string, storagePath: string): string | undefined {
-  const candidate = bodyUrl || (storagePath
-    ? `${config.storageBaseUrl}/${storagePath.replace(/^\/+/, '')}`
-    : '');
-  if (!candidate) return undefined;
-  try {
-    const url = new URL(candidate);
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') return undefined;
-    return new URL('.', url).href;
-  } catch (_) {
-    return undefined;
-  }
-}
-
-export function normalizePost(value: unknown): Post | null {
-  const record = asRecord(value);
-  if (!record) return null;
-  const id = asString(record.id || record.slug).trim();
-  if (!id) return null;
-  const source = record.source === 'storage' ? 'storage' : 'sheets';
-  const storagePath = asString(record.storagePath).trim();
-  const bodyUrl = asString(record.bodyUrl).trim();
-  return {
-    id,
-    slug: asString(record.slug).trim() || undefined,
-    title: asString(record.title).trim() || translate('common.untitled'),
-    excerpt: asString(record.excerpt).trim(),
-    body: asString(record.body || record.bodyMarkdown),
-    tags: normalizeTags(record.tags),
-    status: normalizePostStatus(record.status),
-    createdAt: asString(record.createdAt || record.updatedAt || new Date().toISOString()),
-    updatedAt: asString(record.updatedAt).trim() || undefined,
-    publishedAt: asString(record.publishedAt).trim() || undefined,
-    source,
-    storagePath: storagePath || undefined,
-    bodyUrl: bodyUrl || undefined,
-    markdownBaseUrl: asString(record.markdownBaseUrl).trim() || markdownBaseUrl(bodyUrl, storagePath),
-    markdownRootUrl: asString(record.markdownRootUrl).trim()
-      || (storagePath || source === 'storage' ? config.storageBaseUrl : undefined)
-  };
-}
-
-export function normalizePosts(values: unknown): Post[] {
-  if (!Array.isArray(values)) return [];
-  return values.map(normalizePost).filter((post): post is Post => Boolean(post));
 }
 
 function normalizeAssetOverride(value: unknown): AssetOverride | null {
@@ -213,51 +160,6 @@ export function normalizeThings(values: unknown): Thing[] {
   return values.map(normalizeThing).filter((thing): thing is Thing => Boolean(thing));
 }
 
-export function readCachedPosts(): Post[] {
-  return normalizePosts(readCache<unknown>(POSTS_CACHE_KEY));
-}
-
-export function readCachedPostsPayload(): CachePayload<Post[]> | null {
-  const payload = readCachePayload<unknown>(POSTS_CACHE_KEY);
-  if (!payload) return null;
-  return {
-    savedAt: payload.savedAt,
-    data: normalizePosts(payload.data)
-  };
-}
-
-export function writeCachedPosts(posts: Post[]) {
-  writeCache(POSTS_CACHE_KEY, normalizePosts(posts));
-}
-
-export function readCachedPostControls(): Post[] {
-  return readCachedPostControlsPayload()?.data || [];
-}
-
-export function readCachedPostControlsPayload(): CachePayload<Post[]> | null {
-  const payload = readCachePayload<unknown>(POST_CONTROLS_CACHE_KEY);
-  if (!payload) return null;
-  return {
-    savedAt: payload.savedAt,
-    data: normalizePosts(payload.data)
-  };
-}
-
-export function writeCachedPostControls(posts: Post[]) {
-  const controls = normalizePosts(posts)
-    .filter((post) => post.status !== 'published')
-    .map((post) => ({
-      id: post.id,
-      title: '',
-      body: '',
-      tags: [],
-      status: post.status,
-      createdAt: post.updatedAt || post.createdAt,
-      updatedAt: post.updatedAt || post.createdAt
-    } satisfies Post));
-  writeCache(POST_CONTROLS_CACHE_KEY, controls);
-}
-
 export function readCachedAssetOverridesPayload(): CachePayload<AssetOverride[]> | null {
   const payload = readCachePayload<unknown>(ASSET_OVERRIDES_CACHE_KEY);
   if (!payload) return null;
@@ -299,18 +201,6 @@ export function readCachedThingsPayload(): CachePayload<Thing[]> | null {
 
 export function writeCachedThings(things: Thing[]) {
   writeCache(THINGS_CACHE_KEY, normalizeThings(things).filter((thing) => thing.status === 'visible'));
-}
-
-export async function listPosts(): Promise<Post[]> {
-  try {
-    const posts = requireArrayResponse<Post>(await request<unknown>('post.listPublic'));
-    const normalizedPosts = normalizePosts(posts);
-    writeCachedPostControls(normalizedPosts);
-    return normalizedPosts;
-  } catch (error) {
-    if (error instanceof ApiNotConfiguredError) return getMockPosts();
-    throw error;
-  }
 }
 
 export async function listGuestbook(): Promise<GuestbookEntry[]> {
@@ -363,24 +253,6 @@ export async function adminLogin(input: { password: string; turnstileToken: stri
 
 export async function adminRefreshSession(token: string): Promise<AdminSession> {
   return request<AdminSession>('admin.session.refresh', { token });
-}
-
-export async function adminListPosts(token: string): Promise<Post[]> {
-  return normalizePosts(requireArrayResponse<unknown>(await request<unknown>('admin.post.list', { token })));
-}
-
-export async function adminSavePost(token: string, post: Partial<Post>): Promise<Post> {
-  const saved = normalizePost(await request<unknown>('admin.post.save', { token, post }));
-  if (!saved) throw new ApiRequestError(translate('errors.invalidApiResponse'), 502);
-  return saved;
-}
-
-export async function adminBulkUpdatePosts(token: string, ids: string[], status: Exclude<Post['status'], 'deleted'>): Promise<{ updatedIds: string[]; missingIds?: string[] }> {
-  return request<{ updatedIds: string[]; missingIds?: string[] }>('admin.post.bulkStatus', { token, ids, status });
-}
-
-export async function adminBulkDeletePosts(token: string, ids: string[]): Promise<{ deletedIds: string[]; alreadyMissingIds?: string[] }> {
-  return request<{ deletedIds: string[]; alreadyMissingIds?: string[] }>('admin.post.bulkDelete', { token, ids });
 }
 
 export async function adminListGuestbook(token: string): Promise<GuestbookAdminEntry[]> {

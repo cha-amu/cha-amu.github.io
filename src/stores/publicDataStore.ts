@@ -1,11 +1,10 @@
 import { useSyncExternalStore } from 'react';
 import { translate } from '../i18n';
 import { loadArchiveManifest, mergeAssetOverrides, readCachedArchiveAssetsPayload, writeCachedArchiveAssets } from '../api/archiveManifestClient';
-import { listAssetOverrides, listGuestbook, listPosts, listThings, readCachedAssetOverridesPayload, readCachedGuestbookPayload, readCachedPostControls, readCachedPostControlsPayload, readCachedPostsPayload, readCachedThingsPayload, writeCachedGuestbook, writeCachedPostControls, writeCachedPosts, writeCachedThings } from '../api/appsScriptClient';
-import { listStoragePosts } from '../api/storageClient';
+import { listAssetOverrides, listGuestbook, listThings, readCachedAssetOverridesPayload, readCachedGuestbookPayload, readCachedThingsPayload, writeCachedGuestbook, writeCachedThings } from '../api/appsScriptClient';
+import { listStoragePosts, normalizePostList, readCachedPostsPayload, writeCachedPosts } from '../api/storageClient';
 import type { ArchiveAsset, AssetOverride, GuestbookEntry, Post, Thing } from '../types';
 import { resolveControlSnapshot } from './controlSnapshot';
-import { mergePosts, normalizePostList } from './postMerge';
 
 type ResourceStatus = 'idle' | 'loading' | 'ready' | 'error';
 type ResourceKey = 'posts' | 'guestbook' | 'archive' | 'things';
@@ -52,10 +51,6 @@ function byNewestGuestbook(a: GuestbookEntry, b: GuestbookEntry) {
   return new Date(b.createdAt || '').getTime() - new Date(a.createdAt || '').getTime();
 }
 
-function fulfilledValue<T>(result: PromiseSettledResult<T>, fallback: T): T {
-  return result.status === 'fulfilled' ? result.value : fallback;
-}
-
 function isPendingGuestbookEntry(entry: GuestbookEntry) {
   return String(entry.id || '').startsWith('temp-');
 }
@@ -80,16 +75,13 @@ function normalizeThingList(things: Thing[]) {
 }
 
 const cachedPosts = readCachedPostsPayload();
-const cachedPostControls = readCachedPostControlsPayload();
 const cachedGuestbook = readCachedGuestbookPayload();
 const cachedArchive = readCachedArchiveAssetsPayload();
 const cachedAssetOverrides = readCachedAssetOverridesPayload();
 const cachedThings = readCachedThingsPayload();
 
 let state: PublicDataState = {
-  posts: hydratedResource(
-    cachedPostControls ? normalizePostList(mergePosts(cachedPosts?.data || [], cachedPostControls.data)) : []
-  ),
+  posts: hydratedResource(normalizePostList(cachedPosts?.data || [])),
   guestbook: hydratedResource(normalizeGuestbookList(cachedGuestbook?.data || [])),
   archive: hydratedResource(cachedAssetOverrides ? cachedArchive?.data || [] : []),
   things: hydratedResource(normalizeThingList(cachedThings?.data || []))
@@ -149,21 +141,6 @@ export function usePublicResource<K extends ResourceKey>(key: K): PublicResource
   ) as PublicResource<ResourceMap[K]>;
 }
 
-export function setPublicPosts(updater: Post[] | ((current: Post[]) => Post[])) {
-  const nextPosts = normalizePostList(typeof updater === 'function' ? updater(state.posts.items) : updater);
-  writeCachedPosts(nextPosts);
-  updateResource('posts', { items: nextPosts, status: 'ready', refreshing: false, error: '', loadedAt: new Date().toISOString() });
-}
-
-export function syncPublicPost(saved: Post) {
-  const controls = readCachedPostControls();
-  writeCachedPostControls([saved, ...controls.filter((post) => post.id !== saved.id)]);
-  setPublicPosts((current) => {
-    const withoutSaved = current.filter((post) => post.id !== saved.id);
-    return saved.status === 'published' ? [saved, ...withoutSaved] : withoutSaved;
-  });
-}
-
 export function setPublicGuestbook(updater: GuestbookEntry[] | ((current: GuestbookEntry[]) => GuestbookEntry[])) {
   const nextEntries = normalizeGuestbookList(typeof updater === 'function' ? updater(state.guestbook.items) : updater);
   writeCachedGuestbook(nextEntries);
@@ -199,16 +176,9 @@ export function refreshPosts(options: { force?: boolean; silent?: boolean } = {}
   if (pending.posts) return pending.posts as Promise<Post[]>;
   if (!options.force && state.posts.status === 'ready' && isFresh(state.posts)) return Promise.resolve(state.posts.items);
   setLoading('posts', Boolean(options.silent));
-  const request = Promise.allSettled([listStoragePosts(), listPosts()])
-    .then(([storageResult, sheetsResult]) => {
-      const storagePosts = fulfilledValue(storageResult, []);
-      const cachedControls = readCachedPostControlsPayload();
-      const sheetPosts = resolveControlSnapshot(sheetsResult, cachedControls?.data ?? null);
-      if (!storagePosts.length && !sheetPosts.length) {
-        const firstError = storageResult.status === 'rejected' ? storageResult.reason : sheetsResult.status === 'rejected' ? sheetsResult.reason : null;
-        if (firstError) throw firstError;
-      }
-      const nextPosts = normalizePostList(mergePosts(storagePosts, sheetPosts));
+  const request = listStoragePosts()
+    .then((posts) => {
+      const nextPosts = normalizePostList(posts);
       writeCachedPosts(nextPosts);
       updateResource('posts', { items: nextPosts, status: 'ready', refreshing: false, error: '', loadedAt: new Date().toISOString() });
       return nextPosts;

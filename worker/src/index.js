@@ -1,7 +1,6 @@
 import { contentAction } from './content-api.js';
 
 const PUBLIC_ACTIONS = new Set([
-  'post.listPublic',
   'guestbook.listPublic',
   'assetOverride.listPublic',
   'thing.listPublic'
@@ -12,8 +11,6 @@ const CONTENT_ACTIONS = new Set([
   'guestbook.hideByPassword',
   'admin.session.verify',
   'admin.session.refresh',
-  'admin.post.list',
-  'admin.post.save',
   'admin.guestbook.hide',
   'admin.guestbook.restore',
   'admin.assetOverride.list',
@@ -22,8 +19,6 @@ const CONTENT_ACTIONS = new Set([
 ]);
 
 const VALIDATED_ADMIN_ACTIONS = new Set([
-  'admin.post.bulkStatus',
-  'admin.post.bulkDelete',
   'admin.guestbook.bulkStatus',
   'admin.guestbook.bulkDelete',
   'admin.assetOverride.bulkStatus',
@@ -32,17 +27,12 @@ const VALIDATED_ADMIN_ACTIONS = new Set([
 ]);
 
 const STORAGE_SYNC_ACTIONS = new Set([
-  'storage.sync.post.list',
-  'storage.sync.post.save',
-  'storage.sync.postDeletion.list',
-  'storage.sync.postDeletion.finalize',
   'storage.sync.assetOverride.list',
   'storage.sync.assetOverride.save',
   'storage.sync.assetOverride.delete'
 ]);
 
 const ACTION_FIELDS = new Map([
-  ['post.listPublic', []],
   ['guestbook.listPublic', []],
   ['assetOverride.listPublic', []],
   ['thing.listPublic', []],
@@ -51,10 +41,6 @@ const ACTION_FIELDS = new Map([
   ['admin.login', ['password']],
   ['admin.session.verify', ['token']],
   ['admin.session.refresh', ['token']],
-  ['admin.post.list', ['token']],
-  ['admin.post.save', ['token', 'post']],
-  ['admin.post.bulkStatus', ['token', 'ids', 'status']],
-  ['admin.post.bulkDelete', ['token', 'ids']],
   ['admin.guestbook.list', ['token']],
   ['admin.guestbook.hide', ['token', 'id', 'hiddenReason']],
   ['admin.guestbook.restore', ['token', 'id']],
@@ -67,10 +53,6 @@ const ACTION_FIELDS = new Map([
   ['admin.thing.list', ['token']],
   ['admin.thing.save', ['token', 'thing']],
   ['admin.thing.delete', ['token', 'ids']],
-  ['storage.sync.post.list', []],
-  ['storage.sync.post.save', ['post']],
-  ['storage.sync.postDeletion.list', []],
-  ['storage.sync.postDeletion.finalize', ['deletions']],
   ['storage.sync.assetOverride.list', []],
   ['storage.sync.assetOverride.save', ['override']],
   ['storage.sync.assetOverride.delete', ['ids']]
@@ -80,16 +62,14 @@ const IP_BAN_SCOPE = 'guestbook.create';
 const TURNSTILE_VERIFY_URL = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
 const MAX_BODY_BYTES = 64 * 1024;
 const MAX_BULK_IDS = 100;
-const MAX_POST_OR_ASSET_ID_LENGTH = 512;
+const MAX_ASSET_ID_LENGTH = 512;
 const MAX_GUESTBOOK_ID_LENGTH = 128;
 const MAX_THING_ID_LENGTH = 128;
 const MAX_THING_TITLE_LENGTH = 160;
 const MAX_THING_DESCRIPTION_LENGTH = 2_000;
 const MAX_THING_URL_LENGTH = 2_048;
-const MAX_DELETION_NONCE_LENGTH = 128;
 const MAX_TOKEN_LENGTH = 2048;
 const MAX_HIDDEN_REASON_LENGTH = 500;
-const MAX_STORAGE_POST_BODY_LENGTH = 60_000;
 const MAX_STORAGE_TEXT_LENGTH = 5_000;
 const MAX_STORAGE_URL_LENGTH = 2_048;
 const MAX_STORAGE_TAGS = 100;
@@ -189,35 +169,6 @@ function normalizeBulkIds(value, maxIdLength) {
   return ids;
 }
 
-function normalizePostDeletions(value) {
-  if (!Array.isArray(value)) {
-    throw new GatewayError(400, 'deletions는 배열이어야 합니다.');
-  }
-  const deletions = [];
-  const seen = new Map();
-  for (const valueItem of value) {
-    if (!valueItem || typeof valueItem !== 'object' || Array.isArray(valueItem)) {
-      throw new GatewayError(400, '삭제 확정 항목이 올바르지 않습니다.');
-    }
-    assertOnlyFields(valueItem, ['id', 'nonce']);
-    const id = requireRequestString(valueItem.id, 'id', MAX_POST_OR_ASSET_ID_LENGTH);
-    const nonce = requireRequestString(valueItem.nonce, 'nonce', MAX_DELETION_NONCE_LENGTH);
-    if (seen.has(id)) {
-      if (seen.get(id) !== nonce) {
-        throw new GatewayError(400, '같은 id에 서로 다른 nonce를 사용할 수 없습니다.');
-      }
-      continue;
-    }
-    seen.set(id, nonce);
-    deletions.push({ id, nonce });
-    if (deletions.length > MAX_BULK_IDS) {
-      throw new GatewayError(400, `한 번에 최대 ${MAX_BULK_IDS}개까지 처리할 수 있습니다.`);
-    }
-  }
-  if (!deletions.length) throw new GatewayError(400, '확정할 삭제 항목이 필요합니다.');
-  return deletions;
-}
-
 function requirePlainObject(value, name) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new GatewayError(400, `${name} 값이 올바르지 않습니다.`);
@@ -241,46 +192,12 @@ function normalizeStorageTags(value) {
   return value.map((tag) => requireRequestString(tag, 'tag', MAX_STORAGE_TAG_LENGTH));
 }
 
-function normalizeStoragePost(value) {
-  const post = requirePlainObject(value, 'post');
-  const fields = [
-    'id', 'title', 'excerpt', 'body', 'tags', 'status', 'createdAt', 'updatedAt',
-    'publishedAt', 'storagePath', 'bodyUrl'
-  ];
-  assertOnlyFields(post, fields);
-  const status = requireRequestString(post.status, 'status', 32);
-  if (!new Set(['published', 'draft', 'hidden']).has(status)) {
-    throw new GatewayError(400, '지원하지 않는 글 상태입니다.');
-  }
-  const normalized = {
-    id: requireRequestString(post.id, 'id', MAX_POST_OR_ASSET_ID_LENGTH),
-    status
-  };
-  const limits = {
-    title: MAX_STORAGE_TEXT_LENGTH,
-    excerpt: MAX_STORAGE_TEXT_LENGTH,
-    body: MAX_STORAGE_POST_BODY_LENGTH,
-    createdAt: 64,
-    updatedAt: 64,
-    publishedAt: 64,
-    storagePath: MAX_STORAGE_URL_LENGTH,
-    bodyUrl: MAX_STORAGE_URL_LENGTH
-  };
-  for (const [field, maxLength] of Object.entries(limits)) {
-    const fieldValue = normalizeOptionalString(post[field], field, maxLength);
-    if (fieldValue !== undefined) normalized[field] = fieldValue;
-  }
-  const tags = normalizeStorageTags(post.tags);
-  if (tags !== undefined) normalized.tags = tags;
-  return normalized;
-}
-
 function normalizeStorageAssetOverride(value) {
   const override = requirePlainObject(value, 'override');
   const fields = ['assetId', 'displayName', 'description', 'tags', 'sourceUrl', 'status', 'sortOrder'];
   assertOnlyFields(override, fields);
   const normalized = {
-    assetId: requireRequestString(override.assetId, 'assetId', MAX_POST_OR_ASSET_ID_LENGTH)
+    assetId: requireRequestString(override.assetId, 'assetId', MAX_ASSET_ID_LENGTH)
   };
   for (const [field, maxLength] of Object.entries({
     displayName: MAX_STORAGE_TEXT_LENGTH,
@@ -367,20 +284,12 @@ function normalizeStorageSyncAction(action, body) {
     assertOnlyFields(body, ['action']);
     return {};
   }
-  if (action === 'storage.sync.post.save') {
-    assertOnlyFields(body, ['action', 'post']);
-    return { post: normalizeStoragePost(body.post) };
-  }
-  if (action === 'storage.sync.postDeletion.finalize') {
-    assertOnlyFields(body, ['action', 'deletions']);
-    return { deletions: normalizePostDeletions(body.deletions) };
-  }
   if (action === 'storage.sync.assetOverride.save') {
     assertOnlyFields(body, ['action', 'override']);
     return { override: normalizeStorageAssetOverride(body.override) };
   }
   assertOnlyFields(body, ['action', 'ids']);
-  return { ids: normalizeBulkIds(body.ids, MAX_POST_OR_ASSET_ID_LENGTH) };
+  return { ids: normalizeBulkIds(body.ids, MAX_ASSET_ID_LENGTH) };
 }
 
 function normalizeAdminAction(action, body) {
@@ -395,16 +304,14 @@ function normalizeAdminAction(action, body) {
     ? MAX_GUESTBOOK_ID_LENGTH
     : action.startsWith('admin.thing.')
       ? MAX_THING_ID_LENGTH
-      : MAX_POST_OR_ASSET_ID_LENGTH;
+      : MAX_ASSET_ID_LENGTH;
   const ids = normalizeBulkIds(body.ids, maxIdLength);
   const normalized = { token, ids: action.startsWith('admin.thing.') ? ids.map(normalizeThingId) : ids };
   if (!isBulkStatus) return normalized;
 
-  const statuses = action === 'admin.post.bulkStatus'
-    ? new Set(['published', 'draft', 'hidden'])
-    : action === 'admin.guestbook.bulkStatus'
-      ? new Set(['visible', 'hidden'])
-      : new Set(['visible', 'hidden', 'deleted']);
+  const statuses = action === 'admin.guestbook.bulkStatus'
+    ? new Set(['visible', 'hidden'])
+    : new Set(['visible', 'hidden', 'deleted']);
   const status = requireRequestString(body.status, 'status', 32);
   if (!statuses.has(status)) throw new GatewayError(400, '지원하지 않는 상태입니다.');
   normalized.status = status;

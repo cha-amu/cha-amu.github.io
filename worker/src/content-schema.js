@@ -1,14 +1,6 @@
-// The public names match rowsToObjects_ (including the production-only markdown URLs).
+// The public names match rowsToObjects_.
 // List cells are JSON values, so a legacy string, [] and an empty cell remain distinct.
 export const CONTENT_TABLES = {
-  posts: { table: 'posts', key: 'id', extra: true, columns: [
-    'id', 'slug', 'title', 'excerpt', 'body', 'tags', 'status', 'createdAt',
-    'updatedAt', 'publishedAt', 'source', 'storagePath', 'bodyUrl', 'syncStatus',
-    'markdownBaseUrl', 'markdownRootUrl'
-  ] },
-  postDeletions: { table: 'post_deletions', key: 'id', columns: [
-    'id', 'storagePath', 'nonce', 'deletedAt', 'finalizedAt'
-  ] },
   guestbook: { table: 'guestbook_entries', key: 'id', columns: [
     'id', 'name', 'message', 'status', 'createdAt', 'passwordSalt', 'passwordHash',
     'passwordHashAlgorithm', 'passwordHashIterations', 'hiddenReason'

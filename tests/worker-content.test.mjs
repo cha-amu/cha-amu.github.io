@@ -5,11 +5,6 @@ import { fixture, INITIAL_TIME, ADMIN_PASSWORD, GUESTBOOK_PEPPER, sha } from './
 import { appsScriptHash } from './helpers/apps-script-crypto.mjs';
 import { RATE_LIMITS, enforceContentRateLimit } from '../worker/src/content-rate-limits.js';
 
-const post = (id, status = 'published', extra = {}) => ({
-  id, title: `title-${id}`, body: `private-body-${id}`, status, tags: ['한글'],
-  createdAt: '2026-07-01T00:00:00.000Z', updatedAt: '2026-07-02T00:00:00.000Z',
-  publishedAt: status === 'published' ? '2026-07-01T00:00:00.000Z' : '', storagePath: `posts/${id}.md`, ...extra
-});
 const guest = (id, extra = {}) => ({ id, name: 'ㅇㅁ', message: `message-${id}`, status: 'visible', createdAt: INITIAL_TIME, passwordSalt: 'salt', passwordHash: 'hash', ...extra });
 const storageHeaders = (f) => ({ Authorization: `Bearer ${f.env.STORAGE_SYNC_SECRET}`, Origin: '' });
 
@@ -20,32 +15,6 @@ async function contentError(f, action, payload, message, headers = {}) {
   assert.match(result.error, message);
   return result;
 }
-
-test('public posts expose full published rows, only suppression fields for other statuses and permanent tombstones', async (t) => {
-  const f = await fixture(t);
-  await f.seed('posts', [
-    post('public', 'published', { markdownBaseUrl: 'https://storage.test/posts/', markdownRootUrl: 'https://storage.test/', extraColumn: 'keep extension' }),
-    post('draft', 'draft'), post('hidden', 'hidden'), post('empty', '', { updatedAt: '' }),
-    post('stale'), post('finalized-stale')
-  ]);
-  await f.seed('postDeletions', [
-    { id: 'stale', nonce: 'private-nonce', deletedAt: INITIAL_TIME, storagePath: 'private/path' },
-    { id: 'finalized-stale', nonce: 'secret', deletedAt: INITIAL_TIME, finalizedAt: INITIAL_TIME }
-  ]);
-  const records = await f.call('post.listPublic');
-  assert.deepEqual(records[0], (await f.admin('admin.post.list'))[0]);
-  assert.equal(records[0].markdownBaseUrl, 'https://storage.test/posts/');
-  assert.equal(records[0].markdownRootUrl, 'https://storage.test/');
-  assert.equal(records[0].extraColumn, 'keep extension');
-  assert.deepEqual(records.slice(1), [
-    { id: 'draft', status: 'draft', updatedAt: '2026-07-02T00:00:00.000Z' },
-    { id: 'hidden', status: 'hidden', updatedAt: '2026-07-02T00:00:00.000Z' },
-    { id: 'empty', status: 'hidden', updatedAt: '2026-07-01T00:00:00.000Z' },
-    { id: 'stale', status: 'deleted', updatedAt: INITIAL_TIME },
-    { id: 'finalized-stale', status: 'deleted', updatedAt: INITIAL_TIME }
-  ]);
-  for (const secret of ['private-body-draft', 'private-body-hidden', 'private-body-stale', 'private-nonce', 'private/path']) assert.equal(JSON.stringify(records).includes(secret), false);
-});
 
 test('public guestbook only includes visible projected rows, with default names and no credential or moderation fields', async (t) => {
   const f = await fixture(t);
@@ -197,7 +166,7 @@ test('session refresh extends expiry with a new nonce, inclusive expiry boundary
 
 test('all data admin actions require sessions and missing copied secrets retain the security config error', async (t) => {
   const f = await fixture(t);
-  for (const action of ['admin.post.list', 'admin.guestbook.list', 'admin.assetOverride.list', 'admin.thing.list', 'admin.post.save', 'admin.assetOverride.save', 'admin.guestbook.hide', 'admin.guestbook.restore']) {
+  for (const action of ['admin.guestbook.list', 'admin.assetOverride.list', 'admin.thing.list', 'admin.assetOverride.save', 'admin.guestbook.hide', 'admin.guestbook.restore']) {
     await contentError(f, action, {}, /Admin session is required/);
   }
   f.env.ADMIN_PASSWORD_PEPPER = 'short';
@@ -206,105 +175,6 @@ test('all data admin actions require sessions and missing copied secrets retain 
   await contentError(f, 'guestbook.create', { message: 'x', deletePassword: 'pw', turnstileToken: 'guest-turnstile' }, /Server security config is missing/);
   f.env.ADMIN_SESSION_SECRET = '';
   await contentError(f, 'admin.session.verify', { token: 'signed.token' }, /Server security config is missing/);
-});
-
-test('post admin saves preserve dates/tags contract and replace omitted cells instead of merging them', async (t) => {
-  const f = await fixture(t);
-  const created = await f.admin('admin.post.save', { post: { title: 'new', body: 'body', status: 'published', tags: 'not-an-array', markdownBaseUrl: 'https://storage.test/base/', markdownRootUrl: 'https://storage.test' } });
-  assert.ok(created.id); assert.deepEqual(created.tags, []);
-  assert.equal(created.createdAt, INITIAL_TIME); assert.equal(created.updatedAt, INITIAL_TIME); assert.equal(created.publishedAt, INITIAL_TIME);
-  f.advance(1000);
-  const updated = await f.admin('admin.post.save', { post: { id: created.id, title: 'changed', status: 'draft', createdAt: created.createdAt } });
-  assert.equal(updated.publishedAt, '');
-  const listed = (await f.admin('admin.post.list'))[0];
-  assert.equal(listed.body, ''); assert.equal(listed.markdownBaseUrl, ''); assert.equal(listed.markdownRootUrl, '');
-  assert.equal(listed.createdAt, created.createdAt); assert.equal(listed.updatedAt, f.deps.nowIso());
-});
-
-test('storage post saves preserve supplied timestamps and normalize tags/source/sync status with legacy fallbacks', async (t) => {
-  const f = await fixture(t);
-  const input = { id: ' storage-post ', title: 'title', body: 'body', status: ' published ', tags: [' tag '], createdAt: '2026-01-01', updatedAt: '2026-02-01', publishedAt: '2026-01-02', storagePath: 'posts/p.md', bodyUrl: 'https://storage.test/p.md' };
-  const saved = await f.storage('storage.sync.post.save', { post: input });
-  assert.deepEqual(saved, { ...input, id: 'storage-post', status: 'published', tags: ['tag'], source: 'storage', syncStatus: 'synced' });
-  const fallback = await f.storage('storage.sync.post.save', { post: { id: 'fallback', status: 'draft', publishedAt: '2026-01-01' } });
-  assert.equal(fallback.createdAt, '2026-01-01'); assert.equal(fallback.updatedAt, '2026-01-01');
-  assert.equal(fallback.publishedAt, '2026-01-01');
-  const absent = await f.storage('storage.sync.post.save', { post: { id: 'absent', status: 'draft' } });
-  assert.equal(absent.publishedAt, ''); assert.equal(absent.createdAt, INITIAL_TIME);
-  assert.deepEqual(await f.storage('storage.sync.post.list'), await f.admin('admin.post.list'));
-});
-
-test('post bulk status changes only status/dates, reports missing ids and sets publication dates only once', async (t) => {
-  const f = await fixture(t);
-  await f.seed('posts', [post('p'), post('draft', 'draft'), post('hidden', 'hidden')]);
-  assert.deepEqual(await f.admin('admin.post.bulkStatus', { ids: ['p', 'draft', 'missing'], status: 'hidden' }), { updatedIds: ['p', 'draft'], missingIds: ['missing'] });
-  const rows = await f.admin('admin.post.list');
-  assert.equal(rows[0].body, 'private-body-p'); assert.equal(rows[0].publishedAt, '2026-07-01T00:00:00.000Z');
-  await f.admin('admin.post.bulkStatus', { ids: ['draft'], status: 'published' });
-  f.advance(1000);
-  await f.admin('admin.post.bulkStatus', { ids: ['draft'], status: 'published' });
-  assert.equal((await f.admin('admin.post.list'))[1].publishedAt, INITIAL_TIME);
-  assert.equal((await f.call('post.listPublic'))[0].body, undefined);
-});
-
-test('post deletion preserves nonadjacent rows, repairs incomplete tombstones and preserves nonce/date on retry', async (t) => {
-  const f = await fixture(t);
-  await f.seed('posts', ['p1', 'p2', 'p3', 'p4', 'repair'].map((id) => post(id)));
-  await f.seed('postDeletions', [
-    { id: 'p4', nonce: 'existing-nonce', deletedAt: '2026-07-09' }, { id: 'repair' }
-  ]);
-  assert.deepEqual(await f.admin('admin.post.bulkDelete', { ids: ['p2', 'p4', 'repair', 'missing'] }), { deletedIds: ['p2', 'p4', 'repair'], alreadyMissingIds: ['missing'] });
-  assert.deepEqual((await f.admin('admin.post.list')).map((r) => r.id), ['p1', 'p3']);
-  const tombstones = await f.storage('storage.sync.postDeletion.list');
-  assert.deepEqual(tombstones.map((r) => r.id), ['p4', 'repair', 'p2', 'missing']);
-  assert.equal(tombstones[0].nonce, 'existing-nonce'); assert.equal(tombstones[0].deletedAt, '2026-07-09');
-  assert.equal(tombstones[0].storagePath, 'posts/p4.md'); assert.ok(tombstones[1].nonce); assert.equal(tombstones[1].deletedAt, INITIAL_TIME);
-  f.advance(1000);
-  assert.deepEqual(await f.admin('admin.post.bulkDelete', { ids: ['p2', 'p4', 'repair', 'missing'] }), { deletedIds: [], alreadyMissingIds: ['p2', 'p4', 'repair', 'missing'] });
-  assert.deepEqual(await f.storage('storage.sync.postDeletion.list'), tombstones);
-  assert.deepEqual((await f.rows('audit_log')).map((r) => r.targetId), ['p2', 'p4', 'repair']);
-});
-
-test('finalize validates every nonce before any mutation, is idempotent, retains suppression and blocks all resurrection', async (t) => {
-  const f = await fixture(t);
-  await f.seed('posts', [post('p')]);
-  await f.admin('admin.post.bulkDelete', { ids: ['p', 'missing'] });
-  const tombstones = await f.storage('storage.sync.postDeletion.list');
-  for (const id of ['p', 'missing']) {
-    await contentError(f, 'admin.post.save', { token: f.session(), post: post(id, 'draft') }, /permanently deleted/);
-    await contentError(f, 'storage.sync.post.save', { post: post(id) }, /permanently deleted/, storageHeaders(f));
-  }
-  const pairs = tombstones.map(({ id, nonce }) => ({ id, nonce }));
-  await contentError(f, 'storage.sync.postDeletion.finalize', { deletions: [pairs[0], { id: pairs[1].id, nonce: 'wrong' }] }, /nonce is invalid/, storageHeaders(f));
-  assert.equal((await f.storage('storage.sync.postDeletion.list')).length, 2);
-  assert.ok((await f.rows('post_deletions')).every((r) => r.finalizedAt === ''));
-  assert.deepEqual(await f.storage('storage.sync.postDeletion.finalize', { deletions: [...pairs, { id: 'absent', nonce: 'any' }] }), { finalizedIds: ['p', 'missing'], alreadyMissingIds: ['absent'] });
-  assert.deepEqual(await f.storage('storage.sync.postDeletion.list'), []);
-  assert.equal((await f.rows('post_deletions')).length, 2);
-  assert.deepEqual((await f.call('post.listPublic')).map((r) => r.status), ['deleted', 'deleted']);
-  assert.deepEqual(await f.storage('storage.sync.postDeletion.finalize', { deletions: pairs.map((r) => ({ ...r, nonce: 'even-wrong-on-finalized' })) }), { finalizedIds: [], alreadyMissingIds: ['p', 'missing'] });
-  await contentError(f, 'admin.post.save', { token: f.session(), post: post('p') }, /permanently deleted/);
-  await contentError(f, 'storage.sync.post.save', { post: post('missing') }, /permanently deleted/, storageHeaders(f));
-});
-
-test('post deletion is atomic on SQL failure and concurrent stale saves never revive a tombstoned id', async (t) => {
-  const f = await fixture(t);
-  await f.seed('posts', [post('fail')]);
-  await f.db.prepare("CREATE TRIGGER fail_post_delete BEFORE DELETE ON posts BEGIN SELECT RAISE(ABORT, 'failure'); END").run();
-  assert.equal((await f.request('admin.post.bulkDelete', { token: f.session(), ids: ['fail'] })).status, 503);
-  assert.equal((await f.rows('posts')).length, 1); assert.equal((await f.rows('post_deletions')).length, 0);
-  await f.db.prepare('DROP TRIGGER fail_post_delete').run();
-  for (let i = 0; i < 8; i++) {
-    const id = `race-${i}`;
-    const [saved, deleted] = await Promise.all([
-      f.request('storage.sync.post.save', { post: post(id) }, storageHeaders(f)),
-      f.request('admin.post.bulkDelete', { token: f.session(), ids: [id] })
-    ]);
-    assert.equal(deleted.ok, true); assert.equal(saved.status, 200);
-    if (!saved.ok) assert.match(saved.error, /permanently deleted/);
-    assert.equal(await f.db.prepare('SELECT * FROM posts WHERE id = ?').bind(id).first(), null);
-    assert.ok(await f.db.prepare('SELECT * FROM post_deletions WHERE id = ?').bind(id).first());
-  }
 });
 
 test('guestbook hide/restore and bulk status preserve content/hash; deletes are idempotent', async (t) => {
@@ -367,12 +237,6 @@ test('thing mutations immediately change public projection, keep control/title v
 
 test('all audit event names and targets match legacy mutations and audit failure never rolls back a successful write', async (t) => {
   const f = await fixture(t);
-  await f.admin('admin.post.save', { post: post('p') });
-  await f.storage('storage.sync.post.save', { post: post('s') });
-  await f.admin('admin.post.bulkStatus', { ids: ['p'], status: 'draft' });
-  await f.admin('admin.post.bulkDelete', { ids: ['p'] });
-  const [{ id, nonce }] = await f.storage('storage.sync.postDeletion.list');
-  await f.storage('storage.sync.postDeletion.finalize', { deletions: [{ id, nonce }] });
   await f.seed('guestbook', [guest('g')]);
   await f.admin('admin.guestbook.hide', { id: 'g' }); await f.admin('admin.guestbook.restore', { id: 'g' });
   await f.admin('admin.guestbook.bulkStatus', { ids: ['g'], status: 'hidden', hiddenReason: 'spam' });
@@ -383,13 +247,12 @@ test('all audit event names and targets match legacy mutations and audit failure
   await f.admin('admin.thing.save', { thing: { id: 't', title: 'thing', url: 'https://t.test/', status: 'visible', sortOrder: 1 } });
   await f.admin('admin.thing.delete', { ids: ['t'] });
   assert.deepEqual((await f.rows('audit_log')).map((r) => [r.action, r.targetType, r.targetId]), [
-    ['post.save', 'post', 'p'], ['post.syncFromStorage', 'post', 's'], ['post.bulkStatus', 'post', 'p'], ['post.bulkDelete', 'post', 'p'], ['postDeletion.finalize', 'post', 'p'],
     ['guestbook.hide', 'guestbook', 'g'], ['guestbook.restore', 'guestbook', 'g'], ['guestbook.bulkStatus', 'guestbook', 'g'], ['guestbook.bulkDelete', 'guestbook', 'g'],
     ['assetOverride.update', 'asset', 'a'], ['assetOverride.bulkStatus', 'asset', 'a'], ['assetOverride.delete', 'asset', 'a'], ['thing.save', 'thing', 't'], ['thing.delete', 'thing', 't']
   ]);
   await f.db.prepare("CREATE TRIGGER fail_audit BEFORE INSERT ON audit_log BEGIN SELECT RAISE(ABORT, 'failure'); END").run();
-  await f.admin('admin.post.save', { post: post('audit-fail') });
-  assert.ok((await f.admin('admin.post.list')).some((p) => p.id === 'audit-fail'));
+  await f.admin('admin.assetOverride.save', { override: { assetId: 'audit-fail', status: 'hidden' } });
+  assert.ok((await f.admin('admin.assetOverride.list')).some((asset) => asset.assetId === 'audit-fail'));
 });
 
 for (const [name, rule] of Object.entries(RATE_LIMITS)) {

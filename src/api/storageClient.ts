@@ -1,6 +1,8 @@
 import { config } from '../config';
 import { translate } from '../i18n';
 import type { Post } from '../types';
+import { postTimestamp } from '../utils/postTimestamp';
+import { readCachePayload, writeCache, type CachePayload } from '../utils/localCache';
 import { excerpt } from '../utils/strings';
 
 interface StoragePostEntry {
@@ -43,7 +45,7 @@ function normalizeTags(value: unknown): string[] {
 }
 
 function statusFrom(value: unknown): Post['status'] {
-  return value === 'published' || value === 'draft' || value === 'hidden' || value === 'deleted' ? value : 'published';
+  return value === 'published' || value === 'draft' || value === 'hidden' ? value : 'draft';
 }
 
 function absoluteStorageUrl(pathOrUrl: string): string {
@@ -114,7 +116,7 @@ async function loadStoragePost(entry: StoragePostEntry): Promise<Post | null> {
     excerpt: asString(entry.excerpt || meta.excerpt).trim() || excerpt(body),
     body,
     tags: normalizeTags(entry.tags ?? meta.tags),
-    status: statusFrom(entry.status || meta.status),
+    status: statusFrom(meta.status),
     createdAt,
     updatedAt,
     publishedAt,
@@ -130,5 +132,71 @@ export async function listStoragePosts(): Promise<Post[]> {
   const manifest = await fetchJson<StoragePostsManifest>(config.storagePostsManifestUrl);
   const entries = Array.isArray(manifest.posts) ? manifest.posts : [];
   const posts = await Promise.all(entries.map((entry) => loadStoragePost(entry).catch(() => null)));
-  return posts.filter((post): post is Post => Boolean(post));
+  return normalizePostList(posts.filter((post): post is Post => Boolean(post)));
+}
+
+// Only storage snapshots may hydrate the public list; older mixed caches are ignored.
+const POSTS_CACHE_KEY = 'posts:v2';
+
+export function normalizePostList(posts: Post[]) {
+  return posts.filter((post) => post.status === 'published')
+    .sort((a, b) => new Date(postTimestamp(b)).getTime() - new Date(postTimestamp(a)).getTime());
+}
+
+function markdownBaseUrl(bodyUrl: string, storagePath: string): string | undefined {
+  const candidate = bodyUrl || (storagePath
+    ? `${config.storageBaseUrl}/${storagePath.replace(/^\/+/, '')}`
+    : '');
+  if (!candidate) return undefined;
+  try {
+    const url = new URL(candidate);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return undefined;
+    return new URL('.', url).href;
+  } catch (_) {
+    return undefined;
+  }
+}
+
+function normalizePost(value: unknown): Post | null {
+  const record = value && typeof value === 'object' ? value as Record<string, unknown> : null;
+  if (!record || record.source !== 'storage') return null;
+  const id = asString(record.id || record.slug).trim();
+  if (!id) return null;
+  const storagePath = asString(record.storagePath).trim();
+  const bodyUrl = asString(record.bodyUrl).trim();
+  return {
+    id,
+    slug: asString(record.slug).trim() || undefined,
+    title: asString(record.title).trim() || translate('common.untitled'),
+    excerpt: asString(record.excerpt).trim(),
+    body: asString(record.body || record.bodyMarkdown),
+    tags: normalizeTags(record.tags),
+    status: statusFrom(record.status),
+    createdAt: asString(record.createdAt || record.updatedAt || new Date().toISOString()),
+    updatedAt: asString(record.updatedAt).trim() || undefined,
+    publishedAt: asString(record.publishedAt).trim() || undefined,
+    source: 'storage',
+    storagePath: storagePath || undefined,
+    bodyUrl: bodyUrl || undefined,
+    markdownBaseUrl: asString(record.markdownBaseUrl).trim() || markdownBaseUrl(bodyUrl, storagePath),
+    markdownRootUrl: asString(record.markdownRootUrl).trim() || config.storageBaseUrl
+  };
+}
+
+function normalizePosts(values: unknown): Post[] {
+  if (!Array.isArray(values)) return [];
+  return values.map(normalizePost).filter((post): post is Post => Boolean(post));
+}
+
+export function readCachedPostsPayload(): CachePayload<Post[]> | null {
+  const payload = readCachePayload<unknown>(POSTS_CACHE_KEY);
+  if (!payload) return null;
+  return {
+    savedAt: payload.savedAt,
+    data: normalizePostList(normalizePosts(payload.data))
+  };
+}
+
+export function writeCachedPosts(posts: Post[]) {
+  writeCache(POSTS_CACHE_KEY, normalizePostList(normalizePosts(posts)));
 }

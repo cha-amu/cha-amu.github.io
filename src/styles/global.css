@@ -2531,21 +2531,17 @@ img {
   letter-spacing: 0;
 }
 
-.admin-posts {
+.admin-content {
   display: grid;
   gap: var(--layout-section-gap);
   width: 100%;
 }
 
-.admin-post-layout {
+.admin-content-layout {
   display: grid;
   grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
   gap: var(--layout-section-gap);
   align-items: start;
-}
-
-.admin-post-layout.two-column {
-  grid-template-columns: 1fr;
 }
 
 .admin-list-panel {
@@ -2565,8 +2561,7 @@ img {
 }
 
 .admin-list-panel__top,
-.admin-editor__bar,
-.admin-preview__head {
+.admin-editor__bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2760,14 +2755,6 @@ img {
   font-weight: 900;
 }
 
-.status-chip--published {
-  background: var(--color-primary);
-}
-
-.status-chip--draft {
-  background: #f5e7b8;
-}
-
 .status-chip--hidden {
   background: #ececec;
 }
@@ -2829,7 +2816,7 @@ img {
 }
 
 .admin-form-grid > .field > label,
-.admin-post-status__label {
+.admin-thing-status__label {
   min-height: 18px;
   line-height: 18px;
 }
@@ -2838,17 +2825,17 @@ img {
   height: 41px;
 }
 
-.admin-post-status {
+.admin-thing-status {
   min-width: 0;
 }
 
-.admin-post-status__label {
+.admin-thing-status__label {
   font-weight: 800;
 }
 
-.admin-post-status__options {
+.admin-thing-status__options {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   height: 41px;
   border: 1.5px solid var(--color-ink);
   border-radius: var(--radius-control);
@@ -2856,11 +2843,7 @@ img {
   overflow: hidden;
 }
 
-.admin-thing-status__options {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.admin-post-status__options label {
+.admin-thing-status__options label {
   position: relative;
   display: grid;
   min-width: 0;
@@ -2868,11 +2851,11 @@ img {
   cursor: pointer;
 }
 
-.admin-post-status__options label + label {
+.admin-thing-status__options label + label {
   border-left: 1px solid var(--color-line);
 }
 
-.admin-post-status__options input {
+.admin-thing-status__options input {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -2887,7 +2870,7 @@ img {
   cursor: pointer;
 }
 
-.admin-post-status__options span {
+.admin-thing-status__options span {
   display: grid;
   height: 100%;
   width: 100%;
@@ -2901,51 +2884,27 @@ img {
   white-space: nowrap;
 }
 
-.admin-post-status__options label:hover span,
-.admin-post-status__options input:focus-visible + span {
+.admin-thing-status__options label:hover span,
+.admin-thing-status__options input:focus-visible + span {
   background: var(--color-soft-primary);
   color: var(--color-ink);
 }
 
-.admin-post-status__options input:checked + span {
+.admin-thing-status__options input:checked + span {
   color: var(--color-ink);
   font-weight: 900;
 }
 
-.admin-post-status__options input[value='published']:checked + span,
-.admin-post-status__options input[value='visible']:checked + span {
+.admin-thing-status__options input[value='visible']:checked + span {
   background: var(--color-primary);
 }
 
-.admin-post-status__options input[value='draft']:checked + span {
-  background: #f5e7b8;
-}
-
-.admin-post-status__options input[value='hidden']:checked + span {
+.admin-thing-status__options input[value='hidden']:checked + span {
   background: #ececec;
 }
 
 .admin-field--wide {
   grid-column: 1 / -1;
-}
-
-.admin-writing-rail {
-  width: 100%;
-}
-
-.admin-markdown-input {
-  min-height: 320px;
-  line-height: 1.65;
-}
-
-.admin-live-preview {
-  display: grid;
-  gap: 0;
-  width: 100%;
-}
-
-.admin-live-preview > .post-entry {
-  width: 100%;
 }
 
 .status-chip--visible {
@@ -3605,7 +3564,7 @@ img {
     width: auto;
   }
 
-  .admin-post-layout,
+  .admin-content-layout,
   .admin-asset-layout {
     grid-template-columns: 1fr;
   }
@@ -3634,10 +3593,6 @@ img {
 
   .admin-form-grid {
     grid-template-columns: 1fr;
-  }
-
-  .admin-markdown-input {
-    min-height: 280px;
   }
 
   .admin-status-filters {

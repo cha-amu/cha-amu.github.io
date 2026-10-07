@@ -1,5 +1,5 @@
 import { Component, ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { writeCachedPosts } from '../api/appsScriptClient';
+import { writeCachedPosts } from '../api/storageClient';
 import { AppLayout } from '../components/AppLayout';
 import { BackToTopButton } from '../components/BackToTopButton';
 import { ContentFilterBar, SiteSearchLink } from '../components/ContentFilterBar';

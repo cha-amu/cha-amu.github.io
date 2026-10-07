@@ -16,13 +16,10 @@ const IDS_SQL = 'SELECT value FROM json_each(?)';
 // default locale would reorder the things page.
 const TITLE_COLLATION = 'ko';
 
-function insertStatement(db, definition, record, { upsert = false, guardDeletedPost = false } = {}) {
+function insertStatement(db, definition, record, { upsert = false } = {}) {
   const { columns, values } = storedRecord(definition, record);
   let sql = `INSERT INTO ${definition.table} (${columns.join(',')}) SELECT ${values.map(() => '?').join(',')}`;
-  if (guardDeletedPost) {
-    sql += ' WHERE NOT EXISTS (SELECT 1 FROM post_deletions WHERE id = ?)';
-    values.push(String(record.id || '').trim());
-  } else sql += ' WHERE true';
+  sql += ' WHERE true';
   if (upsert) sql += ` ON CONFLICT(${definition.key}) DO UPDATE SET ${columns.filter((key) => key !== definition.key).map((key) => `${key} = excluded.${key}`).join(',')}`;
   return db.prepare(`${sql} RETURNING ${definition.key}`).bind(...values);
 }
@@ -39,25 +36,6 @@ function guestbookProjection(entry, admin = false) {
     message: String(entry.message || ''), status: entry.status, createdAt: entry.createdAt,
     ...(admin ? { hiddenReason: String(entry.hiddenReason || '') } : {})
   };
-}
-
-async function publicPosts(db) {
-  // Both lists come from one transaction so a concurrent delete cannot disappear
-  // from both lists or expose a post already suppressed by a tombstone.
-  const [posts, deletions] = await db.batch([
-    db.prepare('SELECT * FROM posts ORDER BY rowid'),
-    db.prepare('SELECT * FROM post_deletions ORDER BY rowid')
-  ]);
-  const deletedIds = new Set(deletions.results.map((entry) => entry.id).filter(Boolean));
-  const records = posts.results.map((row) => readRecord(CONTENT_TABLES.posts, row))
-    .filter((post) => post.id && !deletedIds.has(String(post.id)))
-    .map((post) => post.status === 'published' ? post : {
-      id: String(post.id), status: String(post.status || 'hidden'), updatedAt: post.updatedAt || post.createdAt || ''
-    });
-  for (const entry of deletions.results) {
-    if (entry.id) records.push({ id: String(entry.id), status: 'deleted', updatedAt: entry.deletedAt || '' });
-  }
-  return records;
 }
 
 async function publicThings(db) {
@@ -126,28 +104,6 @@ async function hideByPassword(db, body, env, deps) {
   return { id: body.id };
 }
 
-async function savePost(db, post, deps, storage = false) {
-  if (storage) assert(post && post.id, 'Post id is required.');
-  // Preserve the error envelope of the permissive legacy editor save endpoint.
-  assert(post != null, `Cannot read properties of ${post === null ? 'null' : 'undefined'} (reading 'id')`);
-  const now = deps.nowIso();
-  const next = storage ? {
-    ...post, tags: Array.isArray(post.tags) ? post.tags : [],
-    updatedAt: post.updatedAt || post.publishedAt || post.createdAt || now,
-    createdAt: post.createdAt || post.publishedAt || now,
-    publishedAt: post.publishedAt || (post.status === 'published' ? (post.createdAt || now) : ''),
-    source: 'storage', syncStatus: 'synced'
-  } : {
-    ...post, id: post.id || deps.randomUUID(), tags: Array.isArray(post.tags) ? post.tags : [],
-    updatedAt: now, createdAt: post.createdAt || now,
-    publishedAt: post.status === 'published' ? (post.publishedAt || now) : post.publishedAt || ''
-  };
-  const saved = await insertStatement(db, CONTENT_TABLES.posts, next, { upsert: true, guardDeletedPost: true }).first();
-  assert(saved, 'Post id is permanently deleted and cannot be saved.');
-  await audit(db, storage ? 'post.syncFromStorage' : 'post.save', 'post', [next.id], deps);
-  return next;
-}
-
 async function saveAssetOverride(db, override, deps) {
   assert(override && override.assetId, 'assetId is required.');
   const next = { ...override, updatedAt: deps.nowIso() };
@@ -207,11 +163,7 @@ async function bulkStatus(db, name, body, deps) {
   const ids = validateIds(body.ids);
   const now = deps.nowIso();
   let statement;
-  if (name === 'posts') {
-    statement = db.prepare(`UPDATE posts SET status = ?, updatedAt = ?,
-      publishedAt = CASE WHEN ? = 'published' AND publishedAt = '' THEN ? ELSE publishedAt END
-      WHERE id IN (${IDS_SQL}) RETURNING id`).bind(body.status, now, body.status, now, ids);
-  } else if (name === 'guestbook') {
+  if (name === 'guestbook') {
     const hasReason = Object.hasOwn(body, 'hiddenReason');
     statement = db.prepare(`UPDATE guestbook_entries SET status = ?,
       hiddenReason = CASE WHEN ? = 'visible' THEN '' WHEN ? THEN ? ELSE hiddenReason END
@@ -225,8 +177,7 @@ async function bulkStatus(db, name, body, deps) {
   }
   const { results } = await statement.all();
   const result = mutationResult(body.ids, results, 'updatedIds', 'missingIds', CONTENT_TABLES[name].key);
-  const [action, type] = name === 'posts' ? ['post.bulkStatus', 'post']
-    : name === 'guestbook' ? ['guestbook.bulkStatus', 'guestbook'] : ['assetOverride.bulkStatus', 'asset'];
+  const [action, type] = name === 'guestbook' ? ['guestbook.bulkStatus', 'guestbook'] : ['assetOverride.bulkStatus', 'asset'];
   await audit(db, action, type, result.updatedIds, deps);
   return result;
 }
@@ -235,17 +186,6 @@ async function bulkDelete(db, name, body, deps) {
   const ids = validateIds(body.ids);
   const definition = CONTENT_TABLES[name];
   const statements = [];
-  if (name === 'posts') {
-    const deletions = body.ids.map((id) => ({ id, nonce: deps.randomUUID() }));
-    statements.push(db.prepare(`INSERT INTO post_deletions (id, storagePath, nonce, deletedAt)
-      SELECT json_extract(r.value, '$.id'), COALESCE(p.storagePath, ''), json_extract(r.value, '$.nonce'), ?
-      FROM json_each(?) r LEFT JOIN posts p ON p.id = json_extract(r.value, '$.id') WHERE true
-      ON CONFLICT(id) DO UPDATE SET
-        storagePath = CASE WHEN post_deletions.storagePath = '' THEN excluded.storagePath ELSE post_deletions.storagePath END,
-        nonce = CASE WHEN post_deletions.nonce = '' THEN excluded.nonce ELSE post_deletions.nonce END,
-        deletedAt = CASE WHEN post_deletions.deletedAt = '' THEN excluded.deletedAt ELSE post_deletions.deletedAt END`)
-      .bind(deps.nowIso(), JSON.stringify(deletions)));
-  }
   const deleteIndex = statements.length;
   statements.push(db.prepare(`DELETE FROM ${definition.table} WHERE ${definition.key} IN (${IDS_SQL}) RETURNING ${definition.key}`).bind(ids));
   if (name === 'guestbook') {
@@ -254,30 +194,9 @@ async function bulkDelete(db, name, body, deps) {
   }
   const results = await db.batch(statements);
   const result = mutationResult(body.ids, results[deleteIndex].results, 'deletedIds', 'alreadyMissingIds', definition.key);
-  const [action, type] = name === 'posts' ? ['post.bulkDelete', 'post']
-    : name === 'guestbook' ? ['guestbook.bulkDelete', 'guestbook']
+  const [action, type] = name === 'guestbook' ? ['guestbook.bulkDelete', 'guestbook']
       : name === 'things' ? ['thing.delete', 'thing'] : ['assetOverride.delete', 'asset'];
   await audit(db, action, type, result.deletedIds, deps);
-  return result;
-}
-
-async function finalizePostDeletions(db, body, deps) {
-  for (const { id, nonce } of body.deletions) {
-    assert(!/[\u0000-\u001f\u007f]/.test(id), 'Invalid post deletion id.');
-    assert(!/[\u0000-\u001f\u007f]/.test(nonce), 'Invalid post deletion nonce.');
-  }
-  const requested = JSON.stringify(body.deletions);
-  const invalidSql = `SELECT 1 FROM post_deletions d JOIN json_each(?) r ON d.id = json_extract(r.value, '$.id')
-    WHERE d.finalizedAt = '' AND d.nonce != json_extract(r.value, '$.nonce')`;
-  const [invalid, updated] = await db.batch([
-    db.prepare(invalidSql).bind(requested),
-    db.prepare(`UPDATE post_deletions SET finalizedAt = ?
-      WHERE finalizedAt = '' AND id IN (SELECT json_extract(value, '$.id') FROM json_each(?))
-      AND NOT EXISTS (${invalidSql}) RETURNING id`).bind(deps.nowIso(), requested, requested)
-  ]);
-  assert(!invalid.results.length, 'Post deletion nonce is invalid.');
-  const result = mutationResult(body.deletions.map((entry) => entry.id), updated.results, 'finalizedIds', 'alreadyMissingIds');
-  await audit(db, 'postDeletion.finalize', 'post', result.finalizedIds, deps);
   return result;
 }
 
@@ -295,7 +214,6 @@ async function dispatch(action, body, env, deps, context) {
   if (action === 'admin.session.refresh') return createAdminSession(env, deps);
   const db = env.SECURITY_DB;
   switch (action) {
-    case 'post.listPublic': return publicPosts(db);
     case 'guestbook.listPublic': return (await list(db, 'guestbook')).filter((entry) => entry.status === 'visible').map((entry) => guestbookProjection(entry));
     case 'assetOverride.listPublic': return list(db, 'assetOverrides');
     case 'thing.listPublic': return publicThings(db);
@@ -306,16 +224,6 @@ async function dispatch(action, body, env, deps, context) {
       await checkAdminPassword(body, env, deps);
       await audit(db, 'admin.login', 'admin', [''], deps);
       return createAdminSession(env, deps);
-    case 'admin.post.list': case 'storage.sync.post.list': return list(db, 'posts');
-    case 'admin.post.save': return savePost(db, body.post, deps);
-    case 'storage.sync.post.save': return savePost(db, body.post, deps, true);
-    case 'admin.post.bulkStatus': return bulkStatus(db, 'posts', body, deps);
-    case 'admin.post.bulkDelete': return bulkDelete(db, 'posts', body, deps);
-    case 'storage.sync.postDeletion.list':
-      return (await list(db, 'postDeletions')).filter((entry) => !String(entry.finalizedAt || '').trim())
-        .map((entry) => ({ id: String(entry.id || ''), storagePath: String(entry.storagePath || ''), nonce: String(entry.nonce || ''), deletedAt: String(entry.deletedAt || '') }))
-        .filter((entry) => entry.id && entry.nonce);
-    case 'storage.sync.postDeletion.finalize': return finalizePostDeletions(db, body, deps);
     case 'admin.guestbook.list': return (await list(db, 'guestbook')).map((entry) => guestbookProjection(entry, true));
     case 'admin.guestbook.hide': return adminGuestbookStatus(db, body, deps, false);
     case 'admin.guestbook.restore': return adminGuestbookStatus(db, body, deps, true);

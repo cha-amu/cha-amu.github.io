@@ -1,6 +1,6 @@
 # Storage repo 작성 규칙
 
-`cha-amu/storage`는 메인 사이트가 읽는 정적 원본/미러 저장소다. 메인 사이트의 자료 화면 주소는 계속 `/archive/`이고, 실제 파일 URL은 `https://cha-amu.github.io/storage/...`를 쓴다.
+`cha-amu/storage`는 메인 사이트가 읽는 정적 원본 저장소다. 글은 이 저장소의 Markdown 파일만을 원본으로 사용한다. 메인 사이트의 자료 화면 주소는 계속 `/archive/`이고, 실제 파일 URL은 `https://cha-amu.github.io/storage/...`를 쓴다.
 
 ## 폴더 구조
 
@@ -64,7 +64,7 @@ createdAt  선택. 최초 작성 시각을 보존할 때 ISO 날짜로 지정.
 updatedAt  선택. 생략하거나 날짜만 쓰면 마지막 Git 커밋 시각을 사용.
 publishedAt 선택. 공개 시각을 작성 시각과 따로 보존할 때 ISO 날짜로 지정.
 tags       선택. [태그1, 태그2] 형식.
-status     선택. published, draft, hidden 중 하나. 기본값은 published.
+status     필수. published, draft, hidden 중 하나. published인 글만 사이트에 표시.
 excerpt    선택. 비워두면 본문에서 자동 생성.
 id         선택. 보통 쓰지 않는다. 없으면 posts/... 경로로 자동 생성.
 ```
@@ -196,22 +196,18 @@ sortOrder   낮을수록 먼저 표시
 
 같은 이름의 실제 자료가 있으면 `.md`는 사이드카로 처리된다. 같은 이름의 실제 자료가 없으면 `.md`도 일반 파일 자료로 등록된다.
 
-## D1과 sync 규칙
+## 공개 상태와 sync 규칙
 
-GitHub Actions가 `cha-amu/storage`와 게이트웨이 Worker의 D1 데이터를 맞춘다. 2026-10-07까지는 Google Sheets를 썼고, 규칙은 그대로 D1로 옮겼다.
+글의 원본은 `cha-amu/storage`의 Markdown 파일 하나다. D1에는 글 본문이나 공개 상태를 저장하지 않으며, 관리자 화면에서는 글을 편집하지 않는다.
 
-- sync는 메인 사이트 repo가 아니라 `cha-amu/storage` repo의 `Sync storage repo` GitHub Actions에서 돈다.
-- `posts/**`, `assets/**`, sync 스크립트, `package.json`, sync workflow가 `main`에 push되면 즉시 실행된다.
-- 주기 sync는 매시간 17분에 실행된다.
-- storage repo에 직접 push한 글은 즉시 D1에 본문까지 복사된다.
-- D1에만 있거나 D1 쪽 `updatedAt`이 더 최신인 글은 주기적 sync 때 `posts/YYYY/title.md`로 storage repo에 반영된다.
-- storage에만 있는 글은 D1에 `source=storage`, `storagePath=...`, `syncStatus=synced` 표시와 함께 본문까지 추가된다.
-- storage에만 있는 자료 파일은 D1 asset override에 link-only 행으로 추가한다.
-- 사이트에서 글을 표시할 때는 D1의 `updatedAt`이 storage의 `updatedAt`보다 최신이면 D1 본문을 쓰고, 같거나 storage가 최신이면 storage Markdown을 쓴다.
-- GitHub push로 실행된 sync는 사람이 frontmatter `updatedAt`을 직접 바꾸지 않아도 storage 파일을 최신으로 보고 D1에 반영한다.
+- frontmatter의 `status: published`인 글만 아무 글 목록, 검색, 위키 연결에 표시한다. `draft`와 `hidden`은 사이트 목록에 표시하지 않는다.
+- storage repo는 공개 저장소다. `draft`와 `hidden` 파일도 GitHub와 파일 URL로 누구나 읽을 수 있으므로 비공개 보관 용도로 쓰지 않는다.
+- 글을 삭제하려면 storage repo에서 해당 Markdown 파일을 삭제하고 커밋한다. sync가 manifest에서 항목을 제거한다.
+- sync는 `cha-amu/storage` repo의 `Sync storage repo` GitHub Actions에서 manifest를 다시 생성하고, D1에는 자료 표시 설정(asset override)만 동기화한다.
+- `posts/**`, `assets/**`, sync 스크립트, `package.json`, sync workflow가 `main`에 push되면 실행된다. 주기 sync는 매시간 17분에 실행된다.
+- storage에만 있는 자료 파일은 D1 asset override에 link-only 행으로 추가한다. 자료 표시 설정은 관리자 화면에서도 관리한다.
 - `YYYY-MM-DD` 형식의 날짜는 사이트에서 시간 없이 표시한다. 업로드 시각까지 고정하려면 ISO 날짜를 쓰고, 정밀한 `updatedAt`이 없으면 Git 커밋 시각으로 보강한다.
-- 관리자에서 `hidden`이나 `deleted`로 둔 항목은 그 상태의 `updatedAt`이 최신이면 공개 사이트에서 숨긴다.
-- 글을 완전히 지울 때는 관리자의 삭제 기능을 쓴다. D1에 삭제 기록이 남고, 다음 sync가 storage 파일을 지운 뒤 기록을 마무리한다. storage 파일만 git으로 지우면 D1 행이 남아서 다음 주기 sync가 파일을 되살린다.
+- 글은 기존과 같이 `updatedAt`, `publishedAt`, `createdAt` 순으로 날짜를 골라 최신순으로 정렬한다.
 
 ## 수동 sync 실행
 
@@ -226,7 +222,7 @@ GitHub 웹에서 실행한다.
 6. Run workflow 실행
 ```
 
-수동 실행 후 같은 Actions 화면에서 초록색 체크로 끝나면 성공이다. 실행 중 새 manifest나 Markdown 파일 변경이 생기면 `github-actions[bot]`이 `Sync storage manifests` 커밋을 자동으로 만든다.
+수동 실행 후 같은 Actions 화면에서 초록색 체크로 끝나면 성공이다. 실행 중 manifest나 자료 사이드카 변경이 생기면 `github-actions[bot]`이 `Sync storage manifests` 커밋을 자동으로 만든다.
 
 ## sync 확인 방법
 
@@ -243,7 +239,7 @@ https://cha-amu.github.io/storage/manifests/assets.json
 https://cha-amu.github.io/storage/manifests/posts.json
 ```
 
-각 manifest의 `generatedAt`이 최근 시간으로 바뀌고, 새 파일 경로가 `assets` 또는 `posts` 배열에 들어 있으면 storage Pages 쪽 반영은 끝난 것이다. 메인 사이트 `/archive/`는 이 manifest를 읽는다.
+각 manifest의 `generatedAt`이 최근 시간으로 바뀌고, 새 파일 경로가 `assets` 또는 `posts` 배열에 들어 있으면 storage Pages 쪽 반영은 끝난 것이다. 메인 사이트 `/archive/`와 `/posts/`는 각 manifest를 읽는다.
 
 로컬에서 D1을 건드리지 않고 manifest 생성만 확인하려면 storage repo에서 dry-run을 실행한다.
 
@@ -251,7 +247,7 @@ https://cha-amu.github.io/storage/manifests/posts.json
 STORAGE_SYNC_DRY_RUN=1 npm run sync
 ```
 
-실제 D1까지 쓰는 로컬 sync는 `API_URL`과 `STORAGE_SYNC_SECRET`이 필요하므로, 보통은 GitHub Actions 수동 실행을 쓴다. 관리자 비밀번호나 관리자 세션은 사용하지 않는다. `API_URL`은 게이트웨이 주소 `https://cha-amu-gateway.cha-amu.workers.dev/api`를 사용한다.
+D1 자료 표시 설정까지 쓰는 로컬 sync는 `API_URL`과 `STORAGE_SYNC_SECRET`이 필요하므로, 보통은 GitHub Actions 수동 실행을 쓴다. 관리자 비밀번호나 관리자 세션은 사용하지 않는다. `API_URL`은 게이트웨이 주소 `https://cha-amu-gateway.cha-amu.workers.dev/api`를 사용한다.
 
 ## 직접 편집하지 않는 파일
 

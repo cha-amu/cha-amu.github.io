@@ -6,7 +6,7 @@ GitHub Pages에 배포할 개인용 자료 아카이브 사이트입니다.
 
 - Vite + React + TypeScript
 - GitHub Pages static hosting
-- Cloudflare Worker gateway (`worker/`) with D1 for guestbook, admin, post status, things and asset override data
+- Cloudflare Worker gateway (`worker/`) with D1 for guestbook, IP bans, rate limits, things, asset overrides and audit logs
 - Cloudflare Turnstile for guestbook writes
 - Storage manifests from `https://cha-amu.github.io/storage/manifests/*.json`
 
@@ -53,12 +53,16 @@ Run `npm test` and `npm run build` for validation. `node tests/wiki-preview.mjs`
 - [배포와 GitHub Secrets/Variables 관리](docs/deployment.md)
 - [storage repo 포스트/자료 작성 규칙](docs/storage-authoring.md)
 
-현재 GitHub 레포는 `cha-amu/cha-amu.github.io`이고, 사이트는 `https://cha-amu.github.io/`로 배포된다. 정적 포스트/자료 원본과 미러는 `cha-amu/storage` repo를 사용한다.
+현재 GitHub 레포는 `cha-amu/cha-amu.github.io`이고, 사이트는 `https://cha-amu.github.io/`로 배포된다. 정적 포스트/자료 원본은 `cha-amu/storage` repo를 사용한다.
 
 관리자 비밀번호는 레포 루트에서 `npm run admin:password`를 실행하고 새 비밀번호를 두 번 입력해 바꾼다. 게이트웨이 Worker의 `ADMIN_PASSWORD_HASH`가 바뀐다.
 
 ## Runtime data behavior
 
-Public posts, guestbook entries, and archive manifest data use browser `localStorage` plus an in-memory SPA public data store. The app preloads public data once at startup, pages render cached/in-memory data immediately, and gateway refreshes run in the background. The gateway reads D1 directly, so a write is visible on the next read. Guestbook create/delete uses optimistic UI and rolls back on failure.
+Public posts, guestbook entries, and archive manifest data use browser `localStorage` plus an in-memory SPA public data store. The app preloads public data once at startup, pages render cached/in-memory data immediately, and storage/gateway refreshes run in the background. The gateway reads the remaining D1 data directly, so a write is visible on the next read. Guestbook create/delete uses optimistic UI and rolls back on failure.
+
+Posts come only from Markdown files in `cha-amu/storage`. Frontmatter `status: published` makes a post visible in site lists, search and wiki references; `draft` and `hidden` are excluded. The storage repository is public, so those files remain publicly readable. Delete a post by deleting its file. The sync job regenerates manifests and syncs asset overrides only.
+
+The admin page opens on Assets and manages asset display settings, Things, the guestbook and IP bans. The browser post cache uses a new key so old combined data cannot reappear.
 
 The project intentionally does not create GitHub commits for each guestbook write.

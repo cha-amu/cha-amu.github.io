@@ -49,8 +49,8 @@ test('the deployed Worker module graph runs in workerd: login, public reads, sto
   assert.deepEqual(await call('admin.session.verify', { token: session.token }), { valid: true });
   const refreshed = await call('admin.session.refresh', { token: session.token });
   assert.notEqual(refreshed.token, session.token);
-  const post = await call('storage.sync.post.save', { post: { id: 'storage', status: 'published', title: '한국어', body: '본문', tags: ['태그'] } }, { Authorization: `Bearer ${storageSecret}` });
-  assert.equal(post.source, 'storage'); assert.equal((await call('post.listPublic'))[0].title, '한국어');
+  const asset = await call('storage.sync.assetOverride.save', { override: { assetId: 'storage', status: 'visible', displayName: '한국어', description: '설명', tags: ['태그'] } }, { Authorization: `Bearer ${storageSecret}` });
+  assert.equal(asset.displayName, '한국어'); assert.deepEqual((await call('assetOverride.listPublic'))[0].tags, ['태그']);
   const created = await call('guestbook.create', { message: 'hello', name: '', deletePassword: 'pw', turnstileToken: 'guest' });
   assert.equal(created.name, 'ㅇㅁ');
   const mapping = await db.prepare('SELECT * FROM guestbook_entry_ips WHERE entry_id = ?').bind(created.id).first();

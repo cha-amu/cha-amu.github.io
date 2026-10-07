@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS post_deletions;
+DROP TABLE IF EXISTS posts;

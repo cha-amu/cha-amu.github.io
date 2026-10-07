@@ -25,7 +25,7 @@ test('health is non-sensitive, exact CORS is returned, preflight allows bearer h
 test('a different browser origin is rejected before database or external calls', async (t) => {
   const f = await fixture(t);
   delete f.env.SECURITY_DB;
-  const result = await f.request('post.listPublic', {}, { Origin: `${ORIGIN}.attacker.test` });
+  const result = await f.request('guestbook.listPublic', {}, { Origin: `${ORIGIN}.attacker.test` });
   assert.equal(result.status, 403);
   assert.equal(result.error, '허용되지 않은 요청 출처입니다.');
   assert.equal(result.response.headers.get('Access-Control-Allow-Origin'), null);
@@ -48,7 +48,7 @@ test('JSON parsing, byte limits, media types, missing and unknown actions retain
   }
   assert.equal((await f.request('')).error, 'action이 필요합니다.');
   assert.equal((await f.request('unsupported')).error, '지원하지 않는 action입니다.');
-  assert.deepEqual(await f.call(' post.listPublic ', {}, { 'Content-Type': 'application/json' }), []);
+  assert.deepEqual(await f.call(' guestbook.listPublic ', {}, { 'Content-Type': 'application/json' }), []);
 });
 
 test('guestbook create validates Turnstile and atomically stores only a server-chosen id and HMAC IP mapping', async (t) => {
@@ -206,14 +206,13 @@ test('IP security actions reject absent or invalid sessions before accessing D1'
 
 test('bulk actions trim and deduplicate ids and enforce action-specific request fields', async (t) => {
   const f = await fixture(t);
-  await f.seed('posts', [{ id: 'p', status: 'published', title: 'keep' }]);
   await f.seed('guestbook', [{ id: 'g', status: 'visible', message: 'keep', passwordHash: 'keep hash' }]);
-  assert.deepEqual(await f.admin('admin.post.bulkStatus', { token: ` ${f.session()} `, ids: [' p ', 'p', 'missing'], status: ' draft ' }), { updatedIds: ['p'], missingIds: ['missing'] });
+  assert.deepEqual(await f.admin('admin.guestbook.bulkStatus', { token: ` ${f.session()} `, ids: [' g ', 'g', 'missing'], status: ' visible ' }), { updatedIds: ['g'], missingIds: ['missing'] });
   await f.admin('admin.guestbook.bulkStatus', { ids: [' g ', 'g'], status: 'hidden', hiddenReason: ' repeated spam ' });
   assert.equal((await f.rows('guestbook_entries'))[0].hiddenReason, 'repeated spam');
   assert.equal((await f.rows('guestbook_entries'))[0].passwordHash, 'keep hash');
   assert.deepEqual(await f.admin('admin.assetOverride.bulkStatus', { ids: ['a'], status: 'deleted' }), { updatedIds: ['a'], missingIds: [] });
-  for (const [action, id] of [['admin.post.bulkDelete', 'p'], ['admin.guestbook.bulkDelete', 'g'], ['admin.assetOverride.delete', 'a'], ['admin.thing.delete', 'missing']]) {
+  for (const [action, id] of [['admin.guestbook.bulkDelete', 'g'], ['admin.assetOverride.delete', 'a'], ['admin.thing.delete', 'missing']]) {
     const data = await f.admin(action, { ids: [` ${id} `, id] });
     assert.deepEqual(data, id === 'missing' ? { deletedIds: [], alreadyMissingIds: [id] } : { deletedIds: [id], alreadyMissingIds: [] });
   }
@@ -277,9 +276,6 @@ test('thing saves reject all legacy unsafe URL, malformed field and unknown fiel
 test('bulk actions reject all legacy extra field and invalid status cases', async (t) => {
   const f = await fixture(t);
   const invalidCases = [
-    ['admin.post.bulkStatus', { token: 'token', ids: ['post'], status: 'deleted' }],
-    ['admin.post.bulkStatus', { token: 'token', ids: ['post'], status: 'draft', hiddenReason: 'no' }],
-    ['admin.post.bulkDelete', { token: 'token', ids: ['post'], status: 'hidden' }],
     ['admin.guestbook.bulkStatus', { token: 'token', ids: ['entry'], status: 'draft' }],
     ['admin.guestbook.bulkStatus', { token: 'token', ids: ['entry'], status: 'hidden' }],
     ['admin.guestbook.bulkStatus', {
@@ -295,11 +291,9 @@ test('bulk actions reject all legacy extra field and invalid status cases', asyn
   for (const [action, payload] of invalidCases) assert.equal((await f.request(action, payload)).status, 400, action);
 });
 
-test('all seven storage actions require exactly the storage bearer without human credentials', async (t) => {
+test('all three storage actions require exactly the storage bearer without human credentials', async (t) => {
   const f = await fixture(t);
   const cases = [
-    ['storage.sync.post.list', {}], ['storage.sync.post.save', { post: { id: 'p', status: 'draft' } }],
-    ['storage.sync.postDeletion.list', {}], ['storage.sync.postDeletion.finalize', { deletions: [{ id: 'missing', nonce: 'n' }] }],
     ['storage.sync.assetOverride.list', {}], ['storage.sync.assetOverride.save', { override: { assetId: 'a' } }],
     ['storage.sync.assetOverride.delete', { ids: ['a'] }]
   ];
@@ -316,42 +310,32 @@ test('storage sync fails closed on configuration, unknown fields, unknown namesp
   const secret = f.env.STORAGE_SYNC_SECRET;
   for (const configured of [undefined, 'short']) {
     f.env.STORAGE_SYNC_SECRET = configured;
-    assert.equal((await f.request('storage.sync.post.list', {}, { Authorization: `Bearer ${secret}` })).status, 503);
+    assert.equal((await f.request('storage.sync.assetOverride.list', {}, { Authorization: `Bearer ${secret}` })).status, 503);
   }
   f.env.STORAGE_SYNC_SECRET = secret;
   for (const body of [{ token: 'token' }, { password: 'password' }, { gatewaySecret: 'client-secret' }]) {
-    assert.equal((await f.request('storage.sync.post.list', body, storageHeaders(f))).status, 400);
+    assert.equal((await f.request('storage.sync.assetOverride.list', body, storageHeaders(f))).status, 400);
   }
   assert.equal((await f.request('storage.sync.guestbook.list', {}, storageHeaders(f))).status, 400);
   assert.equal((await f.request('admin.guestbook.ip.ban', { entryId: 'entry' }, storageHeaders(f))).status, 401);
-  assert.equal((await f.request('admin.post.list', {}, storageHeaders(f))).ok, false);
+  assert.equal((await f.request('admin.assetOverride.list', {}, storageHeaders(f))).ok, false);
 });
 
-test('storage validation rejects malformed post, asset, id and deletion fields', async (t) => {
+test('storage validation rejects malformed asset and id fields', async (t) => {
   const f = await fixture(t);
-  for (const post of [null, [], { id: 'p', status: 'deleted' }, { id: 'p', status: 'draft', title: 2 }, { id: 'p', status: 'draft', tags: 'x' }, { id: 'p', status: 'draft', tags: [''] }, { id: 'p', status: 'draft', extra: 'x' }]) {
-    assert.equal((await f.request('storage.sync.post.save', { post }, storageHeaders(f))).status, 400);
-  }
   for (const override of [null, { assetId: '' }, { assetId: 'a', status: 'draft' }, { assetId: 'a', tags: ['x'.repeat(101)] }, { assetId: 'a', sortOrder: '3' }, { assetId: 'a', sortOrder: 1e20 }, { assetId: 'a', extra: true }]) {
     assert.equal((await f.request('storage.sync.assetOverride.save', { override }, storageHeaders(f))).status, 400);
   }
-  for (const deletions of [null, [], [null], [{ id: 'p', nonce: '' }], [{ id: 'p', nonce: 'n', extra: 'x' }], [{ id: 'p', nonce: 'n' }, { id: 'p', nonce: 'other' }]]) {
-    assert.equal((await f.request('storage.sync.postDeletion.finalize', { deletions }, storageHeaders(f))).status, 400);
-  }
   for (const ids of [null, [], [''], [23], ['x'.repeat(513)]]) {
-    assert.equal((await f.request('admin.post.bulkDelete', { token: f.session(), ids })).status, 400);
+    assert.equal((await f.request('admin.assetOverride.delete', { token: f.session(), ids })).status, 400);
   }
 });
 
-test('bulk requests allow 100 unique ids after deduplication and reject 101 including finalize', async (t) => {
+test('bulk requests allow 100 unique ids after deduplication and reject 101', async (t) => {
   const f = await fixture(t);
   const ids = Array.from({ length: 100 }, (_, i) => `id-${i}`);
-  assert.deepEqual(await f.admin('admin.post.bulkDelete', { ids: [...ids, ...ids] }), { deletedIds: [], alreadyMissingIds: ids });
-  assert.equal((await f.rows('post_deletions')).length, 100);
-  assert.equal((await f.request('admin.post.bulkDelete', { token: f.session(), ids: [...ids, 'overflow'] })).status, 400);
-  const deletions = (await f.storage('storage.sync.postDeletion.list')).map(({ id, nonce }) => ({ id, nonce }));
-  assert.equal((await f.request('storage.sync.postDeletion.finalize', { deletions: [...deletions, { id: 'overflow', nonce: 'n' }] }, storageHeaders(f))).status, 400);
-  assert.deepEqual(await f.storage('storage.sync.postDeletion.finalize', { deletions: [...deletions, ...deletions] }), { finalizedIds: ids, alreadyMissingIds: [] });
+  assert.deepEqual(await f.admin('admin.assetOverride.delete', { ids: [...ids, ...ids] }), { deletedIds: [], alreadyMissingIds: ids });
+  assert.equal((await f.request('admin.assetOverride.delete', { token: f.session(), ids: [...ids, 'overflow'] })).status, 400);
 });
 
 test('guestbook deletion removes only requested mappings, preserves bans and cannot confirm unrelated ids', async (t) => {
@@ -407,10 +391,10 @@ test('invalid admin sessions cannot delete entries or mappings', async (t) => {
 
 test('public reads use D1 with no network, immediately reflect writes, and fail closed without a database', async (t) => {
   const f = await fixture(t);
-  for (const action of ['post.listPublic', 'guestbook.listPublic', 'thing.listPublic', 'assetOverride.listPublic']) assert.deepEqual(await f.call(action), []);
-  await f.admin('admin.post.save', { post: { id: 'p', title: 'instant', status: 'published' } });
-  assert.equal((await f.call('post.listPublic'))[0].title, 'instant');
+  for (const action of ['guestbook.listPublic', 'thing.listPublic', 'assetOverride.listPublic']) assert.deepEqual(await f.call(action), []);
+  await f.admin('admin.assetOverride.save', { override: { assetId: 'a', displayName: 'instant' } });
+  assert.equal((await f.call('assetOverride.listPublic'))[0].displayName, 'instant');
   assert.equal(f.fetchCalls.length, 0);
   delete f.env.SECURITY_DB;
-  assert.equal((await f.request('post.listPublic')).status, 503);
+  assert.equal((await f.request('guestbook.listPublic')).status, 503);
 });

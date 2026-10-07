@@ -7,11 +7,11 @@ export interface Post {
   excerpt?: string;
   body: string;
   tags: string[];
-  status: 'draft' | 'published' | 'hidden' | 'deleted';
+  status: 'draft' | 'published' | 'hidden';
   createdAt: string;
   updatedAt?: string;
   publishedAt?: string;
-  source?: 'sheets' | 'storage';
+  source?: 'storage';
   storagePath?: string;
   bodyUrl?: string;
   markdownBaseUrl?: string;

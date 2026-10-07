@@ -14,7 +14,7 @@ if (!String.prototype.isWellFormed) {
 }
 const { Miniflare } = await import('../../worker/node_modules/miniflare/dist/src/index.js');
 
-export async function createD1(t, options = {}) {
+export async function createD1(t, options = {}, migrations = ['0001_security.sql', '0002_content.sql', '0003_drop_post_tables.sql']) {
   const mf = new Miniflare({
     modules: true,
     script: 'export default { fetch() { return new Response("ok"); } }',
@@ -24,7 +24,7 @@ export async function createD1(t, options = {}) {
   });
   t.after(() => mf.dispose());
   const db = await mf.getD1Database('SECURITY_DB');
-  for (const name of ['0001_security.sql', '0002_content.sql']) {
+  for (const name of migrations) {
     const sql = await readFile(new URL(`../../worker/migrations/${name}`, import.meta.url), 'utf8');
     // D1 exec expects one statement per line. Migrations contain no SQL literals
     // with semicolons or triggers; the importer has its own statement API.

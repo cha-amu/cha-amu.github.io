@@ -16,7 +16,7 @@ Object.assign(process.env, {
   VITE_WIKI_INDEX_URL: `${blogOrigin}/__fixture__/wiki.json`
 });
 const posts = ['connected', 'unconnected', 'missing-document', 'missing-resource'].map((id, index) => ({
-  id, title: `Fixture ${id}`, body: '# Fixture body\n\n' + 'Scroll preservation fixture.\n\n'.repeat(22),
+  id, path: `posts/${id}.md`, title: `Fixture ${id}`, body: '---\nstatus: published\n---\n# Fixture body\n\n' + 'Scroll preservation fixture.\n\n'.repeat(22),
   tags: ['fixture'], status: 'published', createdAt: `2026-10-0${7 - index}`
 }));
 const assets = ['connected-asset', 'unconnected-asset'].map((id) => ({
@@ -35,10 +35,9 @@ function middleware(req, res, next = () => { res.statusCode = 404; res.end(); })
     let body = '';
     req.on('data', (data) => { body += data; });
     req.on('end', () => {
-      const { action } = JSON.parse(body || '{}');
-      json({ ok: true, data: action === 'post.listPublic' ? posts : [] });
+      json({ ok: true, data: [] });
     });
-  } else if (url.pathname === '/__fixture__/posts.json') json({ posts: [] });
+  } else if (url.pathname === '/__fixture__/posts.json') json({ posts });
   else if (url.pathname === '/__fixture__/assets.json') json({ version: 1, assets });
   else if (url.pathname === '/__fixture__/wiki.json') {
     if (process.env.WIKI_FIXTURE_MODE === 'error') json({}, 503);
