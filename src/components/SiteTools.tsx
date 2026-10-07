@@ -22,8 +22,7 @@ export function SiteTools({ showSearch = true }: { showSearch?: boolean }) {
   const languageOptions: Array<{ value: LanguagePreference; label: string }> = [
     { value: 'auto', label: t('settings.auto') },
     { value: 'ko', label: t('settings.korean') },
-    { value: 'en', label: t('settings.english') },
-    { value: 'ja', label: t('settings.japanese') }
+    { value: 'en', label: t('settings.english') }
   ];
 
   useEffect(() => {

@@ -8,10 +8,10 @@ import { TagFilterPanel, countTagOptions } from '../components/TagFilterPanel';
 import { TagList } from '../components/TagList';
 import { WikiGraph } from '../components/WikiGraph';
 import { useIncrementalItems } from '../hooks/useIncrementalItems';
-import { refreshPublicWiki, usePublicWiki } from '../hooks/usePublicWiki';
+import { refreshPublicWiki, usePublicWiki, useVisibleWikiResources } from '../hooks/usePublicWiki';
 import { useI18n } from '../i18n';
 import { formatDate } from '../utils/date';
-import type { PublicWikiDocument, PublicWikiIndex } from '../utils/publicWiki';
+import { wikiResourceKey, type PublicWikiDocument, type PublicWikiIndex } from '../utils/publicWiki';
 import { navigateTo } from '../utils/router';
 import {
   createWikiLinkResolver,
@@ -54,10 +54,12 @@ function DocumentConnections({ title, connections }: { title: string; connection
   );
 }
 
-function WikiDocumentBody({ document, index, resolveLink }: {
+function WikiDocumentBody({ document, index, resolveLink, visibleResourceKeys }: {
   document: PublicWikiDocument;
   index: PublicWikiIndex;
   resolveLink: ReturnType<typeof createWikiLinkResolver>;
+  /** Posts/assets the blog shows now; null while the blog's lists load. */
+  visibleResourceKeys: ReadonlySet<string> | null;
 }) {
   const { t } = useI18n();
   const relations = useMemo(() => wikiDocumentRelations(index, document.id), [document.id, index]);
@@ -66,6 +68,7 @@ function WikiDocumentBody({ document, index, resolveLink }: {
     return link ? [{ label: source.label, ...link }] : [];
   });
   const resources = relations.resources.flatMap((resource) => {
+    if (!visibleResourceKeys?.has(wikiResourceKey(resource.kind, resource.id))) return [];
     const href = wikiResourceUrl(resource);
     return href ? [{ ...resource, href }] : [];
   });
@@ -112,6 +115,8 @@ function WikiDocumentBody({ document, index, resolveLink }: {
 export function WikiPage() {
   const { locale, t } = useI18n();
   const wiki = usePublicWiki();
+  const visibleResources = useVisibleWikiResources();
+  const visibleResourceKeys = visibleResources.ready ? visibleResources.keys : null;
   const documents = wiki.index?.documents || EMPTY_DOCUMENTS;
   const [selectedHash, setSelectedHash] = useState(() => window.location.hash);
   const initialSelectionApplied = useRef(Boolean(selectedHash));
@@ -124,7 +129,10 @@ export function WikiPage() {
   const selectedDoc = useMemo(() => findWikiDocument(filteredDocuments, selectedId), [filteredDocuments, selectedId]);
   const requestedDoc = useMemo(() => findWikiDocument(documents, selectedId), [documents, selectedId]);
   const tagOptions = useMemo(() => countTagOptions(documents, locale), [documents, locale]);
-  const resolveLink = useMemo(() => createWikiLinkResolver(documents, window.location.origin, wiki.index?.resources), [documents, wiki.index]);
+  const resolveLink = useMemo(
+    () => createWikiLinkResolver(documents, window.location.origin, wiki.index?.resources, visibleResourceKeys),
+    [documents, wiki.index, visibleResourceKeys]
+  );
   const {
     visibleItems: visibleDocuments,
     shownCount,
@@ -218,7 +226,7 @@ export function WikiPage() {
           </section>
           <div className="tagged-layout">
             <section className="post-flow tagged-main" aria-label={t('nativewiki.list')}>
-              {selectedHash.length > 1 && !requestedDoc ? (
+              {selectedHash.length > 1 && !requestedDoc && documents.length ? (
                 <div className="state-box" role="status">
                   <p>{t('nativewiki.notFound')}</p>
                   <a href={NATIVE_WIKI_PATH}>{t('nativewiki.backToList')}</a>
@@ -248,7 +256,8 @@ export function WikiPage() {
                       }}
                     >
                       <h2 id={titleId}>{document.title}</h2>
-                      <WikiDocumentExcerpt body={document.body} resolveLink={resolveLink} />
+                      {/* The opened body starts with the same paragraph the summary would repeat. */}
+                      {expanded ? null : <WikiDocumentExcerpt body={document.body} resolveLink={resolveLink} />}
                       <TagList tags={document.tags} />
                       <p className="meta">
                         {t(`nativewiki.kind.${document.kind}`)}
@@ -257,7 +266,7 @@ export function WikiPage() {
                     </a>
                     {expanded ? (
                       <div className="post-entry__body" id={bodyId}>
-                        <WikiDocumentBody document={document} index={wiki.index!} resolveLink={resolveLink} />
+                        <WikiDocumentBody document={document} index={wiki.index!} resolveLink={resolveLink} visibleResourceKeys={visibleResourceKeys} />
                       </div>
                     ) : null}
                   </article>

@@ -1,6 +1,6 @@
 import { useCallback, useSyncExternalStore } from 'react';
 
-export type LanguagePreference = 'auto' | 'ko' | 'en' | 'ja';
+export type LanguagePreference = 'auto' | 'ko' | 'en';
 export type AppLanguage = Exclude<LanguagePreference, 'auto'>;
 
 const STORAGE_KEY = 'cha-amu:language-preference:v1';
@@ -21,6 +21,7 @@ const ko = {
   'wiki.fullGraphTitle': '{title}에서 이어지는 전체 위키 지도',
   'wiki.allGraphTitle': '전체 위키 연결 지도',
   'wiki.allGraphFrameTitle': '공개 위키 전체 연결 지도',
+  'wiki.connectedDocuments': '이 글과 연결된 위키 문서',
   'nativewiki.title': '아무위키',
   'nativewiki.failed': '공개 위키 문서를 불러오지 못했습니다.',
   'nativewiki.empty': '아직 공개된 위키 문서가 없습니다.',
@@ -81,7 +82,6 @@ const ko = {
   'settings.auto': '자동',
   'settings.korean': '한국어',
   'settings.english': 'English',
-  'settings.japanese': '日本語',
   'tags.label': '태그',
   'tags.filter': '{label} 태그 필터',
   'tags.collapse': '태그 접기',
@@ -378,6 +378,7 @@ const en: Record<TranslationKey, string> = {
   'wiki.fullGraphTitle': 'Full wiki map focused on {title}',
   'wiki.allGraphTitle': 'Full wiki connection map',
   'wiki.allGraphFrameTitle': 'All public wiki connections',
+  'wiki.connectedDocuments': 'Wiki documents linked to this post',
   'nativewiki.title': 'Wiki',
   'nativewiki.failed': 'Could not load public wiki documents.',
   'nativewiki.empty': 'There are no public wiki documents yet.',
@@ -438,7 +439,6 @@ const en: Record<TranslationKey, string> = {
   'settings.auto': 'Auto',
   'settings.korean': '한국어',
   'settings.english': 'English',
-  'settings.japanese': '日本語',
   'tags.label': 'Tags',
   'tags.filter': '{label} tag filters',
   'tags.collapse': 'Show fewer tags',
@@ -715,57 +715,13 @@ const en: Record<TranslationKey, string> = {
   'admin.hide.processing': 'Working'
 };
 
-// Existing untranslated screens retain their English fallback.
-const ja: Record<TranslationKey, string> = {
-  ...en,
-  'nav.wiki': 'Wiki',
-  'wiki.related': 'つながりマップ',
-  'wiki.expand': '拡大',
-  'wiki.closeGraph': 'つながりマップを閉じる',
-  'wiki.graphFor': '{title} · 全体のつながりマップ',
-  'wiki.localGraphTitle': '{title}のWikiつながりマップ',
-  'wiki.fullGraphTitle': '{title}を中心としたWiki全体マップ',
-  'wiki.allGraphTitle': 'Wiki全体のつながりマップ',
-  'wiki.allGraphFrameTitle': '公開Wiki全体のつながりマップ',
-  'nativewiki.title': 'Wiki',
-  'nativewiki.failed': '公開Wiki文書を読み込めませんでした。',
-  'nativewiki.empty': '公開されたWiki文書はまだありません。',
-  'nativewiki.search': 'Wiki文書を検索',
-  'nativewiki.searchQuery': 'Wiki文書の検索語',
-  'nativewiki.searchPlaceholder': '文書を検索',
-  'nativewiki.list': 'Wiki文書一覧',
-  'nativewiki.noMatch': '検索語と選択したタグに一致する文書はありません。',
-  'nativewiki.loadMore': '文書をさらに{count}件表示',
-  'nativewiki.notFound': '公開一覧にこの文書が見つかりません。',
-  'nativewiki.backToList': '文書一覧へ',
-  'nativewiki.outgoing': 'この文書からのリンク',
-  'nativewiki.backlinks': 'この文書へのリンク',
-  'nativewiki.sources': '出典',
-  'nativewiki.resources': '関連する記事と資料',
-  'nativewiki.updated': '更新 {date}',
-  'nativewiki.kind.concept': '概念',
-  'nativewiki.kind.project': 'プロジェクト',
-  'nativewiki.kind.decision': '決定',
-  'nativewiki.kind.question': '質問',
-  'nativewiki.relation.related': '関連',
-  'nativewiki.relation.uses': '使用',
-  'nativewiki.relation.supports': '裏付け',
-  'nativewiki.relation.supersedes': '置き換え',
-  'search.help': '記事、資料、公開Wiki文書を検索します。ゲストブックは対象外です。',
-  'search.partialTotal': '確認できた検索結果 {count}件',
-  'search.sourceFailed': '{source}の検索データを読み込めませんでした。',
-  'search.wikiGroup': 'Wiki（{count}件）',
-  'search.loadMoreWiki': 'Wiki文書をさらに{count}件表示',
-  'settings.japanese': '日本語'
-};
-
 type LanguageSnapshot = {
   preference: LanguagePreference;
   language: AppLanguage;
 };
 
 function isLanguagePreference(value: unknown): value is LanguagePreference {
-  return value === 'auto' || value === 'ko' || value === 'en' || value === 'ja';
+  return value === 'auto' || value === 'ko' || value === 'en';
 }
 
 function readPreference(): LanguagePreference {
@@ -785,7 +741,6 @@ function detectBrowserLanguage(): AppLanguage {
     const language = String(value || '').toLowerCase();
     if (language === 'ko' || language.startsWith('ko-')) return 'ko';
     if (language === 'en' || language.startsWith('en-')) return 'en';
-    if (language === 'ja' || language.startsWith('ja-')) return 'ja';
   }
   return 'en';
 }
@@ -840,7 +795,7 @@ function interpolate(template: string, params: TranslationParams = {}) {
 }
 
 export function translateFor(language: AppLanguage, key: TranslationKey, params?: TranslationParams) {
-  return interpolate((language === 'ko' ? ko : language === 'ja' ? ja : en)[key], params);
+  return interpolate((language === 'ko' ? ko : en)[key], params);
 }
 
 export function translate(key: TranslationKey, params?: TranslationParams) {
@@ -862,7 +817,7 @@ export function getResolvedLanguage() {
 }
 
 export function getLanguageLocale(language: AppLanguage = snapshot.language) {
-  return language === 'ko' ? 'ko-KR' : language === 'ja' ? 'ja-JP' : 'en-US';
+  return language === 'ko' ? 'ko-KR' : 'en-US';
 }
 
 export function formatLocalizedNumber(value: number, language: AppLanguage = snapshot.language) {

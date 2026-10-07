@@ -124,7 +124,8 @@ function inlineMarkdown(value: string, options: MarkdownOptions): string {
       const entities: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', '#39': "'" };
       const raw = url.replace(/&(amp|lt|gt|quot|#39);/g, (_entity, name: string) => entities[name]);
       const link = options.resolveLink(resolveMarkdownUrl(raw, options));
-      if (!link) return '';
+      // An unavailable target keeps its text so the sentence stays whole, without a dead link.
+      if (!link) return label;
       const target = link.target === '_self' ? '' : ' target="_blank" rel="noreferrer"';
       return `<a href="${escapeHtml(link.href)}"${target}>${label}</a>`;
     }

@@ -747,8 +747,17 @@ img {
   .tag-panel {
     position: absolute;
     top: 0;
+    /* Span the reading column so the connection map can stay in view while reading. */
+    bottom: 0;
     left: calc(100% + var(--layout-section-gap));
     width: 200px;
+    align-content: start;
+  }
+
+  .tag-panel > .wiki-graph {
+    position: sticky;
+    top: calc(var(--site-tools-top) + var(--site-tools-row-height) + 1rem);
+    z-index: 2;
   }
 }
 

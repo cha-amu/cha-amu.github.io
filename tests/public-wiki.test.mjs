@@ -172,6 +172,24 @@ test('document and overview maps use the separate embed endpoint while reading l
   assert.equal(wiki.wikiGraphUrl(wiki.DEFAULT_WIKI_EMBED_URL, 'doc', 'x'.repeat(81), 'local'), '');
 });
 
+test('blog iframes ask for parent-filtered resources, compact layout and the reader language', () => {
+  const inline = new URL(wiki.wikiGraphUrl(wiki.DEFAULT_WIKI_EMBED_URL, 'post', 'p1', 'local', { compact: true, lang: 'en', parentResources: true }));
+  assert.deepEqual([...inline.searchParams], [['embed', 'graph'], ['focus', 'post:p1'], ['scope', 'local'], ['resources', 'parent'], ['compact', '1'], ['lang', 'en']]);
+  const dialog = new URL(wiki.wikiGraphUrl(wiki.DEFAULT_WIKI_EMBED_URL, 'doc', 'wiki-one', 'all', { lang: 'ko', parentResources: true }));
+  assert.deepEqual([...dialog.searchParams], [['embed', 'graph'], ['focus', 'doc:wiki-one'], ['scope', 'all'], ['resources', 'parent']]);
+  assert.equal(wiki.wikiResourceKey('asset', 'asset:a.png'), 'asset:asset:a.png');
+});
+
+test('only the active iframe at the configured wiki origin can ask for the visible resource list', () => {
+  const source = {};
+  const event = { origin: 'http://localhost:5187', source, data: { type: 'amuwiki:ready' } };
+  assert.equal(wiki.isWikiReadyMessage(event, source, 'http://localhost:5187/amuwiki/'), true);
+  assert.equal(wiki.isWikiReadyMessage({ ...event, origin: 'https://example.com' }, source, 'http://localhost:5187/amuwiki/'), false);
+  assert.equal(wiki.isWikiReadyMessage(event, {}, 'http://localhost:5187/amuwiki/'), false);
+  assert.equal(wiki.isWikiReadyMessage({ ...event, data: { type: 'amuwiki:escape' } }, source, 'http://localhost:5187/amuwiki/'), false);
+  assert.equal(wiki.isWikiEscapeMessage(event, source, 'http://localhost:5187/amuwiki/'), false);
+});
+
 test('concurrent consumers share one public fetch and a failed refresh clears previous data', async () => {
   let calls = 0;
   let resolveResponse;
@@ -234,11 +252,10 @@ test('integrated search retains posts/assets and links wiki matches to the blog 
   assert.equal(search.buildSearchResults(posts, assets, '', index.documents).length, 0);
 });
 
-test('wiki controls and search states have Korean, English and Japanese translations', () => {
+test('wiki controls and search states have Korean and English translations', () => {
   assert.equal(i18n.translateFor('ko', 'nav.wiki'), '아무위키');
   assert.equal(i18n.translateFor('en', 'nav.wiki'), 'Wiki');
-  assert.equal(i18n.translateFor('ja', 'wiki.expand'), '拡大');
-  for (const language of ['ko', 'en', 'ja']) {
+  for (const language of ['ko', 'en']) {
     for (const key of ['wiki.related', 'wiki.closeGraph', 'wiki.graphFor', 'wiki.localGraphTitle', 'wiki.fullGraphTitle', 'search.partialTotal', 'search.sourceFailed', 'search.wikiGroup', 'search.loadMoreWiki']) {
       const translation = i18n.translateFor(language, key, { title: 'Title', count: 2, source: 'Wiki' });
       assert.ok(translation && !translation.includes('{'), `${language}: ${key}`);

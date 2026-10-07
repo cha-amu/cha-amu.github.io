@@ -169,7 +169,7 @@ test('date-only metadata renders without inventing a clock time', async () => {
   assert.match(formatDate('2026-07-12T11:34:38.256Z'), /(오전|오후) \d{1,2}:\d{2}/);
 });
 
-test('wiki link resolution applies to rendered links, preserves code examples and omits unavailable targets', async () => {
+test('wiki link resolution applies to rendered links, preserves code examples and unlinks unavailable targets', async () => {
   const { renderMarkdown } = await importCompiledSource('src/utils/markdown.ts', 'markdown.js');
   const seen = [];
   const url = 'https://cha-amu.github.io/amuwiki/#topic';
@@ -183,7 +183,8 @@ test('wiki link resolution applies to rendered links, preserves code examples an
   } });
   assert.deepEqual(seen, [url, 'https://cha-amu.github.io/wiki/#unavailable']);
   assert.match(html, /<a href="\/wiki\/#topic">Topic<\/a>/);
-  assert.doesNotMatch(html, /target="_blank"|UNAVAILABLE_LABEL/);
+  assert.doesNotMatch(html, /target="_blank"|#unavailable/);
+  assert.match(html, /<p>UNAVAILABLE_LABEL<\/p>/);
   assert.match(html, /<code>\[Literal\]\(https:\/\/cha-amu.github.io\/amuwiki\/#topic\)<\/code>/);
   assert.match(html, /<pre><code class="language-md">\[Example\]\(https:\/\/cha-amu.github.io\/amuwiki\/#topic\)<\/code><\/pre>/);
 });

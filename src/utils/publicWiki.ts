@@ -75,13 +75,34 @@ export function wikiDocumentUrl(baseUrl: string, id: string): string {
   return `${wikiBaseUrl(baseUrl)}#${encodeURIComponent(id)}`;
 }
 
-export function wikiGraphUrl(baseUrl: string, kind: 'doc' | 'post' | 'asset' | 'all', id: string, scope: 'local' | 'all'): string {
+export function wikiResourceKey(kind: PublicWikiResource['kind'], id: string): string {
+  return `${kind}:${id}`;
+}
+
+export interface WikiGraphUrlOptions {
+  /** Small inline map in the blog body or sidebar. */
+  compact?: boolean;
+  lang?: 'ko' | 'en';
+  /** Draw only the posts/assets the blog reports as currently visible. */
+  parentResources?: boolean;
+}
+
+export function wikiGraphUrl(
+  baseUrl: string,
+  kind: 'doc' | 'post' | 'asset' | 'all',
+  id: string,
+  scope: 'local' | 'all',
+  options: WikiGraphUrlOptions = {}
+): string {
   if (!['doc', 'post', 'asset', 'all'].includes(kind)) return '';
   if (kind === 'doc' ? !isWikiDocumentId(id) : kind !== 'all' && !isWikiResourceId(id)) return '';
   const url = new URL(wikiBaseUrl(baseUrl));
   url.searchParams.set('embed', 'graph');
   if (kind !== 'all') url.searchParams.set('focus', `${kind}:${id}`);
   url.searchParams.set('scope', kind === 'all' ? 'all' : scope);
+  if (options.parentResources) url.searchParams.set('resources', 'parent');
+  if (options.compact) url.searchParams.set('compact', '1');
+  if (options.lang === 'en') url.searchParams.set('lang', 'en');
   return url.href;
 }
 
@@ -159,7 +180,16 @@ export function connectedWikiResource(index: PublicWikiIndex | null, kind: Publi
     && resource.documentIds.some((documentId) => ids.has(documentId))) || null;
 }
 
-export function isWikiEscapeMessage(event: Pick<MessageEvent, 'origin' | 'source' | 'data'>, frameWindow: Window | null, baseUrl: string) {
+function isWikiFrameMessage(event: Pick<MessageEvent, 'origin' | 'source' | 'data'>, frameWindow: Window | null, baseUrl: string, type: string) {
   return Boolean(frameWindow) && event.source === frameWindow && event.origin === new URL(wikiBaseUrl(baseUrl)).origin
-    && record(event.data) && event.data.type === 'amuwiki:escape';
+    && record(event.data) && event.data.type === type;
+}
+
+export function isWikiEscapeMessage(event: Pick<MessageEvent, 'origin' | 'source' | 'data'>, frameWindow: Window | null, baseUrl: string) {
+  return isWikiFrameMessage(event, frameWindow, baseUrl, 'amuwiki:escape');
+}
+
+/** The embed asks for the visible resource list once it can receive it. */
+export function isWikiReadyMessage(event: Pick<MessageEvent, 'origin' | 'source' | 'data'>, frameWindow: Window | null, baseUrl: string) {
+  return isWikiFrameMessage(event, frameWindow, baseUrl, 'amuwiki:ready');
 }

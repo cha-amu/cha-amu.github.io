@@ -149,7 +149,8 @@ test('Markdown link resolution preserves fenced and inline code, images, and ord
   const calls = [];
   const html = markdown.renderMarkdown(source, { resolveLink: (href) => { calls.push(href); return resolveLink(href); } });
   assert.equal((html.match(/<a href="\/wiki\/#alpha"/g) || []).length, 2);
-  assert.doesNotMatch(html, /Unavailable document/);
+  assert.match(html, /<p>Unavailable document<\/p>/);
+  assert.doesNotMatch(html, /href="[^"]*#missing"/);
   assert.ok(html.includes(`<code>[Code](${old})</code>`));
   assert.ok(html.includes(`[Fenced](${old})\n[Fenced missing](/wiki/#missing)</code></pre>`));
   assert.ok(html.includes(`[Tilde fence](${old})</code></pre>`));
@@ -190,8 +191,9 @@ test('wiki summaries show Markdown link labels without leaking old or native hre
     '[없는 문서](/wiki/#missing)',
     'Type**Script**와 <literal> & 기호'
   ].join('\n'), { resolveLink });
-  assert.equal(summary, '강체 물리 운동 법칙 TypeScript와 <literal> & 기호');
-  assert.doesNotMatch(summary, /https:|cha-amu|amuwiki|rigid-body|없는 문서/);
+  // An unavailable target keeps its label as text so the sentence stays whole.
+  assert.equal(summary, '강체 물리 운동 법칙 없는 문서 TypeScript와 <literal> & 기호');
+  assert.doesNotMatch(summary, /https:|cha-amu|amuwiki|rigid-body|missing/);
 });
 
 test('wiki summaries preserve literal inline and fenced code after stripping rendered tags', () => {
@@ -202,9 +204,40 @@ test('wiki summaries preserve literal inline and fenced code after stripping ren
     '~~~html', '<math>x</math>', '~~~'
   ].join('\n');
   const summary = content.wikiExcerpt(source, { maxLength: 300, resolveLink: content.createWikiLinkResolver([]) });
-  assert.equal(summary, 'Examples [literal](https://example.com/path) &amp; <b> [code](/wiki/#missing) **not bold** <tag> <math>x</math>');
+  assert.equal(summary, '[literal](https://example.com/path) &amp; <b>');
+  const codeOnly = ['# Examples', '```md', '[code](/wiki/#missing) **not bold** <tag>', '```'].join('\n');
+  assert.equal(content.wikiExcerpt(codeOnly), '[code](/wiki/#missing) **not bold** <tag>');
   assert.equal(content.wikiExcerpt('😀😀다음', { maxLength: 2 }), '😀😀…');
   assert.equal(content.wikiExcerpt(' \n '), '');
+});
+
+test('wiki summaries use the first paragraph and never include heading text', () => {
+  const body = ['첫 문단입니다. 이어지는 문장입니다.', '', '## 목적', '', '개발 기록에는 과정이 남는다.'].join('\n');
+  assert.equal(content.wikiExcerpt(body), '첫 문단입니다. 이어지는 문장입니다.');
+  assert.equal(content.wikiExcerpt(['## 목적', '', '본문 첫 문단', '', '## 다음'].join('\n')), '본문 첫 문단');
+  assert.doesNotMatch(content.wikiExcerpt(['## 목적', '', '- 목록만 있는 문서'].join('\n')), /목적/);
+});
+
+test('links to blog posts and assets follow what the blog shows now', () => {
+  const resources = [resource('post', 'shown post', ['alpha']), resource('post', 'hidden post', ['alpha'])];
+  const shown = resources[0];
+  const hidden = resources[1];
+  const visible = new Set(['post:shown post', 'asset:assets/a.png']);
+  const resolveLink = content.createWikiLinkResolver([document('alpha')], 'http://localhost:5186', resources, visible);
+  assert.deepEqual(resolveLink(shown.url), { href: content.wikiResourceUrl(shown), target: '_self' });
+  assert.equal(resolveLink(hidden.url), null);
+  assert.equal(resolveLink('/posts/#hidden%20post'), null);
+  assert.deepEqual(resolveLink('http://localhost:5186/archive/#assets%2Fa.png'), { href: '/archive/#assets%2Fa.png', target: '_self' });
+  assert.equal(resolveLink('https://cha-amu.github.io/posts/#unlisted'), null);
+  // Until the blog's lists load, no post or asset link is shown.
+  const loading = content.createWikiLinkResolver([document('alpha')], 'http://localhost:5186', resources, null);
+  assert.equal(loading(shown.url), null);
+  assert.deepEqual(loading('/wiki/#alpha'), { href: '/wiki/#alpha', target: '_self' });
+  assert.deepEqual(loading('https://example.com/'), { href: 'https://example.com/', target: '_blank' });
+  // The rendered sentence keeps an unavailable label as plain text.
+  const html = markdown.renderMarkdown('자세한 내용은 [숨긴 글](https://cha-amu.github.io/posts/#hidden%20post)에 있다.', { resolveLink });
+  assert.match(html, /자세한 내용은 숨긴 글에 있다\./);
+  assert.doesNotMatch(html, /<a\b/);
 });
 
 test('public resource detail links use the current blog and retain long, punctuated IDs exactly once', () => {
@@ -234,9 +267,9 @@ test('source links matching public blog resources open their native detail route
   });
 });
 
-test('native wiki UI and global graph titles have Korean, English, and Japanese translations', () => {
+test('native wiki UI and global graph titles have Korean and English translations', () => {
   const keys = [
-    'wiki.allGraphTitle', 'wiki.allGraphFrameTitle',
+    'wiki.allGraphTitle', 'wiki.allGraphFrameTitle', 'wiki.connectedDocuments',
     ...[
       'title', 'failed', 'empty', 'search', 'searchQuery', 'searchPlaceholder', 'list', 'noMatch', 'loadMore',
       'notFound', 'backToList', 'outgoing', 'backlinks', 'sources', 'resources', 'updated',
@@ -244,14 +277,13 @@ test('native wiki UI and global graph titles have Korean, English, and Japanese 
       'relation.related', 'relation.uses', 'relation.supports', 'relation.supersedes'
     ].map((key) => `nativewiki.${key}`)
   ];
-  for (const language of ['ko', 'en', 'ja']) {
+  for (const language of ['ko', 'en']) {
     for (const key of keys) {
       const translated = i18n.translateFor(language, key, { count: 12, date: '2026-10-07' });
       assert.equal(typeof translated, 'string', `${language}: ${key}`);
       assert.ok(translated.length && !translated.includes('{'), `${language}: ${key}`);
     }
   }
-  assert.equal(i18n.translateFor('ja', 'nativewiki.backToList'), '文書一覧へ');
   assert.equal(i18n.translateFor('ko', 'nativewiki.kind.concept'), '개념');
   assert.equal(i18n.translateFor('en', 'nativewiki.kind.concept'), 'Concept');
 });

@@ -6,7 +6,7 @@ import { ErrorState, LoadingState, EmptyState } from '../components/PageState';
 import { IncrementalLoadMore } from '../components/IncrementalLoadMore';
 import { MarkdownView } from '../components/MarkdownView';
 import { TagList } from '../components/TagList';
-import { WikiGraph } from '../components/WikiGraph';
+import { WikiGraph, WikiResourceDocuments } from '../components/WikiGraph';
 import { TagFilterPanel, countTagOptions } from '../components/TagFilterPanel';
 import { useIncrementalItems } from '../hooks/useIncrementalItems';
 import { translate, useI18n } from '../i18n';
@@ -221,6 +221,7 @@ export function PostsPage() {
                     {expanded ? (
                       <div className="post-entry__body" id={bodyId}>
                         <MarkdownView markdown={post.body} baseUrl={post.markdownBaseUrl} rootUrl={post.markdownRootUrl} />
+                        <WikiResourceDocuments kind="post" id={post.id} />
                       </div>
                     ) : null}
                   </article>

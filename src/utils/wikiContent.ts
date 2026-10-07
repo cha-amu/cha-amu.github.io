@@ -51,24 +51,16 @@ export interface WikiResolvedLink {
   target?: '_self' | '_blank';
 }
 
-/** Extract display text after Markdown parsing so hrefs never become summaries.
- * Code has already been escaped by the renderer and is decoded only after tags
- * are removed, preserving literal Markdown/HTML examples inside code blocks.
- */
-export function wikiExcerpt(markdown: string, options: {
-  maxLength?: number;
-  resolveLink?: (href: string) => WikiResolvedLink | null;
-} = {}): string {
-  if (!markdown.trim()) return '';
-  const html = renderMarkdown(markdown, { resolveLink: options.resolveLink });
-  const entities: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
-  const text = html
+const HTML_ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
+
+function htmlText(html: string): string {
+  return html
     // KaTeX's visually hidden MathML repeats the visible formula.
     .replace(/<math\b[^>]*>[\s\S]*?<\/math>/gi, '')
     .replace(/<\/?(?:p|h[1-6]|pre|div|ul|ol|li|tr|td|th)\b[^>]*>|<br\b[^>]*>/gi, ' ')
     .replace(/<[^>]+>/g, '')
     .replace(/&(#x[\da-f]+|#\d+|amp|lt|gt|quot|apos|nbsp);/gi, (match, entity: string) => {
-      const named = entities[entity.toLowerCase()];
+      const named = HTML_ENTITIES[entity.toLowerCase()];
       if (named) return named;
       const code = entity.slice(0, 2).toLowerCase() === '#x'
         ? Number.parseInt(entity.slice(2), 16)
@@ -77,16 +69,52 @@ export function wikiExcerpt(markdown: string, options: {
     })
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+/** Summarize a document by its opening paragraphs, as rendered: from the first paragraph up
+ * to the next heading, so heading text and hrefs never become summary text. Code was escaped
+ * by the renderer and is decoded only after tags are removed, preserving literal Markdown/HTML
+ * examples. Documents without a paragraph fall back to their body text without headings.
+ */
+export function wikiExcerpt(markdown: string, options: {
+  maxLength?: number;
+  resolveLink?: (href: string) => WikiResolvedLink | null;
+} = {}): string {
+  if (!markdown.trim()) return '';
+  const html = renderMarkdown(markdown, { resolveLink: options.resolveLink });
+  const opening = html.slice(Math.max(0, html.search(/<p\b/i)));
+  const nextHeading = opening.search(/<h[1-6]\b/i);
+  const lead = Array.from((nextHeading >= 0 ? opening.slice(0, nextHeading) : opening).matchAll(/<p\b[^>]*>([\s\S]*?)<\/p>/gi), (match) => htmlText(match[1]))
+    .filter(Boolean)
+    .join(' ');
+  const text = lead || htmlText(html.replace(/<h[1-6]\b[^>]*>[\s\S]*?<\/h[1-6]>/gi, ' '));
   const characters = Array.from(text);
   const maxLength = options.maxLength ?? 120;
   return characters.length > maxLength ? `${characters.slice(0, maxLength).join('').trimEnd()}…` : text;
 }
 
-/** Called for parsed Markdown links, never as a replacement over Markdown text. */
+function blogDetailTarget(url: URL, currentOrigin: string): { kind: 'post' | 'asset'; id: string } | null {
+  if ((url.origin !== BLOG_ORIGIN && url.origin !== currentOrigin) || url.hash.length < 2) return null;
+  const kind = /^\/posts\/?$/.test(url.pathname) ? 'post' : /^\/archive\/?$/.test(url.pathname) ? 'asset' : null;
+  if (!kind) return null;
+  try {
+    const id = decodeURIComponent(url.hash.slice(1));
+    return isWikiResourceId(id) ? { kind, id } : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Called for parsed Markdown links, never as a replacement over Markdown text.
+ * `visibleResourceKeys` is the set of posts/assets the blog shows now (null while it loads).
+ * When given, links to blog posts/assets outside that set resolve to null, so a post hidden
+ * after the wiki snapshot was published never appears as a link.
+ */
 export function createWikiLinkResolver(
   documents: readonly PublicWikiDocument[],
   origin = BLOG_ORIGIN,
-  resources: readonly PublicWikiResource[] = []
+  resources: readonly PublicWikiResource[] = [],
+  visibleResourceKeys?: ReadonlySet<string> | null
 ) {
   const ids = new Set(documents.map((document) => document.id));
   const currentOrigin = new URL(origin).origin;
@@ -110,6 +138,11 @@ export function createWikiLinkResolver(
       if (!url.hash) return { href: NATIVE_WIKI_PATH, target: '_self' };
       const id = wikiDocumentIdFromHash(url.hash);
       return ids.has(id) ? { href: nativeWikiDocumentUrl(id), target: '_self' } : null;
+    }
+    const detail = blogDetailTarget(url, currentOrigin);
+    if (detail && visibleResourceKeys !== undefined) {
+      if (!visibleResourceKeys?.has(`${detail.kind}:${detail.id}`)) return null;
+      return { href: `${detail.kind === 'post' ? '/posts/' : '/archive/'}#${encodeURIComponent(detail.id)}`, target: '_self' };
     }
     const resourceHref = resourceLinks.get(url.href);
     if (resourceHref) return { href: resourceHref, target: '_self' };
