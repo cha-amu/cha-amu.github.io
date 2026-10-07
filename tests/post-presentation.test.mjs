@@ -199,3 +199,14 @@ test('post activity timestamp prefers the latest edit over publication time', as
     updatedAt: '2026-07-12T11:34:38.256Z'
   }), '2026-07-12T11:34:38.256Z');
 });
+
+test('backslash escapes show the punctuation itself, while code keeps the backslash', async () => {
+  const { renderMarkdown } = await importCompiledSource('src/utils/markdown.ts', 'markdown.js');
+  const inline = renderMarkdown('2\\~4px, \\*별표\\*, \\[대괄호\\](주소), `a\\*b`');
+  const heading = renderMarkdown('\\# 제목이 아닌 문장');
+
+  assert.ok(inline.includes('2~4px, *별표*, [대괄호](주소), <code>a\\*b</code>'), inline);
+  assert.doesNotMatch(inline, /<em>|<a /);
+  assert.ok(heading.includes('# 제목이 아닌 문장'), heading);
+  assert.doesNotMatch(heading, /<h1/);
+});

@@ -107,6 +107,9 @@ function inlineMarkdown(value: string, options: MarkdownOptions): string {
     protect(renderMath(expression, false)));
   source = source.replace(/\$(?!\s)([^$\n]*?\S)\$/g, (_match, expression: string) =>
     protect(renderMath(expression, false)));
+  // CommonMark backslash escapes: "\~", "\*" or "\[" stand for the character itself.
+  // Wiki documents arrive re-serialised with such escapes, so the backslash never shows.
+  source = source.replace(/\\([!-\/:-@\[-`{-~])/g, (_match, character: string) => protect(escapeHtml(character)));
 
   let output = escapeHtml(source);
   output = output.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
