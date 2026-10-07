@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useI18n } from '../i18n';
 
 export interface TagOption {
@@ -25,6 +25,45 @@ interface TagFilterPanelProps {
 }
 
 const COLLAPSED_TAG_LIMIT = 12;
+const SIDEBAR_BOTTOM_GAP = 16;
+
+/**
+ * The desktop sidebar is sticky, but it starts lower on the page than where it
+ * sticks. A max-height based only on the stuck position pushes its bottom off
+ * screen until the page scrolls, so the last tags could not be scrolled into
+ * view. Fit the height to the space actually left below the sidebar instead.
+ */
+function useFitToViewport(ref: { current: HTMLElement | null }, deps: unknown[]) {
+  useEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+    let frame = 0;
+    const fit = () => {
+      frame = 0;
+      if (window.getComputedStyle(element).position !== 'sticky') {
+        element.style.removeProperty('max-height');
+        return;
+      }
+      const top = Math.max(0, element.getBoundingClientRect().top);
+      element.style.maxHeight = `${Math.max(160, Math.floor(window.innerHeight - top - SIDEBAR_BOTTOM_GAP))}px`;
+    };
+    const schedule = () => {
+      if (!frame) frame = window.requestAnimationFrame(fit);
+    };
+    fit();
+    const resize = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(schedule);
+    resize?.observe(document.body);
+    window.addEventListener('scroll', schedule, { passive: true });
+    window.addEventListener('resize', schedule);
+    return () => {
+      if (frame) window.cancelAnimationFrame(frame);
+      resize?.disconnect();
+      window.removeEventListener('scroll', schedule);
+      window.removeEventListener('resize', schedule);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps);
+}
 
 export function TagFilterPanel({
   label,
@@ -36,6 +75,8 @@ export function TagFilterPanel({
 }: TagFilterPanelProps) {
   const { t } = useI18n();
   const [expanded, setExpanded] = useState(false);
+  const innerRef = useRef<HTMLDivElement>(null);
+  useFitToViewport(innerRef, [expanded]);
   const selectedTagSet = useMemo(() => new Set(selectedTags), [selectedTags]);
   const visibleTags = useMemo(() => {
     if (expanded || tags.length <= COLLAPSED_TAG_LIMIT) return tags;
@@ -46,7 +87,7 @@ export function TagFilterPanel({
   return (
     <aside className="tag-panel" aria-label={t('tags.filter', { label })}>
       {/* One block for the map and the tags, so the sidebar moves as a unit. */}
-      <div className="tag-panel__inner">
+      <div className="tag-panel__inner" ref={innerRef}>
         {before}
         <div className="tag-panel__head">
           <h2>{t('tags.label')}</h2>

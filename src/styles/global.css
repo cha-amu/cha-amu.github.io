@@ -2347,12 +2347,44 @@ img {
 }
 
 
-@media (max-width: 360px) {
+/* Phones keep the compact menu in the logo row, as on wider screens, so it
+   never covers the content below and needs no background of its own. Under
+   360px the pieces shrink slightly to stay in that row. */
+@media (max-width: 359px) {
+  .topbar-brand img {
+    width: 34px;
+    height: 34px;
+  }
+
   .main-nav--compact {
-    left: 0;
-    top: calc(var(--site-tools-row-height) + 0.4rem);
-    background: var(--color-background);
-    border-radius: 14px;
+    gap: 0.18rem;
+    left: calc(34px + 0.4rem);
+  }
+
+  .main-nav--compact a {
+    width: 32px;
+    min-width: 32px;
+    height: 32px;
+    border-radius: 11px;
+  }
+
+  .main-nav--compact a img {
+    width: 22px;
+    height: 22px;
+  }
+
+  .site-tools {
+    gap: 0.2rem;
+  }
+
+  .tool-icon-link {
+    width: 32px;
+    height: 32px;
+  }
+
+  .tool-icon-link .tool-icon-svg {
+    width: 18px;
+    height: 18px;
   }
 }
 
