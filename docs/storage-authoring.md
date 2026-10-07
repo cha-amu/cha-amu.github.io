@@ -211,6 +211,7 @@ GitHub Actions가 `cha-amu/storage`와 게이트웨이 Worker의 D1 데이터를
 - GitHub push로 실행된 sync는 사람이 frontmatter `updatedAt`을 직접 바꾸지 않아도 storage 파일을 최신으로 보고 D1에 반영한다.
 - `YYYY-MM-DD` 형식의 날짜는 사이트에서 시간 없이 표시한다. 업로드 시각까지 고정하려면 ISO 날짜를 쓰고, 정밀한 `updatedAt`이 없으면 Git 커밋 시각으로 보강한다.
 - 관리자에서 `hidden`이나 `deleted`로 둔 항목은 그 상태의 `updatedAt`이 최신이면 공개 사이트에서 숨긴다.
+- 글을 완전히 지울 때는 관리자의 삭제 기능을 쓴다. D1에 삭제 기록이 남고, 다음 sync가 storage 파일을 지운 뒤 기록을 마무리한다. storage 파일만 git으로 지우면 D1 행이 남아서 다음 주기 sync가 파일을 되살린다.
 
 ## 수동 sync 실행
 
