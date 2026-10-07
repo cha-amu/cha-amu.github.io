@@ -1,8 +1,9 @@
 #!/usr/bin/env node
-// Sets the gateway Worker's admin password from ADMIN_PASSWORD in the local .env.
-// The Worker stores only sha256(ADMIN_PASSWORD + ADMIN_PASSWORD_PEPPER). The pepper is
-// used for nothing else, so a missing one is generated, saved to .env and uploaded too.
-// Values go to wrangler through stdin and are never printed.
+// Sets the gateway Worker's admin password. Asks for the new password twice in the
+// terminal without echoing it. The Worker stores only sha256(password + ADMIN_PASSWORD_PEPPER).
+// The pepper lives in the local .env and is used for nothing else, so a missing one is
+// generated, uploaded and saved too. Values go to wrangler through stdin and are never printed.
+// ADMIN_PASSWORD in .env is deliberately not read: it may be an old password.
 import { createHash, randomBytes } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
@@ -16,9 +17,48 @@ const env = Object.fromEntries(envText.split('\n')
   .filter((line) => /^[A-Z0-9_]+=/.test(line))
   .map((line) => [line.slice(0, line.indexOf('=')), line.slice(line.indexOf('=') + 1).trim()]));
 
-const password = process.env.ADMIN_PASSWORD || env.ADMIN_PASSWORD || '';
+function askHidden(question) {
+  return new Promise((resolve) => {
+    const input = process.stdin;
+    let value = '';
+    process.stdout.write(question);
+    input.setRawMode(true);
+    input.setEncoding('utf8');
+    input.resume();
+    const onData = (chunk) => {
+      for (const character of chunk) {
+        if (character === '\u0003') {
+          input.setRawMode(false);
+          process.stdout.write('\n');
+          process.exit(130);
+        }
+        if (character === '\r' || character === '\n') {
+          input.off('data', onData);
+          input.setRawMode(false);
+          input.pause();
+          process.stdout.write('\n');
+          resolve(value);
+          return;
+        }
+        if (character === '\u007f' || character === '\b') value = Array.from(value).slice(0, -1).join('');
+        else value += character;
+      }
+    };
+    input.on('data', onData);
+  });
+}
+
+if (!process.stdin.isTTY) {
+  console.error('Run this in a terminal. It asks for the new admin password.');
+  process.exit(1);
+}
+const password = await askHidden('New admin password: ');
 if (!password) {
-  console.error('Put the new admin password in .env as ADMIN_PASSWORD=..., then run this again.');
+  console.error('The password is empty. Nothing changed.');
+  process.exit(1);
+}
+if (password !== await askHidden('Type it again: ')) {
+  console.error('The two entries differ. Nothing changed.');
   process.exit(1);
 }
 

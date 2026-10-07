@@ -55,7 +55,7 @@ Run `npm test` and `npm run build` for validation. `node tests/wiki-preview.mjs`
 
 현재 GitHub 레포는 `cha-amu/cha-amu.github.io`이고, 사이트는 `https://cha-amu.github.io/`로 배포된다. 정적 포스트/자료 원본과 미러는 `cha-amu/storage` repo를 사용한다.
 
-관리자 비밀번호는 로컬 `.env`의 `ADMIN_PASSWORD`에 새 비밀번호를 적고 `npm run admin:password`를 실행해 바꾼다. 게이트웨이 Worker의 `ADMIN_PASSWORD_HASH`가 바뀐다.
+관리자 비밀번호는 레포 루트에서 `npm run admin:password`를 실행하고 새 비밀번호를 두 번 입력해 바꾼다. 게이트웨이 Worker의 `ADMIN_PASSWORD_HASH`가 바뀐다.
 
 ## Runtime data behavior
 

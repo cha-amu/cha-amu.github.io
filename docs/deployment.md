@@ -146,12 +146,11 @@ npx wrangler deploy
 
 ## 7. 관리자 비밀번호 변경 방법
 
-1. 로컬 `.env`의 `ADMIN_PASSWORD=`에 **새 비밀번호**를 적는다.
-2. 레포 루트에서 `npm run admin:password`를 실행한다.
+레포 루트의 터미널에서 `npm run admin:password`를 실행하고, 새 비밀번호를 두 번 입력한다. 입력한 글자는 화면에 보이지 않고, 두 입력이 다르면 아무것도 바꾸지 않는다.
 
 스크립트는 `.env`의 `ADMIN_PASSWORD_PEPPER`로 해시를 만들어 Worker의 `ADMIN_PASSWORD_HASH`에 넣는다. 값은 화면에 출력하지 않는다. `.env`가 없거나 pepper가 비어 있으면 새 pepper를 만들어 Worker에 함께 넣고 `.env`에도 저장한다. 관리자 pepper는 관리자 해시에만 쓰이므로 새로 만들어도 다른 데이터에는 영향이 없다. 이미 열린 관리자 세션은 만료될 때까지 유지된다.
 
-`.env`에 남아 있는 `ADMIN_PASSWORD`가 지금 쓰는 비밀번호와 같다는 보장은 없다. 반드시 새 비밀번호를 적은 뒤 실행한다.
+`.env`의 `ADMIN_PASSWORD`는 읽지 않는다. 예전 비밀번호가 남아 있을 수 있어서, 실수로 그 값으로 바뀌는 일을 막기 위해서다.
 
 ## 8. 배포 후 확인할 것
 
@@ -191,7 +190,7 @@ npx wrangler d1 execute cha-amu-security --remote --command="SELECT COUNT(*) FRO
 
 - Worker에 `ADMIN_PASSWORD_HASH`, `ADMIN_PASSWORD_PEPPER`, `ADMIN_SESSION_SECRET`이 있는지 확인(`npx wrangler secret list`)
 - Turnstile 위젯 hostname에 `cha-amu.github.io`가 등록됐는지 확인
-- 새 비밀번호를 `.env`에 적고 `npm run admin:password`를 다시 실행
+- `npm run admin:password`로 새 비밀번호를 다시 설정
 
 ### 방명록 삭제 비밀번호가 안 맞음
 
