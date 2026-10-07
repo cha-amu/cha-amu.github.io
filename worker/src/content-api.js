@@ -9,7 +9,12 @@ import {
 
 const DEFAULT_NAME = 'ㅇㅁ';
 const IDS_SQL = 'SELECT value FROM json_each(?)';
-const literalSheetText = (value) => /^[=+\-@]/.test(value) ? "'" + value : value;
+// Code.js prefixed text starting with = + - @ with an apostrophe so Sheets would not run it
+// as a formula. Sheets dropped that apostrophe when reading the cell back; D1 would keep it
+// and show it to readers, so text is stored exactly as typed.
+// Apps Script sorted titles with the Korean collation (Hangul before Latin); workerd's
+// default locale would reorder the things page.
+const TITLE_COLLATION = 'ko';
 
 function insertStatement(db, definition, record, { upsert = false, guardDeletedPost = false } = {}) {
   const { columns, values } = storedRecord(definition, record);
@@ -62,7 +67,7 @@ async function publicThings(db) {
       url: String(thing.url || ''), imageUrl: String(thing.imageUrl || ''), status: 'visible',
       sortOrder: Number(thing.sortOrder || 0), updatedAt: String(thing.updatedAt || '')
     }))
-    .sort((a, b) => a.sortOrder - b.sortOrder || a.title.localeCompare(b.title) || a.id.localeCompare(b.id));
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.title.localeCompare(b.title, TITLE_COLLATION) || a.id.localeCompare(b.id, TITLE_COLLATION));
 }
 
 async function audit(db, action, targetType, ids, dependencies) {
@@ -89,7 +94,7 @@ async function createGuestbook(db, body, env, deps, context) {
   await enforceGuestbookCreateLimits(db, body, message, env, deps);
   const salt = deps.randomUUID();
   const entry = {
-    id, name: literalSheetText(name.slice(0, 40)), message: literalSheetText(message),
+    id, name: name.slice(0, 40), message,
     status: 'visible', createdAt: deps.nowIso(), passwordSalt: salt,
     passwordHash: await hashGuestbookPassword(password, salt, '', 1, env, deps.subtle),
     passwordHashAlgorithm: 'SHA-256+salt+pepper', passwordHashIterations: 1, hiddenReason: ''
@@ -182,9 +187,7 @@ async function saveThing(db, thing, deps) {
     imageUrl: String(thing.imageUrl || '').trim() ? validateThingUrl(thing.imageUrl) : '',
     status, sortOrder, updatedAt: deps.nowIso()
   };
-  await insertStatement(db, CONTENT_TABLES.things, {
-    ...next, title: literalSheetText(title), description: literalSheetText(description)
-  }, { upsert: true }).run();
+  await insertStatement(db, CONTENT_TABLES.things, next, { upsert: true }).run();
   await audit(db, 'thing.save', 'thing', [id], deps);
   return next;
 }
