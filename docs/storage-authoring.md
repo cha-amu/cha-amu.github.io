@@ -222,7 +222,7 @@ GitHub 웹에서 실행한다.
 6. Run workflow 실행
 ```
 
-수동 실행 후 같은 Actions 화면에서 초록색 체크로 끝나면 성공이다. 실행 중 manifest나 자료 사이드카 변경이 생기면 `github-actions[bot]`이 `Sync storage manifests` 커밋을 자동으로 만든다.
+수동 실행 후 같은 Actions 화면에서 초록색 체크로 끝나면 성공이다. 실행 중 manifest나 자료 사이드카 변경이 생기면 `github-actions[bot]`이 `Sync storage manifests` 커밋을 자동으로 만든다. 바뀐 내용이 없으면 `generatedAt`도 그대로 두므로 커밋을 만들지 않는다.
 
 ## sync 확인 방법
 
@@ -239,7 +239,7 @@ https://cha-amu.github.io/storage/manifests/assets.json
 https://cha-amu.github.io/storage/manifests/posts.json
 ```
 
-각 manifest의 `generatedAt`이 최근 시간으로 바뀌고, 새 파일 경로가 `assets` 또는 `posts` 배열에 들어 있으면 storage Pages 쪽 반영은 끝난 것이다. 메인 사이트 `/archive/`와 `/posts/`는 각 manifest를 읽는다.
+새 파일을 올렸다면 각 manifest의 `generatedAt`이 최근 시간으로 바뀌고, 새 파일 경로가 `assets` 또는 `posts` 배열에 들어 있으면 storage Pages 쪽 반영은 끝난 것이다. 메인 사이트 `/archive/`와 `/posts/`는 각 manifest를 읽는다.
 
 로컬에서 D1을 건드리지 않고 manifest 생성만 확인하려면 storage repo에서 dry-run을 실행한다.
 
