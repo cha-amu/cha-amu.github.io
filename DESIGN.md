@@ -3,7 +3,7 @@
 ## Source of truth
 - Status: Active
 - Last refreshed: 2026-10-08
-- Primary product surfaces: 홈, 아무 글, 자료, 방명록, 통합 검색, 관리자 화면
+- Primary product surfaces: 홈, 아무 글, 아무위키, 자료, 아무거, 방명록, 통합 검색, 관리자 화면
 - Evidence reviewed: `docs/ui-spec.md`, `docs/github-pages-archive-brief.md`, `src/styles/global.css`, `src/components/AppLayout.tsx`, `src/components/SiteTools.tsx`, `src/components/SearchForm.tsx`, `src/entries/home.tsx`, `docs/assets/ui/*`
 
 ## Brand
@@ -34,7 +34,7 @@
 
 ## Visual language
 - Color: primary `#B7DDBF`, background `#F9F9F9`, danger `#F88A87`.
-- Typography: 시스템 산세리프, 한국어와 영어 모두에서 짧고 선명한 가독성을 우선한다.
+- Typography: 웹폰트 `OmuDaye`(눈누의 오뮤 다예쁨체, 오뮤다이어리 x 보이저엑스)를 쓰고, 불러오지 못하면 `ui-rounded`, `Apple SD Gothic Neo`, `Noto Sans KR`, `system-ui` 순서로 대체한다. 한국어와 영어 모두에서 짧고 선명한 가독성을 우선한다.
 - Spacing/layout rhythm: `--layout-page` 본문 레일과 `--layout-gutter`를 공유한다.
 - Shape/radius/elevation: 검은 손그림 느낌 테두리를 유지한다. 카드는 큰 둥근 모서리, 한 줄 입력은 pill, 여러 줄 입력은 둥근 사각형, 아이콘 버튼은 원형으로 구분하고 과한 그림자는 지양한다.
 - Motion: 필수 상태 전환만 사용한다. 주요 탭의 compact 전환은 스크롤 진행률에 맞춰 위치, 크기, 투명도만 보간하고, 채널명 텍스트는 폭을 줄이지 않고 제자리에서 페이드한다.
@@ -68,7 +68,7 @@
 
 ## Content voice
 - Tone: 한국어와 영어 모두 짧고 직접적으로 쓴다.
-- Terminology: 한국어는 `아무 글`, `자료`, `방명록`, `설정`, `검색`, 영어는 `Posts`, `Archive`, `Guestbook`, `Settings`, `Search`를 고정 사용한다.
+- Terminology: 한국어는 `아무 글`, `아무위키`, `자료`, `아무거`, `방명록`, `설정`, `검색`, 영어는 `Posts`, `Wiki`, `Archive`, `Things`, `Guestbook`, `Settings`, `Search`를 고정 사용한다.
 - Microcopy rules: 관리자/방문자 기능을 혼동하지 않게 분리해서 적는다. 방명록 이름은 `이름 (선택)`과 `비우면 ㅇㅁ으로 표시돼요.`로 선택 항목임을 밝힌다. 비밀번호는 `비밀번호`로 짧게 표기하고 `방명록을 지울 때 사용해요.`라는 보조 문구로 용도를 설명한다.
 
 ## Implementation constraints
