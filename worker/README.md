@@ -120,7 +120,6 @@ Rows use the exact exported sheet header names and parsed cell values; dates are
 Generate SQL locally, outside tracked files:
 
 ```sh
-cd /Users/yangyi/projects/new-project/cha-amu-d1
 node worker/scripts/import-sheets-export.mjs /absolute/path/export.json /absolute/path/content-import.sql
 ```
 
@@ -129,7 +128,7 @@ The converter prints per-table counts and writes a private SQL file containing p
 Apply the existing migration sequence to the **same** database, then import:
 
 ```sh
-cd /Users/yangyi/projects/new-project/cha-amu-d1/worker
+cd worker
 npx wrangler d1 migrations apply cha-amu-security --remote
 npx wrangler d1 execute cha-amu-security --remote --file=/absolute/path/content-import.sql
 ```
@@ -159,16 +158,16 @@ Before unfreezing writers, check public lists, admin login/list, password hides 
 
 ## Tests and parity limits
 
-From the worktree root, `npm test` runs every existing test plus the new Worker suites; no root script changes are required. Worker-only command:
+From the repository root, `npm test` runs every existing test plus the new Worker suites; no root script changes are required. Worker-only command:
 
 ```sh
 node --test tests/worker-gateway.test.mjs tests/worker-content.test.mjs tests/worker-import.test.mjs tests/worker-runtime.test.mjs
 ```
 
-The tests use the installed **Miniflare v4 D1**, with both migrations applied to isolated local databases. No string-matching FakeD1 remains. The test-only helper fills in `String.prototype.toWellFormed` / `isWellFormed` on Node 20.18 for Miniflare's Undici dependency; Node 24 uses its native methods. No dependency installation or node_modules modification is required in this worktree. The runtime test runs the actual Worker module graph inside workerd with its WebCrypto and rate bindings. The import test uses Wrangler's SQL-file parser, reapplies the generated file, exercises 8,307 audit rows and an oversized Unicode body, and checks security tables byte-for-byte.
+The tests use the installed **Miniflare v4 D1**, with both migrations applied to isolated local databases. No string-matching FakeD1 remains. The test-only helper fills in `String.prototype.toWellFormed` / `isWellFormed` on Node 20.18 for Miniflare's Undici dependency; Node 24 uses its native methods. Install the Worker dependencies once with npm ci in worker/. The runtime test runs the actual Worker module graph inside workerd with its WebCrypto and rate bindings. The import test uses Wrangler's SQL-file parser, reapplies the generated file, exercises 8,307 audit rows and an oversized Unicode body, and checks security tables byte-for-byte.
 
 Gateway coverage retains CORS/Turnstile/rate/auth/IP-ban/validation contracts. Obsolete echo retry, upstream response validation and pending reconciliation cases are replaced by real SQL failure/rollback and legacy pending-read cases. Both unchanged Apps Script suites still run as reference tests. Their behavioral intent is ported to Worker tests; cache namespace and ScriptLock implementation assertions become immediate-read and D1 atomicity/concurrency assertions.
 
-Intentional infrastructure changes are durable D1 rate counters instead of evictable CacheService entries, atomic entry/mapping and deletion commits, direct uncached public reads, and the explicit session verify route. Limits, scopes, messages, expiry boundaries, duplicate normalization and audit events are preserved. Expired counters are pruned on subsequent attempts. Legacy leading-apostrophe literal-text handling for guestbook and thing writes is retained for contract parity; imports do not add or strip escapes.
+Intentional infrastructure changes are durable D1 rate counters instead of evictable CacheService entries, atomic entry/mapping and deletion commits, direct uncached public reads, and the explicit session verify route. Limits, scopes, messages, expiry boundaries, duplicate normalization and audit events are preserved. Expired counters are pruned on subsequent attempts. Guestbook and thing text is stored exactly as typed. Code.js prefixed text starting with = + - @ with an apostrophe so Sheets would not evaluate it, and Sheets dropped that apostrophe on read; D1 would keep it, so it is not added. Thing titles sort with the Korean collation, as Apps Script did.
 
-Remaining verification limits: no remote migration, production import, real Turnstile call or deployment has been performed. Hash parity assumes Apps Script's UTF-8 encoding as specified; tests compare unchanged Code.js with signed-byte Utilities against both Node and workerd, including 50,000-round PBKDF2, but no real guestbook passwords were available or fetched. Locale-dependent ordering of equal-sort-order non-ASCII thing titles may vary between Apps Script and the Worker ICU version. Malformed legacy cells outside the declared text/numeric field contract, or PBKDF2 iteration counts other than the reported production settings, should be checked before cutover. D1's real plan/storage/query quotas and production request timing remain unmeasured locally.
+Remaining verification limits: no remote migration, production import, real Turnstile call or deployment has been performed. Hash parity assumes Apps Script's UTF-8 encoding as specified; tests compare unchanged Code.js with signed-byte Utilities against both Node and workerd, including 50,000-round PBKDF2, but no real guestbook passwords were available or fetched. Malformed legacy cells outside the declared text/numeric field contract, or PBKDF2 iteration counts other than the reported production settings, should be checked before cutover. D1's real plan/storage/query quotas and production request timing remain unmeasured locally.
