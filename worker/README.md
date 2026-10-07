@@ -2,6 +2,16 @@
 
 Cloudflare Worker entry point for browser writes, administrator authentication, and guestbook IP blocking. Raw client IP addresses are never stored or sent to Apps Script. D1 stores only an HMAC digest keyed by `IP_HASH_SECRET`.
 
+The blog reads its four public lists (`post.listPublic`, `guestbook.listPublic`, `assetOverride.listPublic`, `thing.listPublic`) from the Apps Script web app directly and uses this gateway for them only when that fails. The gateway still accepts them, for example for the amuknowl publication catalog.
+
+## Apps Script responses
+
+Apps Script answers every web app POST with a redirect to a one-time echo URL on `script.googleusercontent.com`. The first GET there returns the result; later GETs redirect back to `/exec`. From Cloudflare's Tokyo and Hong Kong egress this echo request is often slow or answered with 404, while the same calls from a browser succeed. The gateway therefore follows the redirect by hand:
+
+- It reads the echo exactly once and never follows a redirect back to `/exec`, which would run `doGet` and return its health payload in place of the result.
+- Read-only actions whose result is lost run again, up to three attempts within 30 seconds, with 15-second and 8-second limits for the two requests.
+- Writes never run twice, because Apps Script may already have committed them. A lost write result is reported as such.
+
 ## First deployment
 
 1. Install Wrangler in this directory with `npm install`.

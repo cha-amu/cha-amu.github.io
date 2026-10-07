@@ -102,10 +102,14 @@ const D1_MUTATION_BATCH_SIZE = 100;
 const encoder = new TextEncoder();
 
 class GatewayError extends Error {
-  constructor(status, message) {
+  constructor(status, message, options = {}) {
     super(message);
     this.name = 'GatewayError';
     this.status = status;
+    // Safe to run again for read-only actions: the upstream result never arrived.
+    this.retryable = Boolean(options.retryable);
+    // Apps Script ran the action, but its one-time result was lost on the way back.
+    this.lost = Boolean(options.lost);
   }
 }
 
@@ -579,33 +583,134 @@ function upstreamPayload(action, body, env, overrides = {}) {
   return payload;
 }
 
-async function callUpstream(action, body, env, fetchImpl, overrides) {
-  const url = requireString(env.APPS_SCRIPT_URL, 'APPS_SCRIPT_URL');
+// Apps Script answers a web app POST with a redirect to a one-time echo URL on this host.
+// The first GET there returns the result; any later GET redirects back to /exec.
+const APPS_SCRIPT_ECHO_HOST = 'script.googleusercontent.com';
+
+// Read-only actions that may run again when their result is lost. Between Cloudflare's
+// Tokyo/Hong Kong egress and Google the echo request is often slow or answered with 404,
+// while the same calls from a browser succeed. Writes never run twice, because Apps Script
+// may already have committed them.
+const REPEATABLE_UPSTREAM_ACTIONS = new Set([
+  ...PUBLIC_ACTIONS,
+  'admin.session.verify',
+  'admin.post.list',
+  'admin.guestbook.list',
+  'admin.assetOverride.list',
+  'admin.thing.list',
+  'storage.sync.post.list',
+  'storage.sync.postDeletion.list',
+  'storage.sync.assetOverride.list'
+]);
+const UPSTREAM_READ_ATTEMPTS = 3;
+const UPSTREAM_READ_BUDGET_MS = 30_000;
+const UPSTREAM_EXEC_TIMEOUT_MS = 15_000;
+const UPSTREAM_ECHO_TIMEOUT_MS = 8_000;
+const LOST_RESULT_MESSAGE = '원본 API 처리 결과를 받지 못했습니다.';
+const LOST_WRITE_MESSAGE = '원본 API 처리 결과를 받지 못했습니다. 이미 반영됐을 수 있으니 목록을 새로 고쳐 확인한 뒤 다시 시도하세요.';
+
+function deadlineSignal(deadline, limitMs) {
+  if (!deadline) return undefined;
+  return AbortSignal.timeout(Math.max(1, Math.min(limitMs, deadline - Date.now())));
+}
+
+function appsScriptEchoUrl(location, base) {
+  if (!location) return null;
+  try {
+    const url = new URL(location, base);
+    return url.protocol === 'https:' && url.hostname === APPS_SCRIPT_ECHO_HOST ? url.href : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+async function discardBody(response) {
+  try {
+    await response.body?.cancel();
+  } catch (_) {
+    // Nothing left to release.
+  }
+}
+
+function lostUpstreamResult() {
+  return new GatewayError(502, LOST_RESULT_MESSAGE, { retryable: true, lost: true });
+}
+
+async function fetchUpstreamOnce(url, payloadText, fetchImpl, deadline) {
   let response;
   try {
     response = await fetchImpl(url, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(upstreamPayload(action, body, env, overrides))
+      body: payloadText,
+      redirect: 'manual',
+      signal: deadlineSignal(deadline, UPSTREAM_EXEC_TIMEOUT_MS)
     });
   } catch (_) {
-    throw new GatewayError(502, '원본 API에 연결할 수 없습니다.');
+    throw new GatewayError(502, '원본 API에 연결할 수 없습니다.', { retryable: true });
   }
 
-  if (!response.ok) {
-    throw new GatewayError(502, '원본 API가 요청을 처리하지 못했습니다.');
+  if (response.status >= 300 && response.status < 400) {
+    const echoUrl = appsScriptEchoUrl(response.headers.get('Location'), url);
+    await discardBody(response);
+    if (!echoUrl) throw lostUpstreamResult();
+    try {
+      response = await fetchImpl(echoUrl, {
+        method: 'GET',
+        redirect: 'manual',
+        signal: deadlineSignal(deadline, UPSTREAM_ECHO_TIMEOUT_MS)
+      });
+    } catch (_) {
+      throw lostUpstreamResult();
+    }
+    // A used or missing echo answers 404 or redirects back to /exec. Following that
+    // redirect as a GET would run doGet and return its health payload as this result.
+    if (!response.ok) {
+      await discardBody(response);
+      throw lostUpstreamResult();
+    }
+  } else if (!response.ok) {
+    await discardBody(response);
+    throw new GatewayError(502, '원본 API가 요청을 처리하지 못했습니다.', { retryable: true });
   }
 
   let envelope;
   try {
     envelope = JSON.parse(await response.text());
   } catch (_) {
-    throw new GatewayError(502, '원본 API 응답 형식이 올바르지 않습니다.');
+    throw new GatewayError(502, '원본 API 응답 형식이 올바르지 않습니다.', { retryable: true });
   }
   if (!envelope || typeof envelope !== 'object' || typeof envelope.ok !== 'boolean') {
-    throw new GatewayError(502, '원본 API 응답 형식이 올바르지 않습니다.');
+    throw new GatewayError(502, '원본 API 응답 형식이 올바르지 않습니다.', { retryable: true });
   }
   return envelope;
+}
+
+async function callUpstream(action, body, env, fetchImpl, overrides) {
+  const url = requireString(env.APPS_SCRIPT_URL, 'APPS_SCRIPT_URL');
+  const payloadText = JSON.stringify(upstreamPayload(action, body, env, overrides));
+
+  if (!REPEATABLE_UPSTREAM_ACTIONS.has(action)) {
+    try {
+      return await fetchUpstreamOnce(url, payloadText, fetchImpl, null);
+    } catch (error) {
+      if (error instanceof GatewayError && error.lost) throw new GatewayError(502, LOST_WRITE_MESSAGE, { lost: true });
+      throw error;
+    }
+  }
+
+  const deadline = Date.now() + UPSTREAM_READ_BUDGET_MS;
+  let lastError = null;
+  for (let attempt = 1; attempt <= UPSTREAM_READ_ATTEMPTS && deadline - Date.now() > 1_000; attempt += 1) {
+    try {
+      return await fetchUpstreamOnce(url, payloadText, fetchImpl, deadline);
+    } catch (error) {
+      if (!(error instanceof GatewayError) || !error.retryable) throw error;
+      lastError = error;
+      console.warn(JSON.stringify({ event: 'apps_script_retry', action, attempt, error: error.message }));
+    }
+  }
+  throw lastError || lostUpstreamResult();
 }
 
 function validateUpstreamResultIds(value, field, requestedIds, maxIdLength, optional = false) {

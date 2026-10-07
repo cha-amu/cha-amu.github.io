@@ -75,7 +75,7 @@ export function PrivacyPage() {
         ],
         items: [
           'Cloudflare, Inc.: CDN, Worker, D1, Turnstile, 요청 제한과 IP 차단',
-          'Google LLC: Apps Script와 Sheets를 이용한 방명록 및 관리자 데이터 처리',
+          'Google LLC: Apps Script와 Sheets를 이용한 공개 목록 제공, 방명록 및 관리자 데이터 처리',
           'GitHub, Inc.: 정적 사이트와 공개 콘텐츠 호스팅',
           'jsDelivr: 웹폰트 파일 제공'
         ]
@@ -147,7 +147,7 @@ export function PrivacyPage() {
         ],
         items: [
           'Cloudflare, Inc.: CDN, Worker, D1, Turnstile, rate limits, and IP blocking',
-          'Google LLC: Apps Script and Sheets for guestbook and admin data',
+          'Google LLC: Apps Script and Sheets for public lists, guestbook, and admin data',
           'GitHub, Inc.: static site and public-content hosting',
           'jsDelivr: webfont delivery'
         ]

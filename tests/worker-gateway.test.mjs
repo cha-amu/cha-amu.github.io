@@ -5,6 +5,7 @@ import test from 'node:test';
 import { createGateway } from '../worker/src/index.js';
 
 const APP_URL = 'https://apps-script.test/exec';
+const ECHO_URL = 'https://script.googleusercontent.com/macros/echo';
 const ORIGIN = 'https://cha-amu.github.io';
 const RAW_IP = '203.0.113.42';
 const CREATED_ID = '11111111-1111-4111-8111-111111111111';
@@ -246,6 +247,7 @@ function responseJson(data, status = 200) {
 
 function fixture(overrides = {}) {
   const appCalls = [];
+  const echoCalls = [];
   const turnstileCalls = [];
   const appHandler = overrides.appHandler || ((body) => {
     if (body.action === 'guestbook.create') {
@@ -261,10 +263,15 @@ function fixture(overrides = {}) {
   const fetch = async (url, init) => {
     const target = String(url);
     if (target === APP_URL) {
+      assert.equal(init.method, 'POST', 'the gateway must never send a GET to /exec, which would run doGet');
       const body = JSON.parse(init.body);
       appCalls.push({ body, init });
       const result = await appHandler(body);
       return result instanceof Response ? result : responseJson(result);
+    }
+    if (target.startsWith(ECHO_URL)) {
+      echoCalls.push({ url: target, init });
+      return overrides.echoHandler(target, echoCalls.length);
     }
     if (target.includes('/turnstile/v0/siteverify')) {
       const form = new URLSearchParams(init.body);
@@ -280,7 +287,7 @@ function fixture(overrides = {}) {
     randomUUID: () => CREATED_ID,
     nowIso: () => '2026-07-11T00:00:00.000Z'
   });
-  return { gateway, appCalls, turnstileCalls };
+  return { gateway, appCalls, echoCalls, turnstileCalls };
 }
 
 test('health is non-sensitive and exact CORS origin is returned', async () => {
@@ -1193,4 +1200,76 @@ test('guestbook mapping cleanup does not run when upstream rejects the delete', 
   assert.equal(response.status, 200);
   assert.equal((await response.json()).ok, false);
   assert.equal(database.mappings.has('rejected-entry'), true);
+});
+
+function echoRedirect(key) {
+  return new Response(null, { status: 302, headers: { Location: `${ECHO_URL}?user_content_key=${key}&lib=test` } });
+}
+
+function usedEchoRedirect() {
+  // What Google returns for an echo URL whose one-time result is gone.
+  return new Response(null, { status: 302, headers: { Location: APP_URL } });
+}
+
+test('a read takes its result from the one-time Apps Script echo URL', async () => {
+  const { gateway, appCalls, echoCalls } = fixture({
+    appHandler: () => echoRedirect('first'),
+    echoHandler: () => responseJson({ ok: true, data: [{ id: 'post-1' }] })
+  });
+  const response = await gateway.fetch(apiRequest('post.listPublic'), createEnv());
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { ok: true, data: [{ id: 'post-1' }] });
+  assert.equal(appCalls.length, 1);
+  assert.equal(appCalls[0].init.redirect, 'manual');
+  assert.equal(echoCalls.length, 1);
+  assert.equal(echoCalls[0].init.method, 'GET');
+  assert.equal(echoCalls[0].init.redirect, 'manual');
+});
+
+test('a lost read result runs the read again instead of following the echo back to doGet', async () => {
+  const { gateway, appCalls, echoCalls } = fixture({
+    appHandler: () => echoRedirect(`key-${appCalls.length}`),
+    echoHandler: (_url, call) => {
+      if (call === 1) return usedEchoRedirect();
+      if (call === 2) return new Response('<title>Page Not Found</title>', { status: 404 });
+      return responseJson({ ok: true, data: [{ id: 'post-1' }] });
+    }
+  });
+  const response = await gateway.fetch(apiRequest('post.listPublic'), createEnv());
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { ok: true, data: [{ id: 'post-1' }] });
+  assert.equal(appCalls.length, 3);
+  assert.equal(echoCalls.length, 3);
+});
+
+test('a read stops after three lost results and reports it', async () => {
+  const { gateway, appCalls } = fixture({
+    appHandler: () => echoRedirect('lost'),
+    echoHandler: () => usedEchoRedirect()
+  });
+  const response = await gateway.fetch(apiRequest('thing.listPublic'), createEnv());
+
+  assert.equal(response.status, 502);
+  assert.deepEqual(await response.json(), { ok: false, error: '원본 API 처리 결과를 받지 못했습니다.' });
+  assert.equal(appCalls.length, 3);
+});
+
+test('a lost write result is reported without running the write again', async () => {
+  const { gateway, appCalls, echoCalls } = fixture({
+    appHandler: () => echoRedirect('saved'),
+    echoHandler: () => usedEchoRedirect()
+  });
+  const response = await gateway.fetch(apiRequest('admin.post.save', {
+    token: 'admin-token',
+    post: { id: 'post-1', title: 'Title', body: 'Body', status: 'published', tags: [] }
+  }), createEnv());
+
+  assert.equal(response.status, 502);
+  const body = await response.json();
+  assert.equal(body.ok, false);
+  assert.match(body.error, /처리 결과를 받지 못했습니다\. 이미 반영됐을 수 있으니/);
+  assert.equal(appCalls.length, 1);
+  assert.equal(echoCalls.length, 1);
 });
