@@ -64,7 +64,7 @@ createdAt  선택. 최초 작성 시각을 보존할 때 ISO 날짜로 지정.
 updatedAt  선택. 생략하거나 날짜만 쓰면 마지막 Git 커밋 시각을 사용.
 publishedAt 선택. 공개 시각을 작성 시각과 따로 보존할 때 ISO 날짜로 지정.
 tags       선택. [태그1, 태그2] 형식.
-status     필수. published, draft, hidden 중 하나. published인 글만 사이트에 표시.
+status     선택. published, draft, hidden 중 하나. 생략하면 published. published인 글만 사이트에 표시하고, 그 밖의 값은 표시하지 않는다.
 excerpt    선택. 비워두면 본문에서 자동 생성.
 id         선택. 보통 쓰지 않는다. 없으면 posts/... 경로로 자동 생성.
 ```

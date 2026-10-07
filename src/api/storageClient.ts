@@ -44,7 +44,11 @@ function normalizeTags(value: unknown): string[] {
   return text.split(',').map((tag) => tag.trim()).filter(Boolean);
 }
 
+// A post without a status is published, as documented for storage authors and as the
+// storage manifest and the amuknowl catalog read it. Any other unknown value stays off the
+// public list, so a typo never publishes a draft.
 function statusFrom(value: unknown): Post['status'] {
+  if (value === undefined || value === null || value === '') return 'published';
   return value === 'published' || value === 'draft' || value === 'hidden' ? value : 'draft';
 }
 

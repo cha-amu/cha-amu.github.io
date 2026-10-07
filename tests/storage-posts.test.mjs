@@ -54,7 +54,7 @@ const cachedPost = (id, status = 'published', source = 'storage') => ({
 });
 const payload = (data) => JSON.stringify({ savedAt: '2999-01-01', data });
 
-test('the public post list reads storage only, follows frontmatter status and keeps newest-first ordering', async (t) => {
+test('the public post list reads storage only, follows frontmatter status (missing means published) and keeps newest-first ordering', async (t) => {
   const f = await setup(t, new Map([
     ['cha-amu:posts:v1', payload([cachedPost('api-only', 'published', 'sheets')])],
     ['cha-amu:posts-control:v1', payload([cachedPost('newest', 'hidden', 'sheets')])]
@@ -66,7 +66,7 @@ test('the public post list reads storage only, follows frontmatter status and ke
     ['hidden', 'hidden', '2026-12-01', 'published'],
     ['newest', 'published', '2026-03-01', 'hidden'],
     ['middle', 'published', '2026-02-01', 'published'],
-    ['missing-status', undefined, '2026-12-01', 'published'],
+    ['missing-status', undefined, '2025-12-01', 'published'],
     ['invalid-status', 'unknown', '2026-12-01', 'published']
   ];
   for (const [id, status, updatedAt, manifestStatus] of entries) {
@@ -77,14 +77,14 @@ test('the public post list reads storage only, follows frontmatter status and ke
     ].join('\n'));
   }
   const posts = await f.store.refreshPosts();
-  assert.deepEqual(posts.map((post) => post.id), ['newest', 'middle', 'older']);
+  assert.deepEqual(posts.map((post) => post.id), ['newest', 'middle', 'older', 'missing-status']);
   assert.equal(posts[0].body, 'Body newest');
   assert.equal(posts[0].markdownBaseUrl, 'https://cha-amu.github.io/storage/posts/2026/');
   assert.ok(posts.every((post) => post.source === 'storage' && post.status === 'published'));
   assert.deepEqual(f.store.getPublicDataSnapshot().posts.items, posts);
-  assert.deepEqual(f.store.buildSearchResults(posts, [], 'Body').map((result) => result.id), ['newest', 'middle', 'older']);
+  assert.deepEqual(f.store.buildSearchResults(posts, [], 'Body').map((result) => result.id), ['newest', 'middle', 'older', 'missing-status']);
   assert.equal(f.requests.length, entries.length + 1);
-  assert.deepEqual(JSON.parse(f.cache.get('cha-amu:posts:v2')).data.map((post) => post.id), ['newest', 'middle', 'older']);
+  assert.deepEqual(JSON.parse(f.cache.get('cha-amu:posts:v2')).data.map((post) => post.id), ['newest', 'middle', 'older', 'missing-status']);
 
   f.manifest.posts = [];
   await f.store.refreshPosts({ force: true });
