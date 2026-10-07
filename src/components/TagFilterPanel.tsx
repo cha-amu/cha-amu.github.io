@@ -45,12 +45,14 @@ export function TagFilterPanel({
 
   return (
     <aside className="tag-panel" aria-label={t('tags.filter', { label })}>
-      {before}
-      <div className="tag-panel__head">
-        <h2>{t('tags.label')}</h2>
-        <span>{t('common.count', { count: tags.length })}</span>
-      </div>
-      <div className="tag-filter-list">
+      {/* One block for the map and the tags, so the sidebar moves as a unit. */}
+      <div className="tag-panel__inner">
+        {before}
+        <div className="tag-panel__head">
+          <h2>{t('tags.label')}</h2>
+          <span>{t('common.count', { count: tags.length })}</span>
+        </div>
+        <div className="tag-filter-list">
         <button
           className={`tag-filter ${selectedTags.length === 0 ? 'tag-filter--selected' : ''}`}
           type="button"
@@ -84,6 +86,7 @@ export function TagFilterPanel({
             <span>{expanded ? t('tags.collapse') : t('tags.more', { count: hiddenCount })}</span>
           </button>
         ) : null}
+        </div>
       </div>
     </aside>
   );

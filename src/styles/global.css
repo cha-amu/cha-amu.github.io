@@ -482,9 +482,13 @@ img {
 
 .tag-panel {
   grid-area: tags;
+  padding: 0.15rem 0;
+}
+
+.tag-panel__inner {
   display: grid;
   gap: 0.65rem;
-  padding: 0.15rem 0;
+  min-width: 0;
 }
 
 /* The map reads as part of the tag panel below it: the same heading row, a pill
@@ -825,34 +829,27 @@ img {
     display: block;
   }
 
+  /* A rail beside the reading column; its inner block is the sidebar itself. */
   .tag-panel {
     position: absolute;
     top: 0;
-    /* Span the reading column so the connection map can stay in view while reading. */
     bottom: 0;
     left: calc(100% + var(--layout-section-gap));
     width: 200px;
-    align-content: start;
   }
 
-  .tag-panel > .wiki-graph {
+  /* The map and the tags stay in view together, like Quartz's sticky sidebar.
+     A long tag list scrolls inside the sidebar instead of leaving the screen. */
+  .tag-panel__inner {
+    --sidebar-top: calc(var(--site-tools-top) + var(--site-tools-row-height) + 1rem);
     position: sticky;
-    top: calc(var(--site-tools-top) + var(--site-tools-row-height) + 1rem);
-    z-index: 2;
-    /* Tags scroll underneath the sticky map; keep them from showing through. */
-    background: var(--color-background);
-  }
-
-  /* Cover the strip between the header tools and the stuck map, so tags that
-     scroll past it vanish instead of showing as clipped text. */
-  .tag-panel > .wiki-graph::before {
-    content: '';
-    position: absolute;
-    right: -6px;
-    bottom: 100%;
-    left: -6px;
-    height: calc(var(--site-tools-top) + var(--site-tools-row-height) + 1rem);
-    background: var(--color-background);
+    top: var(--sidebar-top);
+    max-height: calc(100vh - var(--sidebar-top) - 1rem);
+    overflow-y: auto;
+    /* Room inside the scroll box for the 3px focus rings of the edge controls. */
+    margin: -6px;
+    padding: 6px;
+    scrollbar-width: thin;
   }
 }
 
