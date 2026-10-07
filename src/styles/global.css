@@ -1724,6 +1724,13 @@ img {
   background: var(--color-surface);
 }
 
+/* Opening a post or wiki document moves focus to its card so assistive tech
+   follows the change. The opened card already shows where the reader is, so
+   the browser's default ring would only appear as a stray blue border. */
+.post-entry[tabindex="-1"]:focus {
+  outline: none;
+}
+
 .post-entry--link:hover,
 .post-entry--link:focus-within {
   background: var(--color-soft-primary);
