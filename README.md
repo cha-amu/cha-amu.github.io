@@ -6,7 +6,7 @@ GitHub Pages에 배포할 개인용 자료 아카이브 사이트입니다.
 
 - Vite + React + TypeScript
 - GitHub Pages static hosting
-- Google Apps Script + Google Sheets API backend
+- Cloudflare Worker gateway (`worker/`) with D1 for guestbook, admin, post status, things and asset override data
 - Cloudflare Turnstile for guestbook writes
 - Storage manifests from `https://cha-amu.github.io/storage/manifests/*.json`
 
@@ -31,7 +31,7 @@ The site is built as a React SPA. `npm run build` emits a single `index.html` an
 
 Copy `.env.example` to `.env` for local configuration.
 
-Only public frontend values go into Vite env files. Secrets belong in GitHub Actions Secrets and Apps Script Properties.
+Only public frontend values go into Vite env files. Server secrets are Worker secrets (`npx wrangler secret put` in `worker/`); see `worker/README.md`.
 
 ## Public wiki integration
 
@@ -48,20 +48,17 @@ Run `npm test` and `npm run build` for validation. `node tests/wiki-preview.mjs`
 
 ## Deployment / 운영
 
-배포, GitHub Actions Secrets/Variables 변경, Apps Script 배포, 관리자 비밀번호 변경 절차는 아래 문서를 따른다.
+배포, GitHub Actions Variables 변경, Worker 비밀값, 관리자 비밀번호 변경 절차는 아래 문서를 따른다.
 
 - [배포와 GitHub Secrets/Variables 관리](docs/deployment.md)
 - [storage repo 포스트/자료 작성 규칙](docs/storage-authoring.md)
 
 현재 GitHub 레포는 `cha-amu/cha-amu.github.io`이고, 사이트는 `https://cha-amu.github.io/`로 배포된다. 정적 포스트/자료 원본과 미러는 `cha-amu/storage` repo를 사용한다.
 
-관리자 비밀번호는 두 방식으로 바꿀 수 있다.
-
-- 로컬 `.env`가 있으면 `.env`의 `ADMIN_PASSWORD` 수정 후 `npm run sync:apps-script-env`
-- 로컬 자료가 없으면 GitHub `ADMIN_PASSWORD` Secret을 만들고 **Actions → Update admin password → Run workflow** 실행
+관리자 비밀번호는 로컬 `.env`의 `ADMIN_PASSWORD`에 새 비밀번호를 적고 `npm run admin:password`를 실행해 바꾼다. 게이트웨이 Worker의 `ADMIN_PASSWORD_HASH`가 바뀐다.
 
 ## Runtime data behavior
 
-Public posts, guestbook entries, and archive manifest data use browser `localStorage` plus an in-memory SPA public data store. The app preloads public data once at startup, pages render cached/in-memory data immediately, and Apps Script refreshes run in the background. Apps Script also caches public list responses with `CacheService` and invalidates those caches on writes. Guestbook create/delete uses optimistic UI and rolls back on failure.
+Public posts, guestbook entries, and archive manifest data use browser `localStorage` plus an in-memory SPA public data store. The app preloads public data once at startup, pages render cached/in-memory data immediately, and gateway refreshes run in the background. The gateway reads D1 directly, so a write is visible on the next read. Guestbook create/delete uses optimistic UI and rolls back on failure.
 
 The project intentionally does not create GitHub commits for each guestbook write.

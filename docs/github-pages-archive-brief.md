@@ -4,6 +4,8 @@
 
 이 문서는 구현물이 아니라, 대화에서 확정된 방향을 기록한 기획 문서다.
 
+2026-10-07부터 방명록·관리자·글 상태 데이터는 Google Sheets와 Apps Script 대신 Cloudflare Worker 게이트웨이의 D1에 저장한다. 아래의 Sheets·Apps Script 설계는 처음 결정의 기록이며, 현재 구조는 `worker/README.md`를 따른다.
+
 기획 내용은 대화에서 확정된 사항을 기준으로 정리한다. 세부 UI 문서는 `docs/ui-spec.md`에 작성되어 있고, 데이터 스키마와 이미지 manifest/override 구조도 이 문서에 확정값으로 기록되어 있다.
 
 ## 만들고 싶은 것

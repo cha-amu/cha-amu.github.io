@@ -10,6 +10,7 @@
     "test": "node --test tests/*.test.mjs",
     "secrets:apps-script": "node scripts/generate-apps-script-secrets.mjs",
     "typecheck": "tsc -b",
+    "admin:password": "node scripts/set-worker-admin-password.mjs",
     "env:apps-script": "node scripts/generate-apps-script-secrets.mjs --write-env",
     "sync:apps-script-env": "node scripts/sync-apps-script-properties.mjs"
   },

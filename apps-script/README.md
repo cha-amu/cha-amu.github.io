@@ -1,4 +1,6 @@
-# Apps Script 연결 절차
+# Apps Script 연결 절차 (백업 전용)
+
+> 2026-10-07부터 사이트는 이 Apps Script와 Google Sheets를 쓰지 않는다. 데이터와 로직은 게이트웨이 Worker의 D1로 옮겼고(`worker/README.md`), 이 프로젝트와 시트는 그 이전 데이터의 백업으로만 남아 있다. 아래 내용은 기록용이다. `Deploy Apps Script` 워크플로는 수동으로만 실행된다.
 
 연결할 Google Sheet:
 
@@ -127,8 +129,6 @@ https://cha-amu-gateway.cha-amu.workers.dev/health
 ## 보안 게이트웨이
 
 쓰기, 관리자 요청, 방명록 작성·삭제는 모두 Cloudflare Worker를 거치며, Apps Script는 공개 조회 외 액션에 `GATEWAY_SHARED_SECRET`을 요구한다. Worker/D1 배포와 비밀값 목록은 `worker/README.md`를 따른다.
-
-공개 조회 4종(`post.listPublic`, `guestbook.listPublic`, `assetOverride.listPublic`, `thing.listPublic`)은 비밀값이 필요 없으므로 브라우저가 아래 Web App URL을 직접 호출한다. Apps Script는 결과를 일회용 echo 주소로 넘겨주는데, Worker를 거치면 Cloudflare 도쿄·홍콩 출구와 Google 사이에서 이 echo 요청이 자주 늦거나 404로 끝나 첫 방문자가 최대 50초 기다린 뒤 오류를 봤다. 브라우저 직접 호출은 같은 시간대에 실패하지 않았다. 직접 호출이 실패하는 네트워크에서는 Worker로 한 번 더 읽는다.
 
 ## 현재 배포 URL
 

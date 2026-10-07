@@ -74,7 +74,7 @@
 ## Implementation constraints
 - Framework/styling system: Vite + React + TypeScript, 전역 CSS 토큰.
 - Design-token constraints: 색상/폭/버튼 크기는 공통 토큰 변경을 우선한다.
-- Performance constraints: GitHub Pages 정적 호스팅, Apps Script 응답은 캐시 우선 표시. 아무 글/자료는 전체 데이터를 메모리에 둔 채 검색과 태그를 전체 대상으로 수행하고, DOM 렌더링만 초기 묶음과 추가 묶음으로 제한한다.
+- Performance constraints: GitHub Pages 정적 호스팅, 게이트웨이(Cloudflare Worker + D1) 응답은 캐시 우선 표시. 아무 글/자료는 전체 데이터를 메모리에 둔 채 검색과 태그를 전체 대상으로 수행하고, DOM 렌더링만 초기 묶음과 추가 묶음으로 제한한다.
 - Compatibility constraints: React SPA 라우팅, GitHub Pages `404.html` fallback, 경로 직접 입력/새로고침, trailing slash 보정 유지.
 - Test/screenshot expectations: UI/라우팅 변경 후 typecheck/build, 직접 URL 진입, 내부 링크 무reload 이동, 주요 DOM 구조 확인.
 

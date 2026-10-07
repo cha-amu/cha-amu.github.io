@@ -196,21 +196,21 @@ sortOrder   낮을수록 먼저 표시
 
 같은 이름의 실제 자료가 있으면 `.md`는 사이드카로 처리된다. 같은 이름의 실제 자료가 없으면 `.md`도 일반 파일 자료로 등록된다.
 
-## Sheets와 sync 규칙
+## D1과 sync 규칙
 
-GitHub Actions가 `cha-amu/storage`와 Google Sheets를 맞춘다.
+GitHub Actions가 `cha-amu/storage`와 게이트웨이 Worker의 D1 데이터를 맞춘다. 2026-10-07까지는 Google Sheets를 썼고, 규칙은 그대로 D1로 옮겼다.
 
 - sync는 메인 사이트 repo가 아니라 `cha-amu/storage` repo의 `Sync storage repo` GitHub Actions에서 돈다.
 - `posts/**`, `assets/**`, sync 스크립트, `package.json`, sync workflow가 `main`에 push되면 즉시 실행된다.
 - 주기 sync는 매시간 17분에 실행된다.
-- storage repo에 직접 push한 글은 즉시 Sheets에 본문까지 복사된다.
-- Sheets에만 있거나 Sheets 쪽 `updatedAt`이 더 최신인 글은 주기적 sync 때 `posts/YYYY/title.md`로 storage repo에 반영된다.
-- storage에만 있는 글은 Sheets에 `source=storage`, `storagePath=...`, `syncStatus=synced` 표시와 함께 본문까지 추가된다.
-- storage에만 있는 자료 파일은 Sheets asset override에 link-only 행으로 추가한다.
-- 사이트에서 글을 표시할 때는 Sheets의 `updatedAt`이 storage의 `updatedAt`보다 최신이면 Sheets 본문을 쓰고, 같거나 storage가 최신이면 storage Markdown을 쓴다.
-- GitHub push로 실행된 sync는 사람이 frontmatter `updatedAt`을 직접 바꾸지 않아도 storage 파일을 최신으로 보고 Sheets에 반영한다.
+- storage repo에 직접 push한 글은 즉시 D1에 본문까지 복사된다.
+- D1에만 있거나 D1 쪽 `updatedAt`이 더 최신인 글은 주기적 sync 때 `posts/YYYY/title.md`로 storage repo에 반영된다.
+- storage에만 있는 글은 D1에 `source=storage`, `storagePath=...`, `syncStatus=synced` 표시와 함께 본문까지 추가된다.
+- storage에만 있는 자료 파일은 D1 asset override에 link-only 행으로 추가한다.
+- 사이트에서 글을 표시할 때는 D1의 `updatedAt`이 storage의 `updatedAt`보다 최신이면 D1 본문을 쓰고, 같거나 storage가 최신이면 storage Markdown을 쓴다.
+- GitHub push로 실행된 sync는 사람이 frontmatter `updatedAt`을 직접 바꾸지 않아도 storage 파일을 최신으로 보고 D1에 반영한다.
 - `YYYY-MM-DD` 형식의 날짜는 사이트에서 시간 없이 표시한다. 업로드 시각까지 고정하려면 ISO 날짜를 쓰고, 정밀한 `updatedAt`이 없으면 Git 커밋 시각으로 보강한다.
-- Sheets에서 `hidden`이나 `deleted`로 둔 항목은 그 상태의 `updatedAt`이 최신이면 공개 사이트에서 숨긴다.
+- 관리자에서 `hidden`이나 `deleted`로 둔 항목은 그 상태의 `updatedAt`이 최신이면 공개 사이트에서 숨긴다.
 
 ## 수동 sync 실행
 
@@ -244,13 +244,13 @@ https://cha-amu.github.io/storage/manifests/posts.json
 
 각 manifest의 `generatedAt`이 최근 시간으로 바뀌고, 새 파일 경로가 `assets` 또는 `posts` 배열에 들어 있으면 storage Pages 쪽 반영은 끝난 것이다. 메인 사이트 `/archive/`는 이 manifest를 읽는다.
 
-로컬에서 Sheets를 건드리지 않고 manifest 생성만 확인하려면 storage repo에서 dry-run을 실행한다.
+로컬에서 D1을 건드리지 않고 manifest 생성만 확인하려면 storage repo에서 dry-run을 실행한다.
 
 ```sh
 STORAGE_SYNC_DRY_RUN=1 npm run sync
 ```
 
-실제 Sheets까지 쓰는 로컬 sync는 `API_URL`과 `STORAGE_SYNC_SECRET`이 필요하므로, 보통은 GitHub Actions 수동 실행을 쓴다. 관리자 비밀번호나 관리자 세션은 사용하지 않는다. `API_URL`은 Apps Script 원본이 아니라 `https://cha-amu-gateway.cha-amu.workers.dev/api`를 사용한다.
+실제 D1까지 쓰는 로컬 sync는 `API_URL`과 `STORAGE_SYNC_SECRET`이 필요하므로, 보통은 GitHub Actions 수동 실행을 쓴다. 관리자 비밀번호나 관리자 세션은 사용하지 않는다. `API_URL`은 게이트웨이 주소 `https://cha-amu-gateway.cha-amu.workers.dev/api`를 사용한다.
 
 ## 직접 편집하지 않는 파일
 

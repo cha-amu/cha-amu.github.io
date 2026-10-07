@@ -1,6 +1,6 @@
-# 배포와 GitHub Secrets/Variables 관리
+# 배포와 비밀값 관리
 
-이 문서는 `cha-amu.github.io` 레포를 나중에 다시 배포하거나, GitHub Actions 설정값을 바꿀 때 보는 운영 절차다.
+이 문서는 `cha-amu.github.io` 레포를 다시 배포하거나, 설정값과 비밀값을 바꿀 때 보는 운영 절차다.
 
 현재 레포:
 
@@ -16,15 +16,18 @@ https://cha-amu.github.io/
 
 ## 1. 배포 구조
 
-이 프로젝트는 GitHub Pages, Cloudflare Worker/D1, Apps Script 세 계층으로 배포한다.
+2026-10-07부터 이 프로젝트는 두 계층으로 배포한다.
 
 ```txt
-.github/workflows/pages.yml       → 사이트 빌드 후 GitHub Pages 배포
-.github/workflows/apps-script.yml → Apps Script 코드 배포
-worker/                           → 보안 게이트웨이와 IP 차단 D1
+.github/workflows/pages.yml → 사이트 빌드 후 GitHub Pages 배포
+worker/                     → 게이트웨이 Worker(cha-amu-gateway)와 D1(cha-amu-security)
 ```
 
-Google Sheets와 `cha-amu/storage` repo의 동기화는 storage repo 자신의 `Sync storage repo` workflow에서 실행한다. storage repo가 자기 파일과 manifest만 커밋하므로 별도 cross-repo push 토큰은 쓰지 않는다. storage repo에 직접 push하면 즉시 Sheets에 본문까지 반영하고, 주기적 실행은 Sheets의 최신 수정본을 storage Markdown으로 되돌려 맞춘다.
+방명록, 관리자 로그인, 글 상태(숨김·초안·삭제 기록), 아무거, 자료 덮어쓰기 데이터와 IP 차단 기록은 모두 D1 `cha-amu-security` 하나에 있다. 글 본문과 자료 파일의 원본은 `cha-amu/storage` repo다.
+
+`cha-amu/storage`와 D1의 동기화는 storage repo 자신의 `Sync storage repo` workflow가 게이트웨이를 거쳐 실행한다. storage repo에 직접 push하면 즉시 D1에 본문까지 반영하고, 주기적 실행은 D1의 최신 수정본을 storage Markdown으로 되돌려 맞춘다. 규칙은 [storage 작성 문서](storage-authoring.md)를 따른다.
+
+Google Apps Script와 Google Sheets는 2026-10-07 이전 데이터의 백업으로만 남아 있다. 사이트는 더 이상 부르지 않으며, `Deploy Apps Script` workflow는 수동으로만 실행된다. 자세한 내용은 `apps-script/README.md`에 있다.
 
 ### 사이트 배포
 
@@ -36,27 +39,12 @@ Google Sheets와 `cha-amu/storage` repo의 동기화는 storage repo 자신의 `
   - `VITE_ADMIN_IDLE_TIMEOUT_MS`
   - `VITE_TURNSTILE_SITE_KEY` (공개 사이트 키)
 
-### Cloudflare Worker/D1
+### 게이트웨이 Worker와 D1
 
-- Worker: `cha-amu-gateway`
-- D1: `cha-amu-security`
-- 배포 절차: `worker/README.md`
-- Worker secrets: `APPS_SCRIPT_URL`, `GATEWAY_SHARED_SECRET`, `IP_HASH_SECRET`, `TURNSTILE_SECRET_KEY`, `STORAGE_SYNC_SECRET`
-- `GATEWAY_SHARED_SECRET`은 Apps Script Properties에도 같은 값으로 등록한다.
-- `STORAGE_SYNC_SECRET`은 `cha-amu/storage` Actions Secret에도 같은 값으로 등록한다.
-
-### Apps Script 배포
-
-- 트리거: `apps-script/**` 또는 workflow 파일 변경 후 `main`에 push하거나 수동 실행
-- 결과: Google Apps Script 코드 갱신
-- 필요한 GitHub Actions Secrets:
-  - `CLASPRC_JSON`
-  - `CLASP_JSON`
-  - `APPS_SCRIPT_DEPLOYMENT_ID`
-  - `SPREADSHEET_ID`
-  - `ADMIN_PASSWORD`는 로컬 없이 GitHub Actions로 관리자 비밀번호를 바꿀 때만 필요
-
-`APPS_SCRIPT_DEPLOYMENT_ID`를 넣어두면 기존 `/exec` URL을 유지한 채 배포만 갱신한다. 이 값을 빼면 Actions가 새 Web App deployment를 만들 수 있으므로, 기존 사이트 URL을 유지하려면 보통 넣어둔다.
+- Worker: `cha-amu-gateway`, D1: `cha-amu-security`
+- 배포: `worker/`에서 `npm ci` 후 `npx wrangler deploy`
+- D1 구조 변경: `worker/migrations/`에 SQL 파일을 추가하고 `npm run migrate:remote`
+- 자세한 데이터 구조와 이전 기록: `worker/README.md`
 
 ## 2. GitHub 메뉴에서 Secrets/Variables 들어가는 법
 
@@ -105,295 +93,69 @@ VITE_TURNSTILE_SITE_KEY=0x4AAAAAADzr-jSxSMZf9xcv
 주의:
 
 - `VITE_`가 붙은 값은 브라우저 번들에 들어가므로 공개값만 넣는다.
-- 관리자 비밀번호, clasp 인증 정보, Turnstile secret key는 Variables에 넣지 않는다.
+- 관리자 비밀번호와 Turnstile secret key는 Variables에 넣지 않는다.
 
-## 4. GitHub Actions Secrets 변경 방법
 
-Secrets는 민감값이다. 등록 후에는 GitHub 화면에서 값을 다시 볼 수 없다. 바꾸려면 새 값으로 덮어쓴다.
+## 4. Worker 비밀값
 
-경로:
-
-```txt
-GitHub repo → Settings → Secrets and variables → Actions → Secrets 탭
-```
-
-### 새 Secret 추가
-
-1. **New repository secret** 클릭
-2. `Name` 입력
-3. `Secret` 입력
-4. **Add secret** 클릭
-
-### 기존 Secret 수정
-
-1. Secrets 목록에서 바꿀 항목 오른쪽의 **Update** 클릭
-2. 새 값을 입력
-3. **Update secret** 클릭
-
-### 현재 필요한 Secrets
+Worker 비밀값은 GitHub이 아니라 Cloudflare에 있다. `worker/`에서 `npx wrangler secret put <이름>`으로 넣고, 값은 다시 볼 수 없다.
 
 ```txt
-CLASPRC_JSON=<~/.clasprc.json 전체 내용>
-CLASP_JSON=<Apps Script 프로젝트 연결 JSON>
-APPS_SCRIPT_DEPLOYMENT_ID=<기존 Apps Script Web App deployment id>
-SPREADSHEET_ID=<Google Sheet ID>
-ADMIN_PASSWORD=<GitHub에서 관리자 비밀번호를 변경할 때 사용할 새 비밀번호>
-ADMIN_PASSWORD_PEPPER=<현재 Apps Script Property와 같은 값>
-ADMIN_SESSION_SECRET=<현재 Apps Script Property와 같은 값>
-GATEWAY_SHARED_SECRET=<Worker와 동일한 비밀값>
-GUESTBOOK_SERVER_PEPPER=<현재 Apps Script Property와 같은 값>
+ADMIN_PASSWORD_HASH      관리자 비밀번호 해시. npm run admin:password가 넣는다.
+ADMIN_PASSWORD_PEPPER    관리자 해시용 pepper. 관리자 해시에만 쓰인다.
+ADMIN_SESSION_SECRET     관리자 세션 서명 키. 바꾸면 열린 세션이 모두 끊긴다.
+GUESTBOOK_SERVER_PEPPER  방명록 삭제 비밀번호 해시용 pepper. 절대 새로 만들지 않는다.
+IP_HASH_SECRET           IP HMAC 키. 바꾸면 기존 IP 차단을 확인할 수 없다.
+TURNSTILE_SECRET_KEY     Turnstile 서버 키.
+STORAGE_SYNC_SECRET      storage 동기화 인증. cha-amu/storage Actions Secret과 같은 값.
 ```
 
-`SPREADSHEET_ID`는 공개 repo 파일에 적지 않고 Secret으로 둔다. Apps Script 배포는 위 서버 비밀값을 같은 값으로 다시 동기화한 뒤 코드를 올린다. 특히 `GUESTBOOK_SERVER_PEPPER`를 새 값으로 바꾸면 기존 방명록 삭제 비밀번호를 검증할 수 없으므로 임의로 재생성하지 않는다.
+`GUESTBOOK_SERVER_PEPPER`를 바꾸면 기존 방명록 글을 작성 때의 비밀번호로 지울 수 없다. `IP_HASH_SECRET`을 바꾸면 기존 차단 기록이 어떤 IP의 것인지 알 수 없게 된다. 두 값은 바꾸지 않는다.
 
-## 5. 각 Secret 값 만드는 법
+비밀값이 아닌 `ADMIN_SESSION_TTL_MS`(10분)와 `GUESTBOOK_PASSWORD_ITERATIONS`는 `worker/wrangler.jsonc`의 `vars`에 있다.
 
-### 5.1 `CLASPRC_JSON`
+`APPS_SCRIPT_URL`과 `GATEWAY_SHARED_SECRET`은 2026-10-07 이전 Worker 버전용이다. 이전 버전으로 되돌릴 가능성이 없어진 뒤 `npx wrangler secret delete`로 지운다.
 
-`CLASPRC_JSON`은 clasp가 Google 계정으로 Apps Script에 접근하기 위한 OAuth 인증 정보다.
+## 5. GitHub Actions Secrets
 
-로컬에서 Google 계정 로그인이 필요하다.
-
-```bash
-npx @google/clasp login
-```
-
-로그인이 끝나면 보통 아래 파일이 생긴다.
+사이트 배포 workflow는 Secret을 쓰지 않는다. 아래 Secret은 백업용 `Deploy Apps Script` workflow에만 쓰이며, Apps Script를 완전히 정리하면 지워도 된다.
 
 ```txt
-~/.clasprc.json
+CLASPRC_JSON, CLASP_JSON, APPS_SCRIPT_DEPLOYMENT_ID, SPREADSHEET_ID,
+ADMIN_PASSWORD, ADMIN_PASSWORD_PEPPER, ADMIN_SESSION_SECRET,
+GATEWAY_SHARED_SECRET, GUESTBOOK_SERVER_PEPPER
 ```
 
-이 파일의 **전체 내용**을 GitHub Secret `CLASPRC_JSON` 값으로 넣는다.
-
-확인만 할 때:
-
-```bash
-cat ~/.clasprc.json
-```
-
-주의:
-
-- 이 값은 민감정보다. README, 이슈, 커밋에 붙이면 안 된다.
-- Google 계정을 바꾸거나 clasp 로그인이 깨지면 이 Secret을 새 값으로 다시 등록한다.
-
-### 5.2 `CLASP_JSON`
-
-`CLASP_JSON`은 어떤 Apps Script 프로젝트에 코드를 push할지 알려주는 값이다.
-
-현재 로컬 `.clasp.json`에는 로컬 작업 경로용 값이 들어있다. GitHub Actions에서는 `apps-script` 폴더 안에서 clasp를 실행하므로 `rootDir`을 `.`로 둔다.
-
-형식:
-
-```json
-{
-  "scriptId": "<Apps Script 프로젝트 ID>",
-  "rootDir": ".",
-  "scriptExtensions": [".js", ".gs"],
-  "htmlExtensions": [".html"],
-  "jsonExtensions": [".json"],
-  "filePushOrder": [],
-  "skipSubdirectories": false
-}
-```
-
-`scriptId` 확인 방법:
-
-1. https://script.google.com/ 접속
-2. 해당 프로젝트 열기
-3. 왼쪽 톱니바퀴 **Project Settings** 클릭
-4. **Script ID** 복사
-
-또는 로컬에 이미 연결돼 있으면:
-
-```bash
-cat .clasp.json
-```
-
-여기서 `scriptId`만 확인하고, GitHub Secret에는 위 형식처럼 `rootDir`을 `.`로 맞춰 넣는다.
-
-### 5.3 `APPS_SCRIPT_DEPLOYMENT_ID`
-
-기존 Apps Script Web App URL을 계속 유지하려면 필요하다.
-
-현재 Web App URL이 아래처럼 생겼다면:
-
-```txt
-https://script.google.com/macros/s/<여기가 deployment id>/exec
-```
-
-`/s/`와 `/exec` 사이 값이 `APPS_SCRIPT_DEPLOYMENT_ID`다.
-
-로컬 clasp로도 확인할 수 있다.
-
-```bash
-npx @google/clasp deployments
-```
-
-목록에서 현재 웹앱 URL에 해당하는 `AKfy...` 값을 `APPS_SCRIPT_DEPLOYMENT_ID`로 넣는다.
-
-
-### 5.4 `SPREADSHEET_ID`
-
-Google Sheet URL이 아래처럼 생겼다면:
-
-```txt
-https://docs.google.com/spreadsheets/d/<SPREADSHEET_ID>/edit
-```
-
-`/d/`와 `/edit` 사이 값이 `SPREADSHEET_ID`다.
-
-주의:
-
-- 이 값은 비밀번호급 secret은 아니지만 공개 repo에는 적지 않는다.
-- GitHub Actions에서는 Repository Secret `SPREADSHEET_ID`로 넣는다.
-- Apps Script 런타임에서는 Script Properties `SPREADSHEET_ID`로 읽는다.
+GitHub Secrets 화면은 `GitHub repo → Settings → Secrets and variables → Actions → Secrets 탭`이다.
 
 ## 6. 배포 실행 방법
 
-### 6.1 코드 수정 후 자동 배포
+### 6.1 사이트
 
-일반적으로는 아래 흐름이다.
+`main`에 push하면 `Deploy site to GitHub Pages`가 자동으로 실행된다. 다시 배포하려면 **Actions → Deploy site to GitHub Pages → Run workflow**를 `main`으로 실행한다.
 
-```bash
-git add .
-git commit -m "..."
-git push origin main
+### 6.2 Worker
+
+```sh
+cd worker
+npm ci
+npx wrangler deploy
 ```
 
-그러면 GitHub Actions가 자동으로 실행된다.
-
-확인 경로:
-
-```txt
-GitHub repo → Actions
-```
-
-- 사이트만 바뀌면 `Deploy site to GitHub Pages` 확인
-- Apps Script도 바뀌면 `Deploy Apps Script` 확인
-
-### 6.2 수동으로 사이트 다시 배포
-
-1. GitHub repo 접속
-2. 상단 **Actions** 클릭
-3. 왼쪽 workflow 목록에서 **Deploy site to GitHub Pages** 클릭
-4. 오른쪽 **Run workflow** 클릭
-5. Branch가 `main`인지 확인
-6. 초록색 **Run workflow** 버튼 클릭
-
-### 6.3 수동으로 Apps Script 다시 배포
-
-1. GitHub repo 접속
-2. 상단 **Actions** 클릭
-3. 왼쪽 workflow 목록에서 **Deploy Apps Script** 클릭
-4. 오른쪽 **Run workflow** 클릭
-5. Branch가 `main`인지 확인
-6. 초록색 **Run workflow** 버튼 클릭
-
-완료 후 `Deploy Apps Script`가 success인지 확인한다.
+배포하면 새 버전 ID가 출력된다. 문제가 생기면 `npx wrangler deployments list`로 이전 버전을 찾아 `npx wrangler rollback <버전 ID>`로 되돌린다. 되돌리는 것은 코드뿐이고 D1 데이터는 그대로다.
 
 ## 7. 관리자 비밀번호 변경 방법
 
-관리자 비밀번호 변경 방법은 2개다.
+1. 로컬 `.env`의 `ADMIN_PASSWORD=`에 **새 비밀번호**를 적는다.
+2. 레포 루트에서 `npm run admin:password`를 실행한다.
 
-- 로컬 `.env`가 있으면 로컬에서 변경
-- 로컬 자료가 없어졌으면 GitHub Secret + 수동 workflow로 변경
+스크립트는 `.env`의 `ADMIN_PASSWORD_PEPPER`로 해시를 만들어 Worker의 `ADMIN_PASSWORD_HASH`에 넣는다. 값은 화면에 출력하지 않는다. `.env`가 없거나 pepper가 비어 있으면 새 pepper를 만들어 Worker에 함께 넣고 `.env`에도 저장한다. 관리자 pepper는 관리자 해시에만 쓰이므로 새로 만들어도 다른 데이터에는 영향이 없다. 이미 열린 관리자 세션은 만료될 때까지 유지된다.
 
-원문 비밀번호는 repo 파일에 저장하지 않는다.
+`.env`에 남아 있는 `ADMIN_PASSWORD`가 지금 쓰는 비밀번호와 같다는 보장은 없다. 반드시 새 비밀번호를 적은 뒤 실행한다.
 
-### 7.1 로컬 `.env`가 있을 때
+## 8. 배포 후 확인할 것
 
-1. 로컬 `.env` 파일에서 아래 값 변경
-
-```txt
-ADMIN_PASSWORD=<새 관리자 비밀번호>
-```
-
-2. 로컬에서 실행
-
-```bash
-npm run sync:apps-script-env
-```
-
-이 명령이 하는 일:
-
-- `ADMIN_PASSWORD_HASH` 생성
-- `ADMIN_PASSWORD_PEPPER` 생성 또는 유지
-- `ADMIN_SESSION_SECRET` 생성 또는 유지
-- `GUESTBOOK_SERVER_PEPPER` 생성 또는 유지
-- `.env`의 `SPREADSHEET_ID`를 Apps Script Properties에 반영
-- Apps Script Properties에 반영
-
-주의:
-
-- `.env`는 `.gitignore`에 들어있고 커밋하면 안 된다.
-- `ADMIN_PASSWORD`에 `VITE_` 접두사를 붙이면 브라우저에 노출되므로 절대 쓰지 않는다.
-
-### 7.2 로컬 `.env`가 없어졌을 때: GitHub UI만으로 변경
-
-로컬 자료를 잃어버렸거나 다른 컴퓨터에서 비밀번호만 바꿔야 하면 아래 방식으로 한다.
-
-1. GitHub repo 접속
-
-```txt
-https://github.com/cha-amu/cha-amu.github.io
-```
-
-2. 새 관리자 비밀번호를 Secret으로 넣기
-
-```txt
-Settings → Secrets and variables → Actions → Secrets 탭
-```
-
-- 이미 `ADMIN_PASSWORD`가 있으면 오른쪽 **Update** 클릭
-- 없으면 **New repository secret** 클릭
-
-입력값:
-
-```txt
-Name: ADMIN_PASSWORD
-Secret: <새 관리자 비밀번호>
-```
-
-3. 비밀번호 갱신 workflow 실행
-
-```txt
-Actions → Update admin password → Run workflow → Branch: main → Run workflow
-```
-
-4. workflow가 success인지 확인
-
-```txt
-Actions → Update admin password → 가장 최근 실행 → success
-```
-
-이 workflow가 하는 일:
-
-- GitHub Secret `ADMIN_PASSWORD`, `SPREADSHEET_ID`, 기존 pepper/session secret을 읽음
-- 새 관리자 비밀번호 hash를 계산하되 기존 pepper/session/방명록 pepper는 유지
-- Apps Script Properties에 반영
-- 기존 Apps Script Web App deployment id를 유지한 채 임시 설정 endpoint를 열었다 닫음
-
-5. `/admin/`에서 새 비밀번호로 로그인 확인
-
-```txt
-https://cha-amu.github.io/admin/
-```
-
-`ADMIN_PASSWORD`, `ADMIN_PASSWORD_PEPPER`, `ADMIN_SESSION_SECRET`, `GUESTBOOK_SERVER_PEPPER`, `SPREADSHEET_ID`, `GATEWAY_SHARED_SECRET`은 이후 Apps Script 배포에도 필요하므로 삭제하지 않는다.
-
-## 8. Apps Script Properties를 GitHub UI에서 바꾸는 게 아닌 이유
-
-Apps Script 런타임 비밀값은 GitHub repo의 Secrets와 별개다.
-
-- GitHub Secrets: GitHub Actions가 배포할 때 쓰는 값
-- Apps Script Properties: 실제 Apps Script API가 실행 중에 읽는 값
-
-예를 들어 관리자 비밀번호 hash, pepper, session secret은 Apps Script Properties에 있어야 한다. 그래서 관리자 비밀번호를 바꿀 때는 `npm run sync:apps-script-env`로 Apps Script Properties를 갱신한다.
-
-## 9. 배포 후 확인할 것
-
-사이트 확인:
+사이트:
 
 ```txt
 https://cha-amu.github.io/
@@ -403,63 +165,39 @@ https://cha-amu.github.io/archive/
 https://cha-amu.github.io/admin/
 ```
 
-Apps Script health 확인:
+게이트웨이 상태:
 
 ```txt
-<Apps Script Web App URL>?action=health
+https://cha-amu-gateway.cha-amu.workers.dev/health
 ```
 
-정상 응답 예:
+D1 데이터 개수:
 
-```json
-{
-  "ok": true,
-  "data": {
-    "name": "cha-amu-api",
-    "sheets": [
-      { "name": "posts", "exists": true }
-    ]
-  }
-}
+```sh
+cd worker
+npx wrangler d1 execute cha-amu-security --remote --command="SELECT COUNT(*) FROM posts; SELECT COUNT(*) FROM guestbook_entries;"
 ```
 
-## 10. 자주 생기는 문제
+## 9. 자주 생기는 문제
 
-### `Update admin password`가 실패함
-
-확인할 것:
-
-- GitHub Secret `ADMIN_PASSWORD`가 있는지 확인
-- GitHub Secret `CLASPRC_JSON`이 있는지 확인
-- GitHub Secret `CLASP_JSON`이 있는지 확인
-- GitHub Secret `APPS_SCRIPT_DEPLOYMENT_ID`가 기존 `/exec` URL의 deployment id와 같은지 확인
-- `CLASP_JSON`의 `scriptId`가 현재 Apps Script 프로젝트 ID인지 확인
-
-### Actions에서 `Deploy Apps Script`가 실패함
-
-대부분 아래 중 하나다.
-
-- `CLASPRC_JSON` 누락 또는 만료
-- `CLASP_JSON`의 `scriptId`가 틀림
-- `CLASP_JSON`의 `rootDir`이 `.`가 아님
-- `APPS_SCRIPT_DEPLOYMENT_ID`가 잘못됨
-- Google 계정에 Apps Script 프로젝트 권한이 없음
-
-### 사이트는 배포됐는데 API가 안 붙음
-
-확인할 것:
+### 사이트는 배포됐는데 목록이 안 뜸
 
 - `https://cha-amu-gateway.cha-amu.workers.dev/health`가 200인지 확인
 - GitHub Variables의 `VITE_API_URL`이 Worker `/api` URL인지 확인
-- Variables 수정 후 `Deploy site to GitHub Pages` workflow를 다시 실행했는지 확인
-- Worker의 `APPS_SCRIPT_URL` secret과 D1 binding이 설정됐는지 확인
+- `worker/wrangler.jsonc`의 D1 binding과 `npm run migrate:remote` 적용 여부 확인
+- Variables를 바꾼 뒤 사이트 workflow를 다시 실행했는지 확인
 
 ### 관리자 로그인이 안 됨
 
-확인할 것:
-
-- Apps Script Properties에 `ADMIN_PASSWORD_HASH`, `ADMIN_PASSWORD_PEPPER`, `ADMIN_SESSION_SECRET`이 있는지 확인
-- Apps Script Properties와 Worker의 `GATEWAY_SHARED_SECRET`이 같은지 확인
+- Worker에 `ADMIN_PASSWORD_HASH`, `ADMIN_PASSWORD_PEPPER`, `ADMIN_SESSION_SECRET`이 있는지 확인(`npx wrangler secret list`)
 - Turnstile 위젯 hostname에 `cha-amu.github.io`가 등록됐는지 확인
-- 로컬에서 `npm run sync:apps-script-env`를 다시 실행했는지 확인
-- Apps Script Web App 배포가 최신 코드인지 확인
+- 새 비밀번호를 `.env`에 적고 `npm run admin:password`를 다시 실행
+
+### 방명록 삭제 비밀번호가 안 맞음
+
+- `GUESTBOOK_SERVER_PEPPER`가 처음 값과 같은지 확인. 바뀌었다면 기존 글은 관리자 화면에서 숨긴다.
+
+### storage 동기화가 실패함
+
+- `cha-amu/storage`의 `STORAGE_SYNC_SECRET`과 Worker 비밀값이 같은지 확인
+- `cha-amu/storage → Actions → Sync storage repo`의 로그 확인

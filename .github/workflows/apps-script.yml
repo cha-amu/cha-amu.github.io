@@ -1,14 +1,9 @@
 name: Deploy Apps Script
 
+# Since 2026-10-07 the site reads and writes Cloudflare D1 through the gateway Worker.
+# Apps Script and its sheet stay only as a backup of the earlier data, so this runs by hand.
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - 'apps-script/**'
-      - 'tests/**'
-      - 'package.json'
-      - '.github/workflows/apps-script.yml'
 
 permissions:
   contents: read
@@ -30,7 +25,7 @@ jobs:
         run: npm ci
 
       - name: Validate Apps Script source
-        run: npm test && node --check apps-script/Code.js
+        run: node --test tests/apps-script-*.test.mjs && node --check apps-script/Code.js
 
       - name: Write clasp credentials
         run: |
