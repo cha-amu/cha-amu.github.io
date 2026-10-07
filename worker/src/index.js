@@ -857,6 +857,16 @@ async function removePendingMapping(db, entryId) {
   ).bind(entryId).run();
 }
 
+async function findCommittedGuestbookEntry(entryId, env, fetchImpl) {
+  try {
+    const listed = await callUpstream('guestbook.listPublic', {}, env, fetchImpl);
+    if (!listed.ok || !Array.isArray(listed.data)) return null;
+    return listed.data.find((entry) => entry && String(entry.id) === entryId) || null;
+  } catch (_) {
+    return null;
+  }
+}
+
 async function handleGuestbookCreate(body, request, env, dependencies) {
   const db = requireDatabase(env);
   const ipHash = await hashClientIp(request, env, dependencies.subtle);
@@ -876,8 +886,14 @@ async function handleGuestbookCreate(body, request, env, dependencies) {
       gatewayEntryId: entryId
     });
   } catch (error) {
-    // A network/format failure is ambiguous: leave the pending row for later reconciliation.
-    throw error;
+    // The call broke off or its one-time result was lost, possibly after Apps Script
+    // committed the entry. The gateway chose the id, so the public list settles it
+    // without writing twice. If it is not there, leave the pending row for reconciliation.
+    const committed = error instanceof GatewayError && error.status === 502
+      ? await findCommittedGuestbookEntry(entryId, env, dependencies.fetch)
+      : null;
+    if (!committed) throw error;
+    envelope = { ok: true, data: committed };
   }
 
   if (!envelope.ok) {

@@ -1273,3 +1273,41 @@ test('a lost write result is reported without running the write again', async ()
   assert.equal(appCalls.length, 1);
   assert.equal(echoCalls.length, 1);
 });
+function guestbookRequest() {
+  return apiRequest('guestbook.create', {
+    name: '',
+    message: '안녕하세요',
+    deletePassword: 'secret',
+    turnstileToken: 'verified-token'
+  });
+}
+
+test('a guestbook entry whose result was lost is confirmed from the public list, not written twice', async () => {
+  const database = new FakeD1();
+  const { gateway, appCalls } = fixture({
+    appHandler: (body) => echoRedirect(body.action),
+    echoHandler: (url) => (url.includes('guestbook.create')
+      ? usedEchoRedirect()
+      : responseJson({ ok: true, data: [{ id: CREATED_ID, name: 'ㅇㅁ', message: '안녕하세요', status: 'visible' }] }))
+  });
+  const response = await gateway.fetch(guestbookRequest(), createEnv(database));
+
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).data.id, CREATED_ID);
+  assert.deepEqual(appCalls.map((call) => call.body.action), ['guestbook.create', 'guestbook.listPublic']);
+  assert.equal(database.mappings.get(CREATED_ID).state, 'active');
+});
+
+test('a lost guestbook result that is not in the public list stays an error with a pending mapping', async () => {
+  const database = new FakeD1();
+  const { gateway, appCalls } = fixture({
+    appHandler: (body) => echoRedirect(body.action),
+    echoHandler: (url) => (url.includes('guestbook.create') ? usedEchoRedirect() : responseJson({ ok: true, data: [] }))
+  });
+  const response = await gateway.fetch(guestbookRequest(), createEnv(database));
+
+  assert.equal(response.status, 502);
+  assert.match((await response.json()).error, /처리 결과를 받지 못했습니다/);
+  assert.equal(appCalls.filter((call) => call.body.action === 'guestbook.create').length, 1);
+  assert.equal(database.mappings.get(CREATED_ID).state, 'pending');
+});

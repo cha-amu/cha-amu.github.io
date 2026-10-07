@@ -25,7 +25,9 @@ export class ApiRequestError extends Error {
 
 // Anonymous list reads that Apps Script answers without the gateway secret.
 const PUBLIC_READ_ACTIONS = new Set(['post.listPublic', 'guestbook.listPublic', 'assetOverride.listPublic', 'thing.listPublic']);
-const PUBLIC_READ_TIMEOUT_MS = 12_000;
+// Long enough for Apps Script's own slow moments (seen at 11 seconds), which the gateway
+// would only make slower. The gateway is for networks that cannot reach Google at all.
+const PUBLIC_READ_TIMEOUT_MS = 25_000;
 
 /**
  * Reads a public list straight from the Apps Script web app. Apps Script returns each
