@@ -114,8 +114,8 @@ export function SearchPage() {
       ) : <p className="meta">{t('search.help')}</p>}
       {isLoading ? <LoadingState label={t('search.refreshing')} /> : null}
       {postsResource.error ? <ErrorState message={t('search.sourceFailed', { source: t('nav.posts') })} onRetry={load} /> : null}
-      {archiveResource.error ? <ErrorState message={t('search.sourceFailed', { source: t('nav.archive') })} onRetry={load} /> : null}
       {wiki.status === 'error' ? <ErrorState message={t('search.sourceFailed', { source: t('nav.wiki') })} onRetry={() => { void refreshPublicWiki(true); }} /> : null}
+      {archiveResource.error ? <ErrorState message={t('search.sourceFailed', { source: t('nav.archive') })} onRetry={load} /> : null}
       {!isLoading && !hasError && query && !results.length ? <EmptyState label={t('search.empty')} /> : null}
       {results.length ? (
         <section className="search-results" aria-label={t('search.results')}>
@@ -134,21 +134,6 @@ export function SearchPage() {
               />
             </section>
           ) : null}
-          {archiveResults.length ? (
-            <section className="search-result-group" aria-labelledby="search-archive-results">
-              <h2 id="search-archive-results">{t('search.archiveGroup', { count: archiveResults.length })}</h2>
-              <div className="search-result-list">
-                {archiveList.visibleItems.map((result) => (
-                  <SearchResultCard result={result} query={query} locale={locale} typeLabel={t('search.resultArchive')} key={result.id} />
-                ))}
-              </div>
-              <IncrementalLoadMore
-                hasMore={archiveList.hasMore}
-                label={t('search.loadMoreArchive', { count: Math.min(ARCHIVE_RESULTS_BATCH_SIZE, archiveList.totalCount - archiveList.shownCount) })}
-                onLoadMore={archiveList.loadMore}
-              />
-            </section>
-          ) : null}
           {wikiResults.length ? (
             <section className="search-result-group" aria-labelledby="search-wiki-results">
               <h2 id="search-wiki-results">{t('search.wikiGroup', { count: wikiResults.length })}</h2>
@@ -161,6 +146,21 @@ export function SearchPage() {
                 hasMore={wikiList.hasMore}
                 label={t('search.loadMoreWiki', { count: Math.min(POST_RESULTS_BATCH_SIZE, wikiList.totalCount - wikiList.shownCount) })}
                 onLoadMore={wikiList.loadMore}
+              />
+            </section>
+          ) : null}
+          {archiveResults.length ? (
+            <section className="search-result-group" aria-labelledby="search-archive-results">
+              <h2 id="search-archive-results">{t('search.archiveGroup', { count: archiveResults.length })}</h2>
+              <div className="search-result-list">
+                {archiveList.visibleItems.map((result) => (
+                  <SearchResultCard result={result} query={query} locale={locale} typeLabel={t('search.resultArchive')} key={result.id} />
+                ))}
+              </div>
+              <IncrementalLoadMore
+                hasMore={archiveList.hasMore}
+                label={t('search.loadMoreArchive', { count: Math.min(ARCHIVE_RESULTS_BATCH_SIZE, archiveList.totalCount - archiveList.shownCount) })}
+                onLoadMore={archiveList.loadMore}
               />
             </section>
           ) : null}
