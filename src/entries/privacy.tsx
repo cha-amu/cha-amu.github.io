@@ -74,8 +74,8 @@ export function PrivacyPage() {
           '서비스 제공 과정에서 아래 사업자가 접속 정보 또는 서비스 데이터를 국외에서 처리할 수 있습니다. 각 사업자는 해당 서비스의 계약과 개인정보 보호정책에 따라 정보를 보관합니다.'
         ],
         items: [
-          'Cloudflare, Inc.: CDN, Worker, D1, Turnstile, 요청 제한과 IP 차단',
-          'Google LLC: Apps Script와 Sheets를 이용한 공개 목록 제공, 방명록 및 관리자 데이터 처리',
+          'Cloudflare, Inc.: CDN, Worker, D1(방명록·관리자 데이터와 IP 차단 기록 저장), Turnstile, 요청 제한',
+          'Google LLC: 2026년 10월 7일 이전 방명록·관리자 데이터의 백업 사본(Google Sheets) 보관',
           'GitHub, Inc.: 정적 사이트와 공개 콘텐츠 호스팅',
           'jsDelivr: 웹폰트 파일 제공'
         ]
@@ -146,8 +146,8 @@ export function PrivacyPage() {
           'The following providers may process connection or service data outside your country under their service agreements and privacy policies.'
         ],
         items: [
-          'Cloudflare, Inc.: CDN, Worker, D1, Turnstile, rate limits, and IP blocking',
-          'Google LLC: Apps Script and Sheets for public lists, guestbook, and admin data',
+          'Cloudflare, Inc.: CDN, Worker, D1 (guestbook, admin data, and IP block records), Turnstile, and rate limits',
+          'Google LLC: a backup copy (Google Sheets) of guestbook and admin data from before October 7, 2026',
           'GitHub, Inc.: static site and public-content hosting',
           'jsDelivr: webfont delivery'
         ]

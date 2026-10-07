@@ -23,53 +23,8 @@ export class ApiRequestError extends Error {
   }
 }
 
-// Anonymous list reads that Apps Script answers without the gateway secret.
-const PUBLIC_READ_ACTIONS = new Set(['post.listPublic', 'guestbook.listPublic', 'assetOverride.listPublic', 'thing.listPublic']);
-// Long enough for Apps Script's own slow moments (seen at 11 seconds), which the gateway
-// would only make slower. The gateway is for networks that cannot reach Google at all.
-const PUBLIC_READ_TIMEOUT_MS = 25_000;
-
-/**
- * Reads a public list straight from the Apps Script web app. Apps Script returns each
- * result once, through a redirect to an echo URL. Relayed through the Cloudflare gateway,
- * that echo request was often lost between Cloudflare's Tokyo/Hong Kong egress and Google,
- * so first-time visitors waited up to 50 seconds for an error. A browser reaches Google
- * directly and reliably, and these reads carry no secret the gateway would have to add.
- * Returns null when the transport fails so the caller can try the gateway instead.
- */
-async function readPublicList<T>(action: string): Promise<{ data: T } | null> {
-  const controller = new AbortController();
-  const timer = globalThis.setTimeout(() => controller.abort(), PUBLIC_READ_TIMEOUT_MS);
-  let envelope: ApiEnvelope<T> | null = null;
-  try {
-    const response = await fetch(config.publicReadUrl, {
-      method: 'POST',
-      // text/plain keeps this a simple CORS request; Apps Script allows any origin.
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action }),
-      signal: controller.signal
-    });
-    if (!response.ok) return null;
-    envelope = (await response.json()) as ApiEnvelope<T>;
-  } catch (_) {
-    return null;
-  } finally {
-    globalThis.clearTimeout(timer);
-  }
-  if (!envelope || typeof envelope.ok !== 'boolean') return null;
-  if (!envelope.ok) throw new ApiRequestError(envelope.error || translate('errors.apiRequest', { status: 502 }), 502, envelope.code);
-  // Every public list is an array. Anything else means doGet answered in place of the list.
-  return Array.isArray(envelope.data) ? { data: envelope.data } : null;
-}
-
 async function request<T>(action: string, payload: Record<string, unknown> = {}): Promise<T> {
   if (!isApiConfigured) throw new ApiNotConfiguredError();
-
-  if (config.publicReadUrl && PUBLIC_READ_ACTIONS.has(action)) {
-    const direct = await readPublicList<T>(action);
-    if (direct) return direct.data;
-    // Networks that block Google's script hosts still read through the gateway.
-  }
 
   const usesGateway = Boolean(config.gatewayUrl && config.apiUrl === config.gatewayUrl);
 
