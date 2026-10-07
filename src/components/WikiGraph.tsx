@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useSta
 import { createPortal } from 'react-dom';
 import { config } from '../config';
 import { usePublicWiki, useVisibleWikiResources } from '../hooks/usePublicWiki';
+import { SIDEBAR_RAIL_MIN_WIDTH, useSectionOpen } from '../hooks/useSectionOpen';
 import { useI18n } from '../i18n';
 import {
   connectedWikiResource,
@@ -18,6 +19,9 @@ import '../styles/wiki.css';
 
 type ResourceSelection = { kind: 'doc' | 'post' | 'asset'; id: string; title: string };
 type GraphSelection = ResourceSelection | { kind: 'all'; id: ''; title: string };
+
+/** Width where an asset's detail dialog has room to show the map open. */
+const DETAIL_MAP_MIN_WIDTH = 761;
 
 /** Wiki resources the blog shows now, as embed keys. Null until the blog's public lists load. */
 function useAllowedResourceKeys(index: PublicWikiIndex | null): string[] | null {
@@ -230,7 +234,12 @@ function ConnectedGraph({ resource, placement, allowedKeys }: {
   const contentId = useId();
   const headingId = useId();
   const Heading = placement === 'detail' ? 'h3' : 'h2';
-  const [expanded, setExpanded] = useState(() => window.matchMedia(`(min-width: ${placement === 'sidebar' ? 1400 : 761}px)`).matches);
+  // Each selection remounts this section, so the open state lives outside it:
+  // a map opened on a phone stays open after a node in it is followed.
+  const [expanded, toggleExpanded] = useSectionOpen(
+    placement === 'sidebar' ? 'map' : 'map-detail',
+    placement === 'sidebar' ? SIDEBAR_RAIL_MIN_WIDTH : DETAIL_MAP_MIN_WIDTH
+  );
   const [dialogOpen, setDialogOpen] = useState(false);
   const [failed, setFailed] = useState(false);
   const closeDialog = useCallback(() => setDialogOpen(false), []);
@@ -238,16 +247,16 @@ function ConnectedGraph({ resource, placement, allowedKeys }: {
 
   return (
     <section className="wiki-graph" aria-labelledby={headingId}>
-      <div className="wiki-graph__head">
-        <Heading className="wiki-graph__heading" id={headingId}>
+      <div className="section-head">
+        <Heading className="section-heading" id={headingId}>
           <button
-            className="wiki-graph__toggle"
+            className="section-toggle"
             type="button"
             aria-expanded={expanded}
             aria-controls={contentId}
-            onClick={() => setExpanded((current) => !current)}
+            onClick={toggleExpanded}
           >
-            <ChevronDownIcon className="wiki-graph__chevron" />
+            <ChevronDownIcon className="section-toggle__chevron" />
             {t('wiki.related')}
           </button>
         </Heading>

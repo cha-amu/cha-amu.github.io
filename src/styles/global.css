@@ -493,29 +493,23 @@ img {
   min-width: 0;
 }
 
-/* The map reads as part of the tag panel below it: the same heading row, a pill
-   action like the tag filters, and the 2px ink border of the post cards. */
-.wiki-graph {
-  display: grid;
-  gap: 0.65rem;
-  min-width: 0;
-}
-
-.wiki-graph__head {
+/* The map and the tags share one collapsible section head: a caret toggle with
+   the title on the left, and an action or a count on the right. */
+.section-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
 }
 
-.wiki-graph__heading {
+.section-heading {
   min-width: 0;
   margin: 0;
   font-size: 1rem;
   line-height: 1;
 }
 
-.wiki-graph__toggle {
+.section-toggle {
   display: inline-flex;
   align-items: center;
   gap: 0.2rem;
@@ -530,7 +524,7 @@ img {
   cursor: pointer;
 }
 
-.wiki-graph__chevron {
+.section-toggle__chevron {
   display: block;
   flex: 0 0 auto;
   width: 18px;
@@ -538,8 +532,28 @@ img {
   transition: transform 0.16s ease;
 }
 
-.wiki-graph__toggle[aria-expanded='false'] .wiki-graph__chevron {
+.section-toggle[aria-expanded='false'] .section-toggle__chevron {
   transform: rotate(-90deg);
+}
+
+/* The borderless toggle would keep a tinted box after a tap on touch screens. */
+@media (hover: hover) {
+  .section-toggle:hover {
+    background: var(--color-soft-primary);
+  }
+}
+
+.section-toggle:focus-visible {
+  outline: 3px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* The map reads as part of the tag panel below it: the same section head, a pill
+   action like the tag filters, and the 2px ink border of the post cards. */
+.wiki-graph {
+  display: grid;
+  gap: 0.65rem;
+  min-width: 0;
 }
 
 .wiki-graph__expand {
@@ -568,14 +582,6 @@ img {
   background: var(--color-soft-primary);
 }
 
-/* The borderless toggle would keep a tinted box after a tap on touch screens. */
-@media (hover: hover) {
-  .wiki-graph__toggle:hover {
-    background: var(--color-soft-primary);
-  }
-}
-
-.wiki-graph__toggle:focus-visible,
 .wiki-graph__expand:focus-visible {
   outline: 3px solid var(--color-primary);
   outline-offset: 2px;
@@ -757,30 +763,39 @@ img {
   outline-offset: 2px;
 }
 
-.tag-panel__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-}
-
-.tag-panel__head h2 {
-  margin: 0;
-  font-size: 1rem;
-  line-height: 1;
-}
-
-.tag-panel__head span {
+.tag-panel__count {
   color: var(--color-muted);
   font-size: 0.9rem;
   font-weight: 800;
   white-space: nowrap;
 }
 
+/* A folded tag list still shows that it filters, in the selected tag colour. */
+.tag-panel__count--selected {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--color-ink);
+}
+
+.tag-panel__count--selected::before {
+  content: '';
+  flex: 0 0 auto;
+  width: 0.6rem;
+  height: 0.6rem;
+  border: 1.5px solid var(--color-ink);
+  border-radius: 50%;
+  background: var(--color-primary);
+}
+
 .tag-filter-list {
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
+}
+
+.tag-filter-list[hidden] {
+  display: none;
 }
 
 .tag-filter {
@@ -816,7 +831,8 @@ img {
   color: var(--color-muted);
 }
 
-.tag-filter span:last-child {
+/* Only a tag's count is a badge; "전체" and the more/fewer button are plain labels. */
+.tag-filter span + span {
   min-width: 1.35rem;
   border: 1.5px solid rgba(31, 31, 31, 0.45);
   border-radius: 999px;
