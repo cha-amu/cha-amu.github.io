@@ -968,7 +968,13 @@ function exportForMigration_() {
     const value = properties.getProperty(key);
     fingerprints[key] = value ? sha256Hex_(String(value)) : null;
   });
-  return { exportedAt: new Date().toISOString(), sheets: sheets, fingerprints: fingerprints };
+  // The Worker needs the stored admin hash itself, because the password lives only in
+  // GitHub secrets. The session TTL is not secret.
+  const carried = {
+    ADMIN_PASSWORD_HASH: properties.getProperty('ADMIN_PASSWORD_HASH'),
+    ADMIN_SESSION_TTL_MS: properties.getProperty('ADMIN_SESSION_TTL_MS')
+  };
+  return { exportedAt: new Date().toISOString(), sheets: sheets, fingerprints: fingerprints, carried: carried };
 }
 function constantTimeEqual_(a, b) {
   a = String(a || ''); b = String(b || '');
