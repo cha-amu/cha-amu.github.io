@@ -131,6 +131,7 @@ function route_(action, body) {
     case 'storage.sync.assetOverride.list': return rowsToObjects_(SHEETS.assetOverrides);
     case 'storage.sync.assetOverride.save': return saveAssetOverride_(body.override);
     case 'storage.sync.assetOverride.delete': return bulkDeleteAssetOverrides_(body);
+    case 'migration.export': return exportForMigration_();
     default: throw new Error('Unknown action: ' + action);
   }
 }
@@ -949,6 +950,26 @@ function stringToBytes_(value) {
   return Utilities.newBlob(value).getBytes();
 }
 function bytesToHex_(bytes) { return bytes.map((byte) => ('0' + ((byte < 0 ? byte + 256 : byte).toString(16))).slice(-2)).join(''); }
+
+/**
+ * Temporary, for the move to Cloudflare D1: every sheet row as the app reads it, plus
+ * SHA-256 fingerprints (never the values) of the properties the Worker will need, so the
+ * local copies can be checked against production. Gateway secret required. Remove after
+ * the cutover.
+ */
+function exportForMigration_() {
+  const sheets = {};
+  ['posts', 'postDeletions', 'guestbook', 'things', 'assetOverrides', 'auditLog'].forEach(function (key) {
+    sheets[key] = rowsToObjects_(SHEETS[key]);
+  });
+  const properties = PropertiesService.getScriptProperties();
+  const fingerprints = {};
+  ['ADMIN_PASSWORD_HASH', 'ADMIN_PASSWORD_PEPPER', 'ADMIN_SESSION_SECRET', 'ADMIN_SESSION_TTL_MS', 'GUESTBOOK_SERVER_PEPPER', 'GUESTBOOK_PASSWORD_ITERATIONS', 'GATEWAY_SHARED_SECRET'].forEach(function (key) {
+    const value = properties.getProperty(key);
+    fingerprints[key] = value ? sha256Hex_(String(value)) : null;
+  });
+  return { exportedAt: new Date().toISOString(), sheets: sheets, fingerprints: fingerprints };
+}
 function constantTimeEqual_(a, b) {
   a = String(a || ''); b = String(b || '');
   if (a.length !== b.length) return false;
