@@ -34,20 +34,6 @@ function useAllowedResourceKeys(index: PublicWikiIndex | null): string[] | null 
   }, [index, visible]);
 }
 
-function documentHasConnection(index: PublicWikiIndex, id: string, allowedKeys: readonly string[] | null) {
-  const allowed = new Set(allowedKeys || []);
-  return index.documents.some((document) => (document.id === id
-    ? document.links.length > 0
-    : document.links.some((link) => link.target.replace(/^doc:/, '') === id)))
-    || index.resources.some((resource) => resource.documentIds.includes(id) && allowed.has(wikiResourceKey(resource.kind, resource.id)));
-}
-
-function indexHasConnection(index: PublicWikiIndex, allowedKeys: readonly string[] | null) {
-  const allowed = new Set(allowedKeys || []);
-  return index.documents.some((document) => document.links.length > 0)
-    || index.resources.some((resource) => resource.documentIds.length > 0 && allowed.has(wikiResourceKey(resource.kind, resource.id)));
-}
-
 function GraphFrame({ resource, scope, compact, allowedKeys, onError, onEscape, onNavigate }: {
   resource: GraphSelection;
   scope: 'local' | 'all';
@@ -283,14 +269,15 @@ export function WikiGraph({ resource, placement = 'sidebar', showAll = false }: 
   const allowedKeys = useAllowedResourceKeys(wiki.index);
   if (wiki.status !== 'ready' || !wiki.index) return null;
   const index = wiki.index;
-  // A map without any connection is a single dot; show it only once something links.
+  // Every public document has a map. One without links is drawn as its own dot,
+  // and the full map gathers such documents apart from the connected ones.
   if (!resource) {
-    return showAll && indexHasConnection(index, allowedKeys)
+    return showAll && index.documents.length
       ? <ConnectedGraph key="all" resource={{ kind: 'all', id: '', title: t('nav.wiki') }} placement={placement} allowedKeys={allowedKeys} />
       : null;
   }
   if (resource.kind === 'doc') {
-    if (!index.documents.some((document) => document.id === resource.id) || !documentHasConnection(index, resource.id, allowedKeys)) return null;
+    if (!index.documents.some((document) => document.id === resource.id)) return null;
   } else if (!connectedWikiResource(index, resource.kind, resource.id) || !allowedKeys?.includes(wikiResourceKey(resource.kind, resource.id))) {
     return null;
   }
