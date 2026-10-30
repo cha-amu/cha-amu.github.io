@@ -6,8 +6,8 @@
   "workers_dev": true,
   "preview_urls": false,
   "vars": {
-    "ALLOWED_ORIGIN": "https://cha-amu.github.io",
-    "TURNSTILE_EXPECTED_HOSTNAME": "cha-amu.github.io",
+    "ALLOWED_ORIGINS": "https://blog.chaamu.net,https://cha-amu.github.io",
+    "TURNSTILE_EXPECTED_HOSTNAMES": "blog.chaamu.net,cha-amu.github.io",
     "ADMIN_SESSION_TTL_MS": "600000",
     "GUESTBOOK_PASSWORD_ITERATIONS": "1"
   },

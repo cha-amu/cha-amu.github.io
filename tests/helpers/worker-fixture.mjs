@@ -4,7 +4,8 @@ import { createGateway } from '../../worker/src/index.js';
 import { CONTENT_TABLES, storedRecord } from '../../worker/src/content-schema.js';
 import { createD1 } from './d1.mjs';
 
-export const ORIGIN = 'https://cha-amu.github.io';
+export const ORIGIN = 'https://blog.chaamu.net';
+export const LEGACY_ORIGIN = 'https://cha-amu.github.io';
 export const RAW_IP = '203.0.113.7';
 export const ADMIN_PASSWORD = '관리자-password🔐';
 export const GUESTBOOK_PEPPER = 'guestbook-test-pepper-00000000000000000000000000000000';
@@ -23,7 +24,7 @@ export function apiRequest(action, payload = {}, headers = {}) {
 export async function fixture(t, options = {}) {
   const { db, mf } = await createD1(t);
   const env = {
-    ALLOWED_ORIGIN: ORIGIN, TURNSTILE_EXPECTED_HOSTNAME: 'cha-amu.github.io',
+    ALLOWED_ORIGINS: `${ORIGIN}, ${LEGACY_ORIGIN}`, TURNSTILE_EXPECTED_HOSTNAMES: 'blog.chaamu.net,cha-amu.github.io',
     IP_HASH_SECRET: 'ip-hash-secret-0000000000000000000000', TURNSTILE_SECRET_KEY: 'turnstile-secret-key',
     STORAGE_SYNC_SECRET: 'storage-sync-secret-00000000000000000000',
     GUESTBOOK_SERVER_PEPPER: GUESTBOOK_PEPPER,
@@ -46,7 +47,7 @@ export async function fixture(t, options = {}) {
       const form = new URLSearchParams(init.body);
       fetchCalls.push({ url, init, form });
       const result = options.turnstile ? await options.turnstile(form) : {
-        success: true, hostname: env.TURNSTILE_EXPECTED_HOSTNAME,
+        success: true, hostname: 'blog.chaamu.net',
         action: form.get('response') === 'admin-turnstile' ? 'admin_login' : 'guestbook_create'
       };
       return result instanceof Response ? result : Response.json(result);

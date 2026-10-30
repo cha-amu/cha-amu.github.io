@@ -17,7 +17,7 @@ test('the deployed Worker module graph runs in workerd: login, public reads, sto
     script: undefined, scriptPath: fileURLToPath(new URL('../worker/src/index.js', import.meta.url)),
     modulesRules: [{ type: 'ESModule', include: ['**/*.js'] }],
     bindings: {
-      ALLOWED_ORIGIN: 'https://cha-amu.github.io', TURNSTILE_EXPECTED_HOSTNAME: 'cha-amu.github.io',
+      ALLOWED_ORIGINS: 'https://blog.chaamu.net,https://cha-amu.github.io', TURNSTILE_EXPECTED_HOSTNAMES: 'blog.chaamu.net,cha-amu.github.io',
       TURNSTILE_SECRET_KEY: 'runtime-turnstile-secret', IP_HASH_SECRET: 'runtime-ip-hash-secret-000000000000000000000000',
       STORAGE_SYNC_SECRET: storageSecret, GUESTBOOK_SERVER_PEPPER: pepper,
       ADMIN_PASSWORD_HASH: createHash('sha256').update(password + adminPepper).digest('hex'),

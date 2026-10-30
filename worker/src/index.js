@@ -97,7 +97,7 @@ function jsonResponse(body, status = 200) {
 function addCors(response, request, env) {
   const headers = new Headers(response.headers);
   const origin = request.headers.get('Origin');
-  if (origin && origin === env.ALLOWED_ORIGIN) {
+  if (origin && configuredValues(env.ALLOWED_ORIGINS).includes(origin)) {
     headers.set('Access-Control-Allow-Origin', origin);
   }
   headers.set('Vary', mergeVary(headers.get('Vary'), 'Origin'));
@@ -117,10 +117,23 @@ function mergeVary(current, value) {
 function assertAllowedOrigin(request, env) {
   const origin = request.headers.get('Origin');
   if (!origin) return;
-  requireString(env.ALLOWED_ORIGIN, 'ALLOWED_ORIGIN');
-  if (origin !== env.ALLOWED_ORIGIN) {
+  if (!requireValues(env.ALLOWED_ORIGINS, 'ALLOWED_ORIGINS').includes(origin)) {
     throw new GatewayError(403, '허용되지 않은 요청 출처입니다.');
   }
+}
+
+// The blog answers on its custom domain and, if that is ever removed, on cha-amu.github.io,
+// so origins and Turnstile hostnames are comma-separated lists of exact values.
+function configuredValues(value) {
+  return typeof value === 'string' ? value.split(',').map((item) => item.trim()).filter(Boolean) : [];
+}
+
+function requireValues(value, name) {
+  const values = configuredValues(value);
+  if (!values.length) {
+    throw new GatewayError(503, `${name} 설정이 없습니다.`);
+  }
+  return values;
 }
 
 function requireString(value, name, minLength = 1) {
@@ -439,7 +452,7 @@ async function verifyTurnstile(body, request, env, expectedAction, fetchImpl) {
   }
 
   const secret = requireString(env.TURNSTILE_SECRET_KEY, 'TURNSTILE_SECRET_KEY', 10);
-  const expectedHostname = requireString(env.TURNSTILE_EXPECTED_HOSTNAME, 'TURNSTILE_EXPECTED_HOSTNAME');
+  const expectedHostnames = requireValues(env.TURNSTILE_EXPECTED_HOSTNAMES, 'TURNSTILE_EXPECTED_HOSTNAMES');
   const form = new URLSearchParams({
     secret,
     response: token,
@@ -462,7 +475,7 @@ async function verifyTurnstile(body, request, env, expectedAction, fetchImpl) {
 
   if (
     result?.success !== true ||
-    result.hostname !== expectedHostname ||
+    !expectedHostnames.includes(result.hostname) ||
     result.action !== expectedAction
   ) {
     throw new GatewayError(403, '사람 확인에 실패했습니다. 다시 시도하세요.');

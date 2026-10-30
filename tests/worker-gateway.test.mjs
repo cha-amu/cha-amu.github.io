@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { fixture, ORIGIN, RAW_IP, ipHash, ADMIN_PASSWORD } from './helpers/worker-fixture.mjs';
+import { fixture, ORIGIN, LEGACY_ORIGIN, RAW_IP, ipHash, ADMIN_PASSWORD } from './helpers/worker-fixture.mjs';
 
 const guestInput = { name: '', message: 'hello', deletePassword: 'password', turnstileToken: 'guest-turnstile' };
 const storageHeaders = (f) => ({ Origin: '', Authorization: `Bearer ${f.env.STORAGE_SYNC_SECRET}` });
@@ -25,11 +25,24 @@ test('health is non-sensitive, exact CORS is returned, preflight allows bearer h
 test('a different browser origin is rejected before database or external calls', async (t) => {
   const f = await fixture(t);
   delete f.env.SECURITY_DB;
-  const result = await f.request('guestbook.listPublic', {}, { Origin: `${ORIGIN}.attacker.test` });
-  assert.equal(result.status, 403);
-  assert.equal(result.error, '허용되지 않은 요청 출처입니다.');
-  assert.equal(result.response.headers.get('Access-Control-Allow-Origin'), null);
+  for (const origin of [`${ORIGIN}.attacker.test`, `${LEGACY_ORIGIN}.attacker.test`, 'http://blog.chaamu.net', 'https://chaamu.net']) {
+    const result = await f.request('guestbook.listPublic', {}, { Origin: origin });
+    assert.equal(result.status, 403);
+    assert.equal(result.error, '허용되지 않은 요청 출처입니다.');
+    assert.equal(result.response.headers.get('Access-Control-Allow-Origin'), null);
+  }
   assert.equal(f.fetchCalls.length, 0);
+});
+
+test('the cha-amu.github.io origin and Turnstile hostname stay accepted beside the custom domain', async (t) => {
+  const f = await fixture(t, { turnstile: () => ({ success: true, hostname: 'cha-amu.github.io', action: 'guestbook_create' }) });
+  const listed = await f.request('guestbook.listPublic', {}, { Origin: LEGACY_ORIGIN });
+  assert.equal(listed.status, 200);
+  assert.equal(listed.response.headers.get('Access-Control-Allow-Origin'), LEGACY_ORIGIN);
+  const created = await f.request('guestbook.create', guestInput, { Origin: LEGACY_ORIGIN });
+  assert.equal(created.status, 200);
+  const missing = await fixture(t, { env: { ALLOWED_ORIGINS: ' , ' } });
+  assert.equal((await missing.request('guestbook.listPublic')).status, 503);
 });
 
 test('JSON parsing, byte limits, media types, missing and unknown actions retain gateway errors', async (t) => {
@@ -75,6 +88,7 @@ test('Turnstile token, success, hostname and action are checked exactly and outa
   for (const result of [
     { success: false, hostname: 'cha-amu.github.io', action: 'guestbook_create' },
     { success: true, hostname: 'other.test', action: 'guestbook_create' },
+    { success: true, hostname: 'chaamu.net', action: 'guestbook_create' },
     { success: true, hostname: 'cha-amu.github.io', action: 'admin_login' }
   ]) {
     const f = await fixture(t, { turnstile: () => result });
