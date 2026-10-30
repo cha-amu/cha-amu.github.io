@@ -2,9 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { AppLayout } from '../components/AppLayout';
 import { BackToTopButton } from '../components/BackToTopButton';
 import { EmptyState, ErrorState, LoadingState } from '../components/PageState';
+import { config } from '../config';
 import { useI18n } from '../i18n';
 import { refreshThings, usePublicResource } from '../stores/publicDataStore';
 import type { Thing } from '../types';
+import { storageUrl } from '../utils/blogOrigins';
 
 function safeHttpUrl(value: string): URL | null {
   try {
@@ -53,7 +55,8 @@ export function ThingsPage() {
   const resource = usePublicResource('things');
   const things = useMemo(() => resource.items.flatMap((thing) => {
     const url = safeHttpUrl(thing.url);
-    const imageUrl = thing.imageUrl ? safeHttpUrl(thing.imageUrl)?.href : undefined;
+    // Images picked from storage load from the blog address serving the page.
+    const imageUrl = thing.imageUrl ? safeHttpUrl(storageUrl(thing.imageUrl, config.storageBaseUrl))?.href : undefined;
     return url ? [{ thing, href: url.href, hostname: url.hostname.replace(/^www\./i, ''), imageUrl }] : [];
   }), [resource.items]);
 

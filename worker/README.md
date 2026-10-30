@@ -81,8 +81,8 @@ Preserve the already configured `IP_HASH_SECRET`, `TURNSTILE_SECRET_KEY` and `ST
 
 Non-secret vars in `wrangler.jsonc`:
 
-- `ALLOWED_ORIGIN=https://cha-amu.github.io`
-- `TURNSTILE_EXPECTED_HOSTNAME=cha-amu.github.io`
+- `ALLOWED_ORIGINS=https://blog.chaamu.net,https://cha-amu.github.io` (comma-separated exact origins; the custom domain and the GitHub Pages address that serves the blog again if the domain is removed)
+- `TURNSTILE_EXPECTED_HOSTNAMES=blog.chaamu.net,cha-amu.github.io` (also registered on the Turnstile widget)
 - `ADMIN_SESSION_TTL_MS=600000` (10 minutes; copy a different existing property value if configured)
 - `GUESTBOOK_PASSWORD_ITERATIONS=1` (fallback for legacy PBKDF2 entries missing their per-entry iteration cell)
 

@@ -8,7 +8,7 @@ GitHub Pages에 배포할 개인용 자료 아카이브 사이트입니다.
 - GitHub Pages static hosting
 - Cloudflare Worker gateway (`worker/`) with D1 for guestbook, IP bans, rate limits, things, asset overrides and audit logs
 - Cloudflare Turnstile for guestbook writes
-- Storage manifests from `https://cha-amu.github.io/storage/manifests/*.json`
+- Storage manifests from `/storage/manifests/*.json` on the blog address serving the page
 
 ## Local development
 
@@ -37,7 +37,7 @@ Only public frontend values go into Vite env files. Server secrets are Worker se
 
 The wiki reading screen is this blog's `/wiki/` route. It uses the same header, navigation, content width and article cards as `/posts/`, with its connection map above the existing tag panel. Menu links, search results and wiki document links use the blog router. A separate public repository stores the public snapshot and serves the embeddable graph; repository separation does not create a separate reader website.
 
-`VITE_WIKI_EMBED_URL` defaults to `https://cha-amu.github.io/amuwiki/` and `VITE_WIKI_INDEX_URL` to `https://cha-amu.github.io/amuwiki/wiki.json`. Override these two absolute HTTP(S) URLs for local data/widget previews. Reader links always stay at the current blog's `/wiki/` route.
+`VITE_WIKI_EMBED_URL` defaults to `/amuwiki/` and `VITE_WIKI_INDEX_URL` to `/amuwiki/wiki.json` on the blog address serving the page (`https://blog.chaamu.net` when run locally). Override these two absolute HTTP(S) URLs for local data/widget previews. Reader links always stay at the current blog's `/wiki/` route.
 
 Only the version 1 public index is fetched, without credentials or persisted caching. A post/asset graph appears only when its exact `kind` and `id` match a resource whose `documentIds` contain an existing public document, and only while that post/asset is in the blog's current public list. Wiki pages likewise list, link and map only posts/assets the blog shows now, so a post hidden after the wiki snapshot was published never appears as a dead link. A document map appears only when the document has at least one connection. Tags never create relationships. Invalid entries are excluded; failed or invalid index requests hide graphs and report a partial search result. Graph rendering belongs to the wiki iframe; this repo does not contain a graph implementation or publish wiki documents.
 
@@ -53,7 +53,7 @@ Run `npm test` and `npm run build` for validation. `node tests/wiki-preview.mjs`
 - [배포와 GitHub Secrets/Variables 관리](docs/deployment.md)
 - [storage repo 포스트/자료 작성 규칙](docs/storage-authoring.md)
 
-현재 GitHub 레포는 `cha-amu/cha-amu.github.io`이고, 사이트는 `https://cha-amu.github.io/`로 배포된다. 정적 포스트/자료 원본은 `cha-amu/storage` repo를 사용한다.
+현재 GitHub 레포는 `cha-amu/cha-amu.github.io`이고, 사이트는 `https://blog.chaamu.net/`로 배포된다(2026-10-31부터, 예전 주소 `https://cha-amu.github.io/`는 새 주소로 리디렉트된다). 정적 포스트/자료 원본은 `cha-amu/storage` repo를 사용한다.
 
 관리자 비밀번호는 레포 루트에서 `npm run admin:password`를 실행하고 새 비밀번호를 두 번 입력해 바꾼다. 게이트웨이 Worker의 `ADMIN_PASSWORD_HASH`가 바뀐다.
 

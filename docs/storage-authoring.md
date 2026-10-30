@@ -1,6 +1,6 @@
 # Storage repo 작성 규칙
 
-`cha-amu/storage`는 메인 사이트가 읽는 정적 원본 저장소다. 글은 이 저장소의 Markdown 파일만을 원본으로 사용한다. 메인 사이트의 자료 화면 주소는 계속 `/archive/`이고, 실제 파일 URL은 `https://cha-amu.github.io/storage/...`를 쓴다.
+`cha-amu/storage`는 메인 사이트가 읽는 정적 원본 저장소다. 글은 이 저장소의 Markdown 파일만을 원본으로 사용한다. 메인 사이트의 자료 화면 주소는 계속 `/archive/`이고, 실제 파일 URL은 `https://blog.chaamu.net/storage/...`를 쓴다. 예전 주소 `https://cha-amu.github.io/storage/...`도 새 주소로 리디렉트된다.
 
 ## 폴더 구조
 
@@ -78,7 +78,7 @@ id         선택. 보통 쓰지 않는다. 없으면 posts/... 경로로 자동
 [첨부파일](../../assets/files/2026/sample.pdf)
 ```
 
-메인 사이트는 이 상대경로를 `https://cha-amu.github.io/storage/...` URL로 풀어서 표시한다.
+메인 사이트는 이 상대경로를 `https://blog.chaamu.net/storage/...` URL로 풀어서 표시한다.
 
 외부 URL도 가능하다.
 
@@ -235,8 +235,8 @@ cha-amu/storage > Actions > Sync storage repo
 사이트 반영 상태:
 
 ```txt
-https://cha-amu.github.io/storage/manifests/assets.json
-https://cha-amu.github.io/storage/manifests/posts.json
+https://blog.chaamu.net/storage/manifests/assets.json
+https://blog.chaamu.net/storage/manifests/posts.json
 ```
 
 새 파일을 올렸다면 각 manifest의 `generatedAt`이 최근 시간으로 바뀌고, 새 파일 경로가 `assets` 또는 `posts` 배열에 들어 있으면 storage Pages 쪽 반영은 끝난 것이다. 메인 사이트 `/archive/`와 `/posts/`는 각 manifest를 읽는다.
