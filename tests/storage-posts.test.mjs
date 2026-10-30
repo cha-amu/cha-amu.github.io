@@ -9,6 +9,7 @@ const { outputFiles } = await build({
       export * from './src/stores/publicDataStore';
       export * from './src/utils/search';
       export * from './src/stores/controlSnapshot';
+      export * from './src/utils/blogOrigins';
     `,
     resolveDir: fileURLToPath(new URL('..', import.meta.url))
   },
@@ -17,12 +18,12 @@ const { outputFiles } = await build({
 });
 let instance = 0;
 
-async function setup(t, cache = new Map()) {
+async function setup(t, cache = new Map(), origin = 'https://cha-amu.github.io') {
   const originalWindow = globalThis.window;
   const originalFetch = globalThis.fetch;
   const requests = [];
   globalThis.window = {
-    location: { origin: 'https://blog.test' },
+    location: { origin },
     addEventListener() {},
     localStorage: {
       getItem: (key) => cache.get(key) ?? null,
@@ -35,7 +36,7 @@ async function setup(t, cache = new Map()) {
     requests.push(String(url));
     assert.equal(options.method, 'GET', 'post refresh must only read storage files');
     assert.equal(options.cache, 'no-cache');
-    if (url === 'https://cha-amu.github.io/storage/manifests/posts.json') return Response.json(manifest);
+    if (url === `${origin === 'https://cha-amu.github.io' ? origin : 'https://blog.chaamu.net'}/storage/manifests/posts.json`) return Response.json(manifest);
     assert.ok(bodies.has(url), `Unexpected request: ${url}`);
     return new Response(bodies.get(url));
   };
@@ -90,6 +91,37 @@ test('the public post list reads storage only, follows frontmatter status (missi
   await f.store.refreshPosts({ force: true });
   assert.deepEqual(f.store.getPublicDataSnapshot().posts.items, [], 'deleting storage files removes cached posts too');
   assert.deepEqual(JSON.parse(f.cache.get('cha-amu:posts:v2')).data, []);
+});
+
+test('storage files are read from the blog address serving the page, whichever address the manifest names', async (t) => {
+  const f = await setup(t, new Map(), 'https://blog.chaamu.net');
+  f.manifest.posts.push(
+    { id: 'legacy', path: 'posts/2026/legacy.md', url: 'https://cha-amu.github.io/storage/posts/2026/legacy.md' },
+    { id: 'current', path: 'posts/2026/current.md', url: 'https://blog.chaamu.net/storage/posts/2026/current.md' },
+    { id: 'relative', path: 'posts/2026/relative.md' }
+  );
+  for (const id of ['legacy', 'current', 'relative']) {
+    f.bodies.set(`https://blog.chaamu.net/storage/posts/2026/${id}.md`, `---\ntitle: ${id}\n---\nBody ${id}`);
+  }
+  const posts = await f.store.refreshPosts();
+  assert.deepEqual(posts.map((post) => post.id).sort(), ['current', 'legacy', 'relative']);
+  assert.ok(posts.every((post) => post.markdownBaseUrl === 'https://blog.chaamu.net/storage/posts/2026/'));
+  assert.ok(posts.every((post) => post.markdownRootUrl === 'https://blog.chaamu.net/storage'));
+  assert.ok(f.requests.every((url) => url.startsWith('https://blog.chaamu.net/storage/')), f.requests.join('\n'));
+});
+
+test('storage URLs move between the two blog addresses only, and local pages use the custom domain', async (t) => {
+  const { store } = await setup(t, new Map(), 'https://blog.test');
+  const base = 'https://blog.chaamu.net/storage';
+  assert.equal(store.servingBlogOrigin(), 'https://blog.chaamu.net');
+  assert.equal(store.storageUrl('/assets/a b.png', base), `${base}/assets/a b.png`);
+  assert.equal(store.storageUrl('https://cha-amu.github.io/storage', 'https://cha-amu.github.io/storage'), 'https://cha-amu.github.io/storage');
+  assert.equal(store.storageUrl('https://cha-amu.github.io/storage/assets/그림.png', base), `${base}/assets/그림.png`);
+  assert.equal(store.storageUrl('https://blog.chaamu.net/storage/', 'https://cha-amu.github.io/storage'), 'https://cha-amu.github.io/storage/');
+  for (const url of [
+    'https://cha-amu.github.io/storagex/a.png', 'https://cha-amu.github.io.example.com/storage/a.png',
+    'https://cha-amu.github.io/amuwiki/wiki.json', 'https://example.com/storage/a.png'
+  ]) assert.equal(store.storageUrl(url, base), url);
 });
 
 test('storage cache hydration excludes draft, hidden and non-storage rows and still revalidates', async (t) => {

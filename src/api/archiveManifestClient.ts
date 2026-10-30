@@ -2,6 +2,7 @@ import { config } from '../config';
 import { getMockAssets } from '../data/mockData';
 import { getLanguageLocale } from '../i18n';
 import type { ArchiveAsset, ArchiveManifest, AssetOverride } from '../types';
+import { storageUrl } from '../utils/blogOrigins';
 import { readCache, readCachePayload, writeCache, type CachePayload } from '../utils/localCache';
 
 const ARCHIVE_ASSETS_CACHE_KEY = 'archive-assets:v1';
@@ -39,8 +40,7 @@ function normalizeTags(value: unknown): string[] {
 }
 
 function absoluteStorageUrl(pathOrUrl: string): string {
-  if (/^https?:\/\//i.test(pathOrUrl)) return pathOrUrl;
-  return `${config.storageBaseUrl}/${pathOrUrl.replace(/^\/+/, '')}`;
+  return storageUrl(pathOrUrl, config.storageBaseUrl);
 }
 
 function extensionOf(path: string): string {
@@ -81,8 +81,8 @@ function normalizeAsset(value: unknown): ArchiveAsset | null {
     source: 'storage',
     storagePath: path,
     metadataPath: asString(record.metadataPath).trim() || undefined,
-    markdownBaseUrl: asString(record.markdownBaseUrl).trim() || undefined,
-    markdownRootUrl: asString(record.markdownRootUrl).trim() || config.storageBaseUrl
+    markdownBaseUrl: asString(record.markdownBaseUrl).trim() ? absoluteStorageUrl(asString(record.markdownBaseUrl).trim()) : undefined,
+    markdownRootUrl: config.storageBaseUrl
   };
 }
 

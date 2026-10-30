@@ -1,6 +1,7 @@
 import { config } from '../config';
 import { translate } from '../i18n';
 import type { Post } from '../types';
+import { storageUrl } from '../utils/blogOrigins';
 import { postTimestamp } from '../utils/postTimestamp';
 import { readCachePayload, writeCache, type CachePayload } from '../utils/localCache';
 import { excerpt } from '../utils/strings';
@@ -53,9 +54,7 @@ function statusFrom(value: unknown): Post['status'] {
 }
 
 function absoluteStorageUrl(pathOrUrl: string): string {
-  if (/^https?:\/\//i.test(pathOrUrl)) return pathOrUrl;
-  const path = pathOrUrl.replace(/^\/+/, '');
-  return `${config.storageBaseUrl}/${path}`;
+  return storageUrl(pathOrUrl, config.storageBaseUrl);
 }
 
 function dirname(url: string): string {
@@ -167,7 +166,9 @@ function normalizePost(value: unknown): Post | null {
   const id = asString(record.id || record.slug).trim();
   if (!id) return null;
   const storagePath = asString(record.storagePath).trim();
-  const bodyUrl = asString(record.bodyUrl).trim();
+  const cachedBodyUrl = asString(record.bodyUrl).trim();
+  const bodyUrl = cachedBodyUrl && absoluteStorageUrl(cachedBodyUrl);
+  const cachedBaseUrl = asString(record.markdownBaseUrl).trim();
   return {
     id,
     slug: asString(record.slug).trim() || undefined,
@@ -182,8 +183,8 @@ function normalizePost(value: unknown): Post | null {
     source: 'storage',
     storagePath: storagePath || undefined,
     bodyUrl: bodyUrl || undefined,
-    markdownBaseUrl: asString(record.markdownBaseUrl).trim() || markdownBaseUrl(bodyUrl, storagePath),
-    markdownRootUrl: asString(record.markdownRootUrl).trim() || config.storageBaseUrl
+    markdownBaseUrl: (cachedBaseUrl && absoluteStorageUrl(cachedBaseUrl)) || markdownBaseUrl(bodyUrl, storagePath),
+    markdownRootUrl: config.storageBaseUrl
   };
 }
 

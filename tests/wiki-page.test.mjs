@@ -111,6 +111,8 @@ test('old and native wiki document links resolve to the current blog, with no gu
   for (const href of [
     `https://cha-amu.github.io/amuwiki/#${encoded}`,
     `https://cha-amu.github.io/wiki/#${encoded}`,
+    `https://blog.chaamu.net/amuwiki/#${encoded}`,
+    `https://blog.chaamu.net/wiki/#${encoded}`,
     `http://localhost:5186/wiki/#${encoded}`,
     `/amuwiki/#${encoded}`, `/wiki/#${encoded}`, `/wiki#${encoded}`, `#${encoded}`,
     `/wiki/?from=source#${encoded}`
@@ -126,6 +128,9 @@ test('old and native wiki document links resolve to the current blog, with no gu
   assert.deepEqual(resolveLink('https://example.com/wiki/#missing'), { href: 'https://example.com/wiki/#missing', target: '_blank' });
   assert.deepEqual(resolveLink('https://cha-amu.github.io.example.com/amuwiki/#missing'), {
     href: 'https://cha-amu.github.io.example.com/amuwiki/#missing', target: '_blank'
+  });
+  assert.deepEqual(resolveLink('https://blog.chaamu.net.example.com/wiki/#missing'), {
+    href: 'https://blog.chaamu.net.example.com/wiki/#missing', target: '_blank'
   });
   assert.deepEqual(resolveLink('/posts/#connected'), { href: '/posts/#connected', target: '_self' });
   for (const href of ['javascript:alert(1)', 'data:text/html,test', 'https://user:password@example.com/', 'https://exam\nple.com/', '\\wiki\\#missing']) {
@@ -229,6 +234,8 @@ test('links to blog posts and assets follow what the blog shows now', () => {
   assert.equal(resolveLink('/posts/#hidden%20post'), null);
   assert.deepEqual(resolveLink('http://localhost:5186/archive/#assets%2Fa.png'), { href: '/archive/#assets%2Fa.png', target: '_self' });
   assert.equal(resolveLink('https://cha-amu.github.io/posts/#unlisted'), null);
+  assert.deepEqual(resolveLink('https://cha-amu.github.io/posts/#shown%20post'), { href: '/posts/#shown%20post', target: '_self' });
+  assert.deepEqual(resolveLink('https://blog.chaamu.net/posts/#shown%20post'), { href: '/posts/#shown%20post', target: '_self' });
   // Until the blog's lists load, no post or asset link is shown.
   const loading = content.createWikiLinkResolver([document('alpha')], 'http://localhost:5186', resources, null);
   assert.equal(loading(shown.url), null);

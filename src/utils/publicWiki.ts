@@ -24,9 +24,9 @@ export interface PublicWikiIndex {
   resources: PublicWikiResource[];
 }
 
-export const DEFAULT_WIKI_BASE_URL = 'https://cha-amu.github.io/wiki/';
-export const DEFAULT_WIKI_EMBED_URL = 'https://cha-amu.github.io/amuwiki/';
-export const DEFAULT_WIKI_INDEX_URL = 'https://cha-amu.github.io/amuwiki/wiki.json';
+export const DEFAULT_WIKI_BASE_URL = 'https://blog.chaamu.net/wiki/';
+export const DEFAULT_WIKI_EMBED_URL = 'https://blog.chaamu.net/amuwiki/';
+export const DEFAULT_WIKI_INDEX_URL = 'https://blog.chaamu.net/amuwiki/wiki.json';
 const UNSAFE_TEXT = /[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/u;
 
 function record(value: unknown): value is Record<string, unknown> {

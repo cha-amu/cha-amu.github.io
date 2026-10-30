@@ -168,7 +168,7 @@ test('document and overview maps use the separate embed endpoint while reading l
   const overview = new URL(wiki.wikiGraphUrl(wiki.DEFAULT_WIKI_EMBED_URL, 'all', '', 'local'));
   assert.equal(overview.searchParams.has('focus'), false);
   assert.equal(overview.searchParams.get('scope'), 'all');
-  assert.equal(wiki.wikiDocumentUrl(wiki.DEFAULT_WIKI_BASE_URL, 'wiki-one'), 'https://cha-amu.github.io/wiki/#wiki-one');
+  assert.equal(wiki.wikiDocumentUrl(wiki.DEFAULT_WIKI_BASE_URL, 'wiki-one'), 'https://blog.chaamu.net/wiki/#wiki-one');
   assert.equal(wiki.wikiGraphUrl(wiki.DEFAULT_WIKI_EMBED_URL, 'doc', 'x'.repeat(81), 'local'), '');
 });
 
@@ -246,7 +246,7 @@ test('integrated search retains posts/assets and links wiki matches to the blog 
   const results = search.buildSearchResults(posts, assets, 'fixture', index.documents, 'http://localhost:5186/wiki/');
   assert.deepEqual(results.map((result) => result.type), ['post', 'asset', 'wiki', 'wiki']);
   assert.equal(results[2].href, 'http://localhost:5186/wiki/#wiki-one');
-  assert.equal(search.buildSearchResults([], [], 'needle', index.documents)[0].href, 'https://cha-amu.github.io/wiki/#wiki-one');
+  assert.equal(search.buildSearchResults([], [], 'needle', index.documents)[0].href, 'https://blog.chaamu.net/wiki/#wiki-one');
   assert.equal(search.buildSearchResults([], [], 'needle', index.documents).length, 1);
   assert.equal(search.buildSearchResults([], [], 'Fixture source', index.documents).length, 1);
   assert.equal(search.buildSearchResults(posts, assets, '', index.documents).length, 0);

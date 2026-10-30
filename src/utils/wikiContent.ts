@@ -8,9 +8,9 @@ import {
 } from './publicWiki';
 import { normalizeText } from './strings';
 import { renderMarkdown } from './markdown';
+import { isBlogOrigin, PRIMARY_BLOG_ORIGIN } from './blogOrigins';
 
 export const NATIVE_WIKI_PATH = '/wiki/';
-const BLOG_ORIGIN = 'https://cha-amu.github.io';
 
 /** Decode the route once. A document ID itself is never decoded or deprefixed. */
 export function wikiDocumentIdFromHash(hash: string): string {
@@ -94,7 +94,7 @@ export function wikiExcerpt(markdown: string, options: {
 }
 
 function blogDetailTarget(url: URL, currentOrigin: string): { kind: 'post' | 'asset'; id: string } | null {
-  if ((url.origin !== BLOG_ORIGIN && url.origin !== currentOrigin) || url.hash.length < 2) return null;
+  if ((!isBlogOrigin(url.origin) && url.origin !== currentOrigin) || url.hash.length < 2) return null;
   const kind = /^\/posts\/?$/.test(url.pathname) ? 'post' : /^\/archive\/?$/.test(url.pathname) ? 'asset' : null;
   if (!kind) return null;
   try {
@@ -112,7 +112,7 @@ function blogDetailTarget(url: URL, currentOrigin: string): { kind: 'post' | 'as
  */
 export function createWikiLinkResolver(
   documents: readonly PublicWikiDocument[],
-  origin = BLOG_ORIGIN,
+  origin = PRIMARY_BLOG_ORIGIN,
   resources: readonly PublicWikiResource[] = [],
   visibleResourceKeys?: ReadonlySet<string> | null
 ) {
@@ -134,7 +134,7 @@ export function createWikiLinkResolver(
       return null;
     }
     if (!['http:', 'https:', 'mailto:', 'tel:'].includes(url.protocol) || url.username || url.password) return null;
-    if ((url.origin === BLOG_ORIGIN || url.origin === currentOrigin) && /^\/(wiki|amuwiki)\/?$/.test(url.pathname)) {
+    if ((isBlogOrigin(url.origin) || url.origin === currentOrigin) && /^\/(wiki|amuwiki)\/?$/.test(url.pathname)) {
       if (!url.hash) return { href: NATIVE_WIKI_PATH, target: '_self' };
       const id = wikiDocumentIdFromHash(url.hash);
       return ids.has(id) ? { href: nativeWikiDocumentUrl(id), target: '_self' } : null;
